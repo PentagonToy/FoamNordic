@@ -17,6 +17,7 @@ EXE_INC = \
     -Imodels/kEqnFjord \
     -Imodels/reactionRateFjord \
     -Imodels/progressVariableFjord \
+    -Icombustion \
     -I$(FOAMNORDIC_SOURCE)/src \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
 

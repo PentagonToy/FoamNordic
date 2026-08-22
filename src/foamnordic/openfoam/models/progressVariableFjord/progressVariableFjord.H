@@ -24,6 +24,7 @@ namespace Foam::combustionModels {
 
 template<class ReactionThermo>
 class progressVariableFjord final : public ThermoCombustion<ReactionThermo> {
+    word progressField_;
     word reactionRateField_;
     dimensionSet reactionRateDimensions_;
     Switch correctThermo_;

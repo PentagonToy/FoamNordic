@@ -30,6 +30,12 @@ def validate_reaction_rate(closure: Closure) -> None:
         raise ValueError(
             "reaction-rate closure requires a 'reaction_rate' output port"
         )
+    for name in ("progress", "variance"):
+        binding = closure.inputs[name]
+        if binding.operation != "field" or binding.field_name is None:
+            raise ValueError(
+                f"reaction-rate {name} input must bind to a solver-owned field"
+            )
 
 
 ManifoldOutput = FieldExpression | FieldSelection

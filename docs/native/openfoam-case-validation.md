@@ -190,10 +190,15 @@ reaction rate, manifold, and one thermodynamic correction in that order. The
 model compiles and registers for both `psiReactionThermo` and
 `rhoReactionThermo` with OpenFOAM.com v2606.
 
+The equation boundary now also exposes the configured source through
+`combustion->R(progress)`. A compiled v2606 probe checked the resulting matrix
+on all 16,384 cells of the cavity mesh: dimensions matched the configured
+volumetric source times cell volume, the positive right-hand-side convention
+was preserved, and the maximum difference from `V*omega_c` was zero. The
+cavity is only a mesh-level source gate, not a combustion validation case.
+
 The remaining complete-combustion integration needs:
 
-- explicit mapping of the dimensioned source into the transported
-  progress-variable equation and any energy coupling;
 - a solver-integrated beta-FDF artifact fixture and atomic field trajectory;
 - boundary, conservation, realizability, and failure-policy rules owned by
   OpenFOAM; and
@@ -201,8 +206,9 @@ The remaining complete-combustion integration needs:
   field exchange.
 
 The shared Fjord, resident, artifact, scaling, observation, lifecycle,
-reaction-rate, and manifold-dispatch layers are now present. Solver equations
-and their physical acceptance trajectory remain.
+reaction-rate, source-matrix, and manifold-dispatch layers are now present.
+Solver-specific transport equations and their physical acceptance trajectory
+remain.
 
 ## Known local limitation
 

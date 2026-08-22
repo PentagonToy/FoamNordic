@@ -13,11 +13,13 @@ The current adapters include LES closures:
 
 The combustion adapters are:
 
-- `reactionRateFjord`, a narrow one-source producer for custom solver wiring.
+- `reactionRateFjord`, a narrow one-source producer exposed through
+  `combustion->R(progress)` for custom solver wiring.
 - `progressVariableFjord`, which invokes reaction-rate and pre-integrated
   manifold programs in order and then corrects thermodynamics once. It still
   relies on a custom solver to assemble and solve the transported progress
-  and variance equations.
+  and variance equations. The shared source matrix fixes sign, volume scaling,
+  and dimensions but deliberately does not prescribe transport terms.
 
 Generic field programs do not require a turbulence-model adapter.
 `foamNordicExchange` can transform or observe registered fields in laminar,

@@ -14,6 +14,7 @@
 #include "progressVariableFjord.H"
 
 #include "fvmSup.H"
+#include "progressVariableSource.H"
 
 #include <stdexcept>
 #include <string>
@@ -106,6 +107,11 @@ void progressVariableFjord<ReactionThermo>::validateContract() const {
             "progressVariableFjord reaction-rate dimensions do not match "
             "reactionRateDimensions.");
     }
+    if (!this->mesh().template foundObject<volScalarField>(progressField_)) {
+        throw std::invalid_argument(
+            "progressVariableFjord progressField must be a solver-owned "
+            "volScalarField: " + std::string(progressField_.c_str()));
+    }
 
     const wordList manifoldOutputs = manifold.get<wordList>("outputs");
     if (manifoldOutputs.found(reactionRateField_)) {
@@ -122,6 +128,7 @@ progressVariableFjord<ReactionThermo>::progressVariableFjord(
     const compressibleTurbulenceModel& turbulence,
     const word& combustionProperties)
     : ThermoCombustion<ReactionThermo>(modelType, thermo, turbulence),
+      progressField_(this->coeffs().template get<word>("progressField")),
       reactionRateField_(this->coeffs().template get<word>(
           "reactionRateField")),
       reactionRateDimensions_(this->coeffs().template get<dimensionSet>(
@@ -153,8 +160,13 @@ void progressVariableFjord<ReactionThermo>::correct() {
 
 template<class ReactionThermo>
 tmp<fvScalarMatrix> progressVariableFjord<ReactionThermo>::R(
-    volScalarField& species) const {
-    return tmp<fvScalarMatrix>::New(species, dimMass / dimTime);
+    volScalarField& field) const {
+    if (field.name() == progressField_) {
+        const auto& source = this->mesh().template lookupObject<volScalarField>(
+            reactionRateField_);
+        return foamNordic::combustion::explicitSource(field, source);
+    }
+    return tmp<fvScalarMatrix>::New(field, dimMass / dimTime);
 }
 
 template<class ReactionThermo>
@@ -174,9 +186,12 @@ bool progressVariableFjord<ReactionThermo>::read() {
 
     const word configuredField =
         this->coeffs().template get<word>("reactionRateField");
+    const word configuredProgress =
+        this->coeffs().template get<word>("progressField");
     const dimensionSet configuredDimensions =
         this->coeffs().template get<dimensionSet>("reactionRateDimensions");
-    if (configuredField != reactionRateField_
+    if (configuredProgress != progressField_
+        || configuredField != reactionRateField_
         || configuredDimensions != reactionRateDimensions_) {
         throw std::invalid_argument(
             "progressVariableFjord field identity and dimensions are "

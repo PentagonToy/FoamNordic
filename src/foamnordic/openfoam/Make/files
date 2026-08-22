@@ -1,5 +1,6 @@
 operations/expression.C
 operations/frame.C
+combustion/progressVariableSource.C
 closureHook.C
 closureObservation.C
 closureSession.C

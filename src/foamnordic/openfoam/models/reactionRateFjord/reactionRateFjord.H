@@ -24,6 +24,7 @@ namespace Foam::combustionModels {
 
 template<class ReactionThermo>
 class reactionRateFjord final : public ThermoCombustion<ReactionThermo> {
+    word progressField_;
     word reactionRateField_;
     dimensionSet reactionRateDimensions_;
     std::unique_ptr<foamNordic::ClosureHook> closure_;

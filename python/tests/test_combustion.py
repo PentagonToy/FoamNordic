@@ -211,6 +211,8 @@ class CombustionDeclarationTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("#error", template)
         self.assertIn("reactionRateField", template)
+        self.assertIn("progressField", template)
+        self.assertIn("@PROGRESS_FIELD@", template)
         self.assertIn("reactionRateDimensions", template)
         self.assertIn("@REACTION_RATE_DIMENSIONS@", template)
         self.assertIn("foamNordicClosure", template)
@@ -276,6 +278,7 @@ class CombustionDeclarationTests(unittest.TestCase):
 
         self.assertEqual(destination, Path("constant/combustionProperties"))
         self.assertIn("combustionModel progressVariableFjord", rendered)
+        self.assertIn("progressField         c_tilde", rendered)
         self.assertIn("reactionRateField     omega_c", rendered)
         self.assertIn("reactionRateDimensions [1 -3 -1 0 0 0 0]", rendered)
         self.assertIn('address          "unix:///tmp/reaction.sock"', rendered)
@@ -314,6 +317,55 @@ class CombustionDeclarationTests(unittest.TestCase):
             "makeCombustionTypes(progressVariableFjord, rhoReactionThermo)",
             registration,
         )
+
+    def test_equation_source_uses_openfoam_combustion_interface(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        helper = (
+            root
+            / "src/foamnordic/openfoam/combustion/progressVariableSource.C"
+        ).read_text(encoding="utf-8")
+        model = (
+            root
+            / "src/foamnordic/openfoam/models/progressVariableFjord"
+            / "progressVariableFjord.C"
+        ).read_text(encoding="utf-8")
+        equation = (
+            root
+            / "src/foamnordic/template/openfoam/combustion-model"
+            / "progressVariableEqn.H.in"
+        ).read_text(encoding="utf-8")
+        variance = (
+            root
+            / "src/foamnordic/template/openfoam/combustion-model"
+            / "varianceEqn.H.in"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("matrix.ref() -= reactionRate", helper)
+        self.assertIn("reactionRate.dimensions() * dimVolume", helper)
+        self.assertIn("field.name() == progressField_", model)
+        self.assertIn("explicitSource(field, source)", model)
+        self.assertIn("combustion->R(@PROGRESS_FIELD@)", equation)
+        self.assertLess(
+            variance.index("@BOUND_VARIANCE_USING_THE_DECLARED_POLICY@"),
+            variance.index("combustion->correct()"),
+        )
+
+    def test_progress_moment_must_be_a_direct_field(self) -> None:
+        closure = fno.Closure(
+            name="reactionRate",
+            operator=fno.Operator.model("reaction-rate.fnom"),
+            inputs={
+                "progress": fno.grad("c_tilde"),
+                "variance": fno.field("c_var"),
+                "temperature": fno.field("T_tilde"),
+            },
+            outputs={"reaction_rate": fno.field("omega_c")},
+        )
+        with self.assertRaisesRegex(ValueError, "progress.*solver-owned field"):
+            fno.Combustion.ProgressVariable(
+                reaction_rate=closure,
+                manifold=manifold(),
+            )
 
 
 if __name__ == "__main__":

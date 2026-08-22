@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from types import MappingProxyType
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 
 _EPSILON = 1.0e-14
@@ -42,6 +42,21 @@ class SingleCellResult:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
+
+
+@dataclass(frozen=True, slots=True)
+class LaggedTrajectoryStep:
+    """One explicit progress solve followed by source and manifold updates."""
+
+    index: int
+    progress_before: float
+    source_used: float
+    progress_after: float
+    source_next: float
+    manifold: Mapping[str, float]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "manifold", MappingProxyType(dict(self.manifold)))
 
 
 def _finite(value: float, label: str) -> float:
@@ -271,3 +286,74 @@ def evaluate_single_cell(
         evaluated[logical_name] = _beta_expectation(coordinates, values, state)
 
     return SingleCellResult(state=state, values=evaluated)
+
+
+def evaluate_lagged_mass_source_trajectory(
+    *,
+    progress: float,
+    variance: float,
+    temperature: float,
+    density: float,
+    delta_t: float,
+    steps: int,
+    reaction_rate: Callable[[float, float, float], float],
+    grid: Sequence[float],
+    outputs: Mapping[str, Sequence[float]],
+    bounds: str = "error",
+) -> tuple[LaggedTrajectoryStep, ...]:
+    """Reference a lagged volumetric-mass-source coupling trajectory.
+
+    The source is primed from the initial state. Each step advances normalized
+    progress with ``dt*omega/rho``, then evaluates the next reaction rate and
+    beta-FDF manifold from the updated moments. This intentionally slow oracle
+    fixes call order for acceptance tests; it is not a runtime integrator.
+    """
+
+    if not isinstance(steps, int) or isinstance(steps, bool) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    rho = _finite(density, "density")
+    dt = _finite(delta_t, "delta_t")
+    temp = _finite(temperature, "temperature")
+    var = _finite(variance, "variance")
+    if rho <= 0.0:
+        raise ValueError("density must be positive")
+    if dt <= 0.0:
+        raise ValueError("delta_t must be positive")
+    if not callable(reaction_rate):
+        raise TypeError("reaction_rate must be callable")
+
+    current = beta_state(progress, var, bounds=bounds).progress
+
+    def evaluate_source(value: float) -> float:
+        return _finite(
+            reaction_rate(value, var, temp),
+            "reaction-rate source",
+        )
+
+    source = evaluate_source(current)
+    trajectory: list[LaggedTrajectoryStep] = []
+    for index in range(steps):
+        before = current
+        advanced = before + dt * source / rho
+        state = beta_state(advanced, var, bounds=bounds)
+        current = state.progress
+        next_source = evaluate_source(current)
+        manifold = evaluate_single_cell(
+            progress=current,
+            variance=state.variance,
+            grid=grid,
+            outputs=outputs,
+            bounds=bounds,
+        )
+        trajectory.append(
+            LaggedTrajectoryStep(
+                index=index,
+                progress_before=before,
+                source_used=source,
+                progress_after=current,
+                source_next=next_source,
+                manifold=manifold.values,
+            )
+        )
+        source = next_source
+    return tuple(trajectory)

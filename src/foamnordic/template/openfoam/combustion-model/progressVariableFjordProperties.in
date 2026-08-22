@@ -13,6 +13,7 @@ progressVariableFjordCoeffs
 {
     sourceTreatment       lagged;
     correctionStage       outerCorrector;
+    progressField         @PROGRESS_FIELD@;
     reactionRateField     @REACTION_RATE_FIELD@;
     reactionRateDimensions @REACTION_RATE_DIMENSIONS@;
     correctThermo         @CORRECT_THERMO@;

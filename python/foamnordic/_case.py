@@ -350,6 +350,12 @@ def render_combustion_dictionary(
         raise ValueError("a progress-variable combustion declaration is required")
     source = reaction_rate.outputs["reaction_rate"]
     assert source.field_name is not None
+    progress = reaction_rate.inputs["progress"]
+    if progress.operation != "field" or progress.field_name is None:
+        raise ValueError("reaction-rate progress input must bind to a scalar field")
+    progress_metadata = longship.case.field(progress.field_name)
+    if progress_metadata.field_class != "volScalarField":
+        raise ValueError("reaction-rate progress input must be a volScalarField")
     metadata = longship.case.field(source.field_name)
     if metadata.field_class != "volScalarField":
         raise ValueError("reaction-rate output must be a volScalarField")
@@ -359,6 +365,7 @@ def render_combustion_dictionary(
         else _observation_block(longship, observation_path)
     )
     values = {
+        "PROGRESS_FIELD": progress.field_name,
         "REACTION_RATE_FIELD": source.field_name,
         "REACTION_RATE_DIMENSIONS": _dimensions(metadata.dimensions),
         "CORRECT_THERMO": str(combustion.coupling.thermo_correction).lower(),

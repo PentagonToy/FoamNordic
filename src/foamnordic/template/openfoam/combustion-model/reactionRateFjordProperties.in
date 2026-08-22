@@ -11,6 +11,7 @@ active          true;
 
 @FOAMNORDIC_MODEL@Coeffs
 {
+    progressField          @PROGRESS_FIELD@;
     // This field is created and owned by the progress-variable solver.
     reactionRateField      @FOAMNORDIC_OUTPUT_FIELDS@;
     reactionRateDimensions @REACTION_RATE_DIMENSIONS@;

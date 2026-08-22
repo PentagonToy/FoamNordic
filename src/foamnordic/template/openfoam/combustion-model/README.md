@@ -49,8 +49,11 @@ policy instead of acquiring it accidentally from include-file order.
   scientific comparison and failure fallback.
 
 `CombustionAdapter.H.in` and `CombustionAdapter.C.in` define the native model
-boundary. The equation files are insertion-point checklists, not reusable
-equations. A solver family should copy and resolve only the files it needs.
+boundary. The equation files are insertion-point templates, not universal
+transport equations. `progressVariableEqn.H.in` uses the implemented
+`combustion->R(progress)` source boundary while leaving only solver-specific
+transport, `fvOptions`, and bounds tokens unresolved. A solver family should
+copy and resolve only the files it needs.
 
 `reactionRateFjordProperties.in` is the exception: it is a runnable dictionary
 template for the concrete `reactionRateFjord` source producer shipped in

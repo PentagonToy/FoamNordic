@@ -7,3 +7,8 @@
 @ASSEMBLE_PROGRESS_VARIABLE_VARIANCE_EQUATION@
 @RELAX_CONSTRAIN_AND_SOLVE_VARIANCE_EQUATION@
 @BOUND_VARIANCE_USING_THE_DECLARED_POLICY@
+
+// Required lagged ordering: the solved moments drive the next source and the
+// current manifold transaction. progressVariableFjord invokes reaction rate,
+// then manifold, then thermo.correct() exactly once.
+combustion->correct();

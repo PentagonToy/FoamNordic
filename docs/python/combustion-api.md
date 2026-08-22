@@ -82,10 +82,16 @@ may use `[0 0 -1 0 0 0 0]`, while a volumetric mass source may use
 dictionary template is
 `src/foamnordic/template/openfoam/combustion-model/progressVariableFjordProperties.in`.
 
-This is deliberately not a complete combustion solver. `R(Y)` and `Qdot()`
-return zero because a progress-variable solver must own its transported scalar
-equations and consume the declared reaction-rate field explicitly. That solver
-must call `combustion->correct()` once at its native outer-corrector site after
-the progress and variance solves. Selecting this model in stock
-`reactingFoam` therefore does not create a progress-variable equation or map
-the source into one.
+This is deliberately not a complete combustion solver. `R(progress)` returns
+the declared reaction-rate field as a positive explicit OpenFOAM matrix
+source; `R(otherField)` and `Qdot()` remain zero. A custom solver can therefore
+use `transport == combustion->R(progress)` without knowing the source field
+name. Matrix dimensions are derived from the configured volumetric source, so
+an incompatible transport equation is rejected when OpenFOAM assembles it.
+
+The solver still owns convection, diffusion, relaxation, constraints, bounds,
+and the variance equation. It must call `combustion->correct()` once at its
+native outer-corrector site after the progress and variance solves. Selecting
+this model in stock `reactingFoam` does not create those equations. A guarded,
+copyable insertion template lives in
+`src/foamnordic/template/openfoam/combustion-model/progressVariableEqn.H.in`.

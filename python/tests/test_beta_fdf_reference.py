@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 import unittest
 
-from foamnordic.combustion.reference import beta_state, evaluate_single_cell
+from foamnordic.combustion.reference import (
+    beta_state,
+    evaluate_lagged_mass_source_trajectory,
+    evaluate_single_cell,
+)
 
 
 FIXTURE = (
@@ -92,6 +96,47 @@ class SingleCellBetaFDFTests(unittest.TestCase):
                 grid=[0.0, 0.5, 1.0],
                 outputs={"Y": [0.0, float("nan"), 1.0]},
             )
+
+    def test_lagged_source_then_manifold_trajectory(self) -> None:
+        density = 1.2
+
+        def reaction_rate(
+            progress: float,
+            variance: float,
+            temperature: float,
+        ) -> float:
+            self.assertEqual(variance, 0.01)
+            self.assertEqual(temperature, 900.0)
+            return density * 2.0 * (1.0 - progress)
+
+        trajectory = evaluate_lagged_mass_source_trajectory(
+            progress=0.2,
+            variance=0.01,
+            temperature=900.0,
+            density=density,
+            delta_t=0.1,
+            steps=3,
+            reaction_rate=reaction_rate,
+            grid=[0.0, 0.5, 1.0],
+            outputs={"Y_product": [0.0, 0.5, 1.0]},
+        )
+
+        self.assertEqual(len(trajectory), 3)
+        expected_progress = (0.36, 0.488, 0.5904)
+        expected_sources = (1.92, 1.536, 1.2288)
+        for step, progress, source in zip(
+            trajectory, expected_progress, expected_sources
+        ):
+            self.assertAlmostEqual(step.source_used, source, places=13)
+            self.assertAlmostEqual(step.progress_after, progress, places=13)
+            self.assertAlmostEqual(
+                step.manifold["Y_product"], progress, places=12
+            )
+        self.assertAlmostEqual(
+            trajectory[0].source_next,
+            trajectory[1].source_used,
+            places=13,
+        )
 
 
 if __name__ == "__main__":

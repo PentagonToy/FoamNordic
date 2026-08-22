@@ -1,9 +1,21 @@
-#error "FoamNordic combustion scaffold: supply the solver's progress-variable equation"
+#error "FoamNordic combustion scaffold: supply solver-specific transport terms"
 
-// The solver owns this equation and its relaxation, constraints, and solve.
-// @REACTION_RATE_FIELD@ must already contain the source selected by the
-// declared lag policy. Do not invoke Python or transport code from this file.
+// The reaction-rate field is exposed through the ordinary OpenFOAM
+// combustion R(field) interface. The model returns a positive explicit source
+// only when the argument is @PROGRESS_FIELD@; species and unrelated scalars
+// receive a zero matrix. The solver still owns all transport terms.
 
-@ASSEMBLE_PROGRESS_VARIABLE_EQUATION_WITH_REACTION_RATE_SOURCE@
-@RELAX_CONSTRAIN_AND_SOLVE_PROGRESS_VARIABLE_EQUATION@
-@BOUND_PROGRESS_VARIABLE_USING_THE_DECLARED_POLICY@
+fvScalarMatrix progressEqn
+(
+    @SOLVER_SPECIFIC_PROGRESS_TRANSPORT_TERMS@
+ ==
+    combustion->R(@PROGRESS_FIELD@)
+  + fvOptions(@SOLVER_SPECIFIC_FVOPTIONS_ARGUMENTS@)
+);
+
+progressEqn.relax();
+fvOptions.constrain(progressEqn);
+progressEqn.solve();
+fvOptions.correct(@PROGRESS_FIELD@);
+
+@BOUND_PROGRESS_TO_ZERO_AND_ONE@
