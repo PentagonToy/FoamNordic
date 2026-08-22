@@ -30,6 +30,11 @@ blocks on every invocation. Specific OpenFOAM model adapters should only select
 fields, expose their views, and invoke the port; transport, sequencing, scaler
 application, bypass, and inference remain in the native core.
 
+The distinction between generic field programs and equation-level adapters is
+also recorded beside the implementations in
+`src/foamnordic/openfoam/models/README.md`. Copied-case laminar, RAS, and LES
+evidence is recorded in [OpenFOAM case validation](openfoam-case-validation.md).
+
 `Foam::foamNordic::ClosureSession` is the reusable solver hook. It owns one
 rank-local connection and one `ClosurePort`; `begin(Time)` creates a fresh
 per-call invocation without reconnecting. A turbulence correction, modeled

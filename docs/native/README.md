@@ -10,6 +10,7 @@ These documents describe code implemented in the current repository.
 | [Model artifacts](model-artifacts.md) | Manifests, scalers, Equinox and Joblib boundaries, and ONNX Runtime |
 | [Field pipeline](field-pipeline.md) | Zero-copy field views, native transforms, observations, and ownership |
 | [OpenFOAM adapter](openfoam-adapter.md) | ClosureHook, field operations, build contract, and end-to-end probes |
+| [OpenFOAM case validation](openfoam-case-validation.md) | Copied-case laminar, RAS, and LES compatibility evidence |
 | [Placement and lifecycle](placement-and-lifecycle.md) | Attached and central ClosureHost policies and transport selection |
 | [Benchmarks](benchmarks.md) | Recorded transport measurements and the release performance gate |
 
