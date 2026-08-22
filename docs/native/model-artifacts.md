@@ -105,3 +105,7 @@ foamnordic_closure_worker unix:///run/user/1000/closure.sock model.fnom
 Unix endpoints negotiate SHM automatically and retain UDS as their control
 plane. `--no-shm` is available for diagnosis. TCP endpoints remain available
 for separated placement; they never advertise same-node SHM.
+`--connections N` lets one node-local worker serve N solver ranks while owning
+one model instance. `--ready-file PATH` publishes a lifecycle marker only after
+the listener and model are initialized; `{rank}` in that path expands from the
+active Slurm or MPI task identity.

@@ -63,6 +63,60 @@ when either component ends. Graceful termination is bounded and escalates to
 `SIGKILL`; therefore a failed model service cannot leave OpenFOAM blocked in a
 closure exchange or orphan an `srun` step.
 
+The `foamnordic-longship` executable exposes that supervisor without Python or
+an intermediate command shell. One or more `--ready` paths identify regular
+marker files or ClosureHost Unix sockets. Arguments following `--host` and
+`--solver` are passed directly to their processes:
+
+```bash
+foamnordic-longship \
+    --ready /tmp/foamnordic-case.sock \
+    --host-output closure-host.log \
+    --solver-output openfoam.log \
+    --host foamnordic_closure_worker \
+        unix:///tmp/foamnordic-case.sock model.fnom \
+    --solver pimpleFoam -case /path/to/case
+```
+
+The supervisor removes stale readiness paths before launch, waits for every
+configured host endpoint, starts the solver only afterward, and returns the
+failing component's status. Under Slurm the two commands may be `srun` command
+arrays; the lifecycle behavior remains identical.
+After a successful solver exit, Longship first gives ClosureHost one grace
+window to consume protocol shutdown and exit naturally. Only a host that
+remains alive receives `SIGTERM` and, after another bounded grace window,
+`SIGKILL`. Longship removes every configured readiness path after both process
+groups have been reaped, even when the host wrapper itself cannot run cleanup.
+
+One resident ClosureHost accepts the declared number of solver connections on
+its node and owns one model instance. Every connection retains its global MPI
+rank and an independent Harbor, SHM channel, exchange state machine, and
+shutdown boundary. Model evaluation is initially serialized inside the host;
+this guarantees framework safety without loading one model per rank. A later
+batching policy may combine compatible rank requests without changing their
+individual exchange identities.
+
+In a Slurm launch, each host writes a distinct readiness marker on a filesystem
+visible to the Longship supervisor. `foamnordic_closure_worker` accepts
+`--connections N` and `--ready-file PATH`; `{rank}` in the marker path expands
+from `SLURM_PROCID`, PMI, PMIx, or Open MPI rank metadata. The marker is created
+only after the listener and model are ready and is removed when the worker
+exits. The canonical Slurm template passes all markers to
+`foamnordic-longship`, which alone owns startup and fail-together behavior.
+For a central UCX host, `foamnordic_closure_worker` additionally accepts
+`--ucx-host HOST`. This keeps TCP as the advertised control address, creates a
+UCP listener on `HOST`, and requires every declared solver connection to
+upgrade before inference begins.
+
+When the central host and solver use separate Slurm allocations, Longship runs
+`tools/longship/runSlurmClient.sh` as its solver-side process. The adapter
+submits one `sbatch` client, records its job identity, waits for accounting,
+and cancels the job from its signal/exit cleanup path. Longship therefore still
+observes one local process boundary: a host failure terminates the adapter and
+cancels the remote client, while a failed client makes the adapter fail and
+causes Longship to terminate the host. Slurm submission remains orchestration;
+it never enters the field-exchange data path.
+
 Automatic attached transport selection is:
 
 ```text

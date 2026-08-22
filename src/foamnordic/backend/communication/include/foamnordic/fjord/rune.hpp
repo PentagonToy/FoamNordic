@@ -36,6 +36,8 @@ enum class RuneKind : std::uint8_t {
     error = 7,
     shm_offer = 8,
     shm_ready = 9,
+    ucx_offer = 10,
+    ucx_ready = 11,
 };
 
 enum class Capability : std::uint32_t {

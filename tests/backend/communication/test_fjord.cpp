@@ -18,6 +18,9 @@
 #include "foamnordic/fjord/endpoint.hpp"
 #include "foamnordic/fjord/harbor.hpp"
 #include "foamnordic/fjord/rune.hpp"
+#ifdef FOAMNORDIC_HAVE_UCX
+#include "foamnordic/fjord/ucx_channel.hpp"
+#endif
 
 using foamnordic::fjord::Element;
 using foamnordic::fjord::Harbor;
@@ -64,6 +67,35 @@ void test_rune_codec() {
     require(
         values_of(decoded) == std::vector<double>(values.begin(), values.end()),
         "Rune did not preserve tensor values.");
+}
+
+void test_upgrade_control_codec() {
+    for (const auto kind : {
+             foamnordic::fjord::RuneKind::shm_offer,
+             foamnordic::fjord::RuneKind::ucx_offer}) {
+        const foamnordic::fjord::RunePrefix prefix{
+            .kind = kind,
+            .name_bytes = 24,
+            .session_id = 91,
+        };
+        const auto decoded = foamnordic::fjord::decode_prefix(
+            foamnordic::fjord::encode_prefix(prefix));
+        require(decoded.kind == kind, "Rune lost an upgrade offer kind.");
+        require(
+            decoded.name_bytes == 24 && decoded.session_id == 91,
+            "Rune lost upgrade offer metadata.");
+    }
+    for (const auto kind : {
+             foamnordic::fjord::RuneKind::shm_ready,
+             foamnordic::fjord::RuneKind::ucx_ready}) {
+        const foamnordic::fjord::RunePrefix prefix{
+            .kind = kind,
+            .session_id = 91,
+        };
+        const auto decoded = foamnordic::fjord::decode_prefix(
+            foamnordic::fjord::encode_prefix(prefix));
+        require(decoded.kind == kind, "Rune lost an upgrade readiness kind.");
+    }
 }
 
 void test_harbor_round_trip() {
@@ -276,7 +308,80 @@ void test_address_parser() {
         network.kind == foamnordic::fjord::FjordKind::tcp
             && network.location == "127.0.0.1" && network.port == 2026,
         "TCP Fjord address parsing failed.");
+    const auto ucx = foamnordic::fjord::FjordAddress::parse(
+        "ucx://127.0.0.1:2027");
+    require(
+        ucx.kind == foamnordic::fjord::FjordKind::ucx
+            && ucx.location == "127.0.0.1" && ucx.port == 2027,
+        "UCX Fjord address parsing failed.");
 }
+
+#ifdef FOAMNORDIC_HAVE_UCX
+void test_ucx_upgrade() {
+    auto control = foamnordic::fjord::FjordListener::network("127.0.0.1", 0);
+    std::atomic<bool> upgraded{false};
+    std::thread server([&control, &upgraded] {
+        Harbor harbor(control.accept());
+        const auto selected = harbor.accept_session({
+            1,
+            foamnordic::fjord::Capability::tcp
+                | foamnordic::fjord::Capability::ucx,
+            0,
+            2,
+            4096,
+        });
+        require(
+            foamnordic::fjord::any(
+                selected.capabilities & foamnordic::fjord::Capability::ucx),
+            "UCX loopback session did not select UCX.");
+        auto listener = foamnordic::fjord::UcxListener::network("127.0.0.1", 0);
+        harbor.offer_ucx(listener);
+        upgraded.store(true, std::memory_order_release);
+        const auto input = harbor.receive();
+        harbor.send(input.view());
+    });
+
+    Harbor client(foamnordic::fjord::connect(control.address()));
+    const auto selected = client.connect_session({
+        87,
+        foamnordic::fjord::Capability::tcp
+            | foamnordic::fjord::Capability::ucx,
+        1,
+        2,
+        4096,
+    });
+    require(
+        foamnordic::fjord::any(
+            selected.capabilities & foamnordic::fjord::Capability::ucx),
+        "UCX loopback client did not select UCX.");
+    client.accept_ucx();
+    const auto upgrade_deadline = std::chrono::steady_clock::now()
+                                  + std::chrono::seconds(2);
+    while (!upgraded.load(std::memory_order_acquire)
+           && std::chrono::steady_clock::now() < upgrade_deadline) {
+        std::this_thread::yield();
+    }
+    require(
+        upgraded.load(std::memory_order_acquire),
+        "UCX upgrade remained dependent on the first payload.");
+    const std::array<float, 4> values{1.0F, 2.0F, 3.0F, 4.0F};
+    client.send(TensorView{
+        "p",
+        Element::float32,
+        {4},
+        foamnordic::fjord::as_bytes(std::span(values)),
+        9,
+        0.5,
+    });
+    const auto output = client.receive();
+    server.join();
+    require(output.name == "p", "UCX loopback lost the field name.");
+    require(
+        output.bytes.size() == sizeof(values)
+            && std::memcmp(output.bytes.data(), values.data(), sizeof(values)) == 0,
+        "UCX loopback corrupted the field payload.");
+}
+#endif
 
 void verify_interrupt_releases_blocked_reader(
     std::pair<
@@ -312,6 +417,7 @@ void test_channel_interrupt() {
 
 int main() {
     test_rune_codec();
+    test_upgrade_control_codec();
     test_harbor_round_trip();
     test_session_negotiation();
     test_session_rejection();
@@ -319,6 +425,9 @@ int main() {
     test_unix_endpoint();
     test_tcp_endpoint();
     test_address_parser();
+#ifdef FOAMNORDIC_HAVE_UCX
+    test_ucx_upgrade();
+#endif
     test_channel_interrupt();
     std::cout << "FoamNordic Fjord round trip: PASS\n";
 }

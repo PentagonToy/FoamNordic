@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -23,6 +24,9 @@
 #include "foamnordic/fjord/endpoint.hpp"
 #include "foamnordic/fjord/harbor.hpp"
 #include "foamnordic/fjord/tensor.hpp"
+#ifdef FOAMNORDIC_HAVE_UCX
+#include "foamnordic/fjord/ucx_channel.hpp"
+#endif
 
 namespace {
 
@@ -87,17 +91,46 @@ void validate_tensor(
 void run_server(
     const FjordAddress& address,
     std::uint64_t iterations,
-    std::size_t elements) {
+    std::size_t elements,
+    bool use_ucx) {
     auto listener = FjordListener::network(address.location, address.port);
     std::cout << "[FoamNord] Inter-node server listening: "
               << listener.address().text() << std::endl;
 
     Harbor harbor(listener.accept());
-    const auto session = harbor.accept_session({
-        1, Capability::tcp, 0, 2, 16ULL * 1024ULL * 1024ULL * 1024ULL});
-    if (session.capabilities != Capability::tcp) {
-        throw std::runtime_error("Inter-node probe did not negotiate TCP.");
+    auto supported = Capability::tcp;
+#ifdef FOAMNORDIC_HAVE_UCX
+    if (use_ucx) {
+        supported = supported | Capability::ucx;
     }
+#endif
+    const auto session = harbor.accept_session({
+        1, supported, 0, 2, 16ULL * 1024ULL * 1024ULL * 1024ULL});
+    if (!any(session.capabilities & Capability::tcp)) {
+        throw std::runtime_error("Inter-node probe lost its TCP control plane.");
+    }
+#ifdef FOAMNORDIC_HAVE_UCX
+    std::unique_ptr<foamnordic::fjord::UcxListener> ucx_listener;
+    if (use_ucx) {
+        if (!any(session.capabilities & Capability::ucx)) {
+            throw std::runtime_error("Inter-node probe did not negotiate UCX.");
+        }
+        const auto* selected_host = std::getenv("FOAMNORDIC_UCX_HOST");
+        const auto ucx_host = selected_host != nullptr && *selected_host != '\0'
+                                  ? std::string(selected_host)
+                                  : address.location;
+        ucx_listener = std::make_unique<foamnordic::fjord::UcxListener>(
+            foamnordic::fjord::UcxListener::network(ucx_host, 0));
+        std::cout << "[FoamNord] UCX listener: "
+                  << ucx_listener->address().text() << std::endl;
+        harbor.offer_ucx(*ucx_listener);
+    }
+#else
+    if (use_ucx) {
+        throw std::runtime_error(
+            "Inter-node probe was built without FoamNordic UCX support.");
+    }
+#endif
 
     for (std::uint64_t index = 0; index < iterations; ++index) {
         auto exchange = receive_exchange(harbor);
@@ -118,13 +151,33 @@ void run_server(
 void run_client(
     const FjordAddress& address,
     std::uint64_t iterations,
-    std::size_t elements) {
+    std::size_t elements,
+    bool use_ucx) {
     Harbor harbor(foamnordic::fjord::connect(address));
-    const auto session = harbor.connect_session({
-        1, Capability::tcp, 1, 2, 16ULL * 1024ULL * 1024ULL * 1024ULL});
-    if (session.capabilities != Capability::tcp) {
-        throw std::runtime_error("Inter-node probe did not negotiate TCP.");
+    auto offered = Capability::tcp;
+#ifdef FOAMNORDIC_HAVE_UCX
+    if (use_ucx) {
+        offered = offered | Capability::ucx;
     }
+#endif
+    const auto session = harbor.connect_session({
+        1, offered, 1, 2, 16ULL * 1024ULL * 1024ULL * 1024ULL});
+    if (!any(session.capabilities & Capability::tcp)) {
+        throw std::runtime_error("Inter-node probe lost its TCP control plane.");
+    }
+#ifdef FOAMNORDIC_HAVE_UCX
+    if (use_ucx) {
+        if (!any(session.capabilities & Capability::ucx)) {
+            throw std::runtime_error("Inter-node probe did not negotiate UCX.");
+        }
+        harbor.accept_ucx();
+    }
+#else
+    if (use_ucx) {
+        throw std::runtime_error(
+            "Inter-node probe was built without FoamNordic UCX support.");
+    }
+#endif
 
     std::vector<double> values(elements);
     const auto started = std::chrono::steady_clock::now();
@@ -156,7 +209,7 @@ void run_client(
     const auto transferred = static_cast<double>(
         iterations * elements * sizeof(double) * 2ULL);
 
-    std::cout << "[FoamNord] Data plane: TCP\n"
+    std::cout << "[FoamNord] Data plane: " << (use_ucx ? "UCX" : "TCP") << '\n'
               << "[FoamNord] Atomic exchanges: " << iterations << '\n'
               << "[FoamNord] Payload bytes/exchange: "
               << elements * sizeof(double) << '\n'
@@ -181,10 +234,10 @@ void run_client(
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 5) {
+    if (argc != 5 && argc != 6) {
         std::cerr
             << "Usage: foamnordic_fjord_network_probe <server|client> "
-               "<tcp-address> <iterations> <elements>\n";
+               "<tcp-address> <iterations> <elements> [tcp|ucx]\n";
         return 2;
     }
     try {
@@ -196,10 +249,15 @@ int main(int argc, char** argv) {
         const auto iterations = parse_positive(argv[3], "Iterations");
         const auto elements = static_cast<std::size_t>(
             parse_positive(argv[4], "Elements"));
+        const std::string transport = argc == 6 ? argv[5] : "tcp";
+        if (transport != "tcp" && transport != "ucx") {
+            throw std::invalid_argument("Network probe transport is invalid.");
+        }
+        const auto use_ucx = transport == "ucx";
         if (mode == "server") {
-            run_server(address, iterations, elements);
+            run_server(address, iterations, elements, use_ucx);
         } else if (mode == "client") {
-            run_client(address, iterations, elements);
+            run_client(address, iterations, elements, use_ucx);
         } else {
             throw std::invalid_argument("Network probe mode is invalid.");
         }

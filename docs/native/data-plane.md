@@ -169,9 +169,23 @@ UCX is an optional inter-node bulk channel, not a required runtime dependency.
 TCP performs rendezvous and capability negotiation. UCX is selected only when
 both peers advertise a compatible build and a connectivity probe succeeds.
 
+The optional `UcxChannel` uses the UCP stream API and preserves Fjord's exact
+byte contract. A TCP Harbor first negotiates `tcp|ucx`, the server advertises a
+UCP listener address, and the client sends a one-byte bootstrap over UCP before
+acknowledging readiness on TCP. This transport bootstrap progresses and proves
+the endpoint independently of the first scientific payload. Both peers then
+replace their payload channel before the first Rune tensor is sent. TCP remains
+the rendezvous/control path; Rune tensor and completion frames use UCP after a
+successful upgrade. This is a direct FoamNordic UCP integration and does not
+route field traffic through MPI's UCX PML.
+
 Automatic mode may fall back from UCX to TCP during negotiation. An explicit
 `ucx` request must fail clearly rather than silently use TCP. A live session
 never changes channels halfway through an exchange.
+
+UCX is disabled by default so a workstation and an HPC site without UCX retain
+the same build. Enable it with `FOAMNORDIC_UCX=ON`; an installation outside the
+compiler's normal search path can be supplied through `FOAMNORDIC_UCX_ROOT`.
 
 ## Placement policy
 
@@ -237,13 +251,41 @@ remains an a-posteriori OpenFOAM case: coupled wall time must remain at or below
 1.5 times the uncoupled solver wall time under the same allocation,
 decomposition, time-step sequence, and output policy.
 
-The transport matrix will cover Rune codec, socket pair, named UDS, loopback
-TCP, SHM wraparound and crash recovery, two-node TCP, and two-node UCX. Roihu
-tests are added only after their local deterministic counterparts pass.
+The transport matrix covers Rune codec, socket pair, named UDS, loopback TCP,
+SHM wraparound and crash recovery, two-node TCP, and two-node UCX. A
+UCX-enabled build also runs a deterministic TCP-to-UCX loopback upgrade. Roihu
+passed the fabric-backed split-allocation probe with UCX's TCP transport
+explicitly excluded. A central multi-node OpenFOAM and ClosureHost run remains
+a higher-level integration gate rather than a Fjord transport gate.
 
-`foamnordic_fjord_network_probe` is the two-node TCP baseline. It negotiates a
-TCP-only Harbor session, publishes one tensor plus one atomic completion record
-per closure call, verifies monotonic exchange and solver-time indices on both
-peers, checks the returned payload, and reports round-trip and payload rates.
-It intentionally contains no Slurm API: the scheduler only places its server
-and client processes on different nodes.
+A reproducible two-node TCP driver is available at
+`tools/network/testTcpSlurm.sh`. It requires an executable
+`foamnordic_fjord_network_probe` built with
+`FOAMNORDIC_NETWORK_TOOLS=ON` and an allocation containing at least two nodes.
+
+Roihu partition limits matter independently of the number of nodes shown by
+`sinfo`: `small` and `interactive` accept one node per job, `test` accepts one
+or two nodes but may not have two nodes simultaneously available, and
+multi-node `medium` reserves complete nodes. When a two-node allocation is
+impractical, `tools/network/testTcpSplitSlurm.sh` runs the server inside an
+existing one-node interactive allocation and submits a one-node `small` client
+job with the server node explicitly excluded. The shared probe executable and
+logs remain on project scratch; only TCP payloads cross the node boundary.
+
+The matching UCX entry points are `tools/network/testUcxSlurm.sh` and
+`tools/network/testUcxSplitSlurm.sh`. TCP and UCX wrappers share scheduler and
+accounting logic, while the UCX wrapper advertises the IPv4 address of `ib0` by
+default. Sites with a different fabric name set `FOAMNORDIC_UCX_INTERFACE`, or
+provide the exact listener address through `FOAMNORDIC_UCX_HOST`.
+
+`foamnordic_fjord_network_probe` is the two-node TCP and UCX correctness probe.
+It publishes one tensor plus one atomic completion record per closure call,
+verifies monotonic exchange and solver-time indices on both peers, checks the
+returned payload, and reports round-trip and payload rates. It intentionally
+contains no Slurm API: the scheduler only places its server and client
+processes on different nodes.
+
+The current implementation and site-validation matrix, including the Roihu
+UCX 1.20.0 environment and the distinction between an available runtime and an
+implemented Fjord channel, is recorded in
+[HPC transport status and site notes](hpc-transport-status.md).

@@ -15,72 +15,28 @@ set -Eeuo pipefail
 
 @ENVIRONMENT@
 
-hostpid=""
-solverpid=""
-
-cleanup()
-{
-    if [ -n "$solverpid" ]; then
-        kill "$solverpid" 2>/dev/null || true
-    fi
-
-    if [ -n "$hostpid" ]; then
-        kill "$hostpid" 2>/dev/null || true
-    fi
-
-    wait 2>/dev/null || true
-}
-
-trap cleanup EXIT INT TERM
-
 echo "[FoamNord] Longship job: $SLURM_JOB_ID"
-echo "[FoamNord] Starting one ClosureHost per solver node."
+echo "[FoamNord] Starting one multi-rank ClosureHost per solver node."
 
-srun \
-    --nodes=@NODES@ \
-    --ntasks=@HOST_TASKS@ \
-    --ntasks-per-node=1 \
-    --cpus-per-task=@HOST_CPUS_PER_TASK@ \
-    --exact \
-    --exclusive \
-    @HOST_COMMAND@ &
-
-hostpid=$!
-
-@HOST_READY_COMMAND@
-
-echo "[FoamNord] ClosureHosts ready."
-echo "[FoamNord] Starting OpenFOAM ranks."
-
-srun \
-    --nodes=@NODES@ \
-    --ntasks=@SOLVER_TASKS@ \
-    --ntasks-per-node=@SOLVER_TASKS_PER_NODE@ \
-    --cpus-per-task=@SOLVER_CPUS_PER_TASK@ \
-    --exact \
-    --exclusive \
-    @SOLVER_COMMAND@ &
-
-solverpid=$!
-
-set +e
-wait -n "$hostpid" "$solverpid"
-status=$?
-set -e
-
-if kill -0 "$solverpid" 2>/dev/null; then
-    echo "[FoamNord] ClosureHost exited before OpenFOAM."
-    if [ "$status" -eq 0 ]; then
-        status=1
-    fi
-fi
-
-cleanup
-trap - EXIT INT TERM
-
-if [ "$status" -ne 0 ]; then
-    echo "[FoamNord] Longship component failed with status $status."
-    exit "$status"
-fi
-
-echo "[FoamNord] Longship completed."
+exec @LONGSHIP_EXECUTABLE@ \
+    @HOST_READY_ARGUMENTS@ \
+    --readiness-timeout-ms @READINESS_TIMEOUT_MS@ \
+    --termination-grace-ms @TERMINATION_GRACE_MS@ \
+    --host \
+        srun \
+        --nodes=@NODES@ \
+        --ntasks=@HOST_TASKS@ \
+        --ntasks-per-node=1 \
+        --cpus-per-task=@HOST_CPUS_PER_TASK@ \
+        --exact \
+        --exclusive \
+        @HOST_COMMAND@ \
+    --solver \
+        srun \
+        --nodes=@NODES@ \
+        --ntasks=@SOLVER_TASKS@ \
+        --ntasks-per-node=@SOLVER_TASKS_PER_NODE@ \
+        --cpus-per-task=@SOLVER_CPUS_PER_TASK@ \
+        --exact \
+        --exclusive \
+        @SOLVER_COMMAND@

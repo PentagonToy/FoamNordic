@@ -237,6 +237,158 @@ std::optional<ObservationRecord> ObservationReceiver::receive(
     return read_frame(*channel_);
 }
 
+void ObservationReceiver::interrupt() noexcept { channel_->interrupt(); }
+
 void ObservationReceiver::close() noexcept { channel_->close(); }
+
+std::size_t LongshipObservation::byte_size() const noexcept {
+    return sizeof(LongshipObservation) + source.size() + record.byte_size();
+}
+
+LongshipObservationStream::LongshipObservationStream(
+    std::vector<ObservationSource> sources,
+    ObservationRetention retention)
+    : sources_(std::move(sources)), retention_(retention) {
+    retention_.validate();
+    if (sources_.empty()) {
+        throw std::invalid_argument(
+            "Longship observation stream requires at least one source.");
+    }
+    for (std::size_t index = 0; index < sources_.size(); ++index) {
+        if (sources_[index].name.empty() || !sources_[index].receiver) {
+            throw std::invalid_argument(
+                "Longship observation source requires a name and receiver.");
+        }
+        for (std::size_t previous = 0; previous < index; ++previous) {
+            if (sources_[previous].name == sources_[index].name) {
+                throw std::invalid_argument(
+                    "Longship observation source name is duplicated: "
+                    + sources_[index].name);
+            }
+        }
+    }
+    workers_.reserve(sources_.size());
+    try {
+        for (std::size_t index = 0; index < sources_.size(); ++index) {
+            workers_.emplace_back([this, index] { run(index); });
+        }
+    } catch (...) {
+        stopped_.store(true, std::memory_order_release);
+        for (auto& source : sources_) {
+            source.receiver->interrupt();
+        }
+        for (auto& worker : workers_) {
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+        for (auto& source : sources_) {
+            source.receiver->close();
+        }
+        throw;
+    }
+}
+
+LongshipObservationStream::~LongshipObservationStream() { stop(); }
+
+std::optional<LongshipObservation> LongshipObservationStream::receive(
+    std::chrono::milliseconds timeout) {
+    std::unique_lock lock(mutex_);
+    if (!available_.wait_for(
+            lock, timeout, [this] {
+                return stopped_.load(std::memory_order_acquire)
+                       || !records_.empty();
+            })) {
+        return std::nullopt;
+    }
+    if (records_.empty()) {
+        return std::nullopt;
+    }
+    auto observation = std::move(records_.front());
+    bytes_ -= observation.byte_size();
+    records_.pop_front();
+    return observation;
+}
+
+void LongshipObservationStream::stop() noexcept {
+    if (stopped_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    for (auto& source : sources_) {
+        source.receiver->interrupt();
+    }
+    available_.notify_all();
+    for (auto& worker : workers_) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+    for (auto& source : sources_) {
+        source.receiver->close();
+    }
+}
+
+bool LongshipObservationStream::healthy() const noexcept {
+    return healthy_.load(std::memory_order_acquire);
+}
+
+std::string LongshipObservationStream::failure() const {
+    std::scoped_lock lock(mutex_);
+    return failure_;
+}
+
+std::uint64_t LongshipObservationStream::dropped_records() const noexcept {
+    return dropped_.load(std::memory_order_relaxed);
+}
+
+void LongshipObservationStream::run(std::size_t source_index) noexcept {
+    auto& source = sources_[source_index];
+    try {
+        while (!stopped_.load(std::memory_order_acquire)) {
+            auto record = source.receiver->receive(std::chrono::milliseconds(100));
+            if (record) {
+                retain({0, source.name, std::move(*record)});
+            }
+        }
+    } catch (const std::exception& error) {
+        if (!stopped_.load(std::memory_order_acquire)) {
+            std::scoped_lock lock(mutex_);
+            healthy_.store(false, std::memory_order_release);
+            if (failure_.empty()) {
+                failure_ = source.name + ": " + error.what();
+            }
+        }
+    }
+}
+
+void LongshipObservationStream::retain(LongshipObservation observation) {
+    std::unique_lock lock(mutex_);
+    if (stopped_.load(std::memory_order_acquire)) {
+        return;
+    }
+    const auto observation_bytes = observation.byte_size();
+    if (observation_bytes > retention_.max_bytes) {
+        dropped_.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    if (retention_.overflow == ObservationOverflow::drop_newest
+        && (records_.size() >= retention_.max_records
+            || bytes_ + observation_bytes > retention_.max_bytes)) {
+        dropped_.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    while (!records_.empty()
+           && (records_.size() >= retention_.max_records
+               || bytes_ + observation_bytes > retention_.max_bytes)) {
+        bytes_ -= records_.front().byte_size();
+        records_.pop_front();
+        dropped_.fetch_add(1, std::memory_order_relaxed);
+    }
+    observation.stream_index = next_stream_index_++;
+    bytes_ += observation_bytes;
+    records_.push_back(std::move(observation));
+    lock.unlock();
+    available_.notify_one();
+}
 
 }  // namespace foamnordic::adapter

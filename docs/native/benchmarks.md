@@ -33,6 +33,44 @@ portable inter-node baseline, not the default closure hot path. Its latency
 supports the default Longship policy: place one ClosureHost beside the solver
 ranks on every node and use SHM locally.
 
+### Split-allocation confirmation
+
+A later run used server allocation `764646` on `rc4283` and client job
+`764650` in the one-node `small` partition. It completed 100 round trips with
+one 1 MiB tensor sent and returned per exchange.
+
+| Data path | Round trips/s | Bidirectional payload MiB/s |
+|---|---:|---:|
+| TCP | 21.5159 | 43.0318 |
+
+The payload size and process placement differ from the measurement above, so
+the two rates are validation records rather than a direct performance
+comparison. Server, client, atomic exchange validation, and shutdown all
+passed.
+
+## 2026-08-21: Roihu cross-node UCX
+
+Server allocation `766158` ran on `rc4283` in `interactive`; client job
+`766161` ran in `small`. The UCX 1.20-enabled release build first negotiated
+over TCP and then transferred every Rune payload through a UCP stream. It
+completed 100 round trips with one 1 MiB float64 tensor sent and returned per
+exchange.
+
+| Data path | Round trips/s | Bidirectional payload MiB/s |
+|---|---:|---:|
+| UCX | 1647.19 | 3294.38 |
+
+`UCX_TLS=rc,ud,sm,self` excluded the UCX TCP transport; Roihu exposed RC and UD
+over the mlx5 devices. The run therefore validates an actual fabric-backed UCX
+path, including TCP-to-UCX upgrade, Rune metadata, atomic completion, payload
+integrity, monotonic exchange identity, and clean shutdown.
+
+The earlier split-allocation TCP confirmation used the same exchange count and
+payload size and observed 21.5159 round trips/s and 43.0318 MiB/s. UCX was
+about 76.6 times faster in this pair of validation runs. That observed ratio is
+not a general performance guarantee and does not replace the OpenFOAM release
+gate below.
+
 ## Release performance gate
 
 The microbenchmarks detect transport regressions. The scientific release gate

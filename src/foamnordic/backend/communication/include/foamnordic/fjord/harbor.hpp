@@ -23,6 +23,10 @@
 
 namespace foamnordic::fjord {
 
+#ifdef FOAMNORDIC_HAVE_UCX
+class UcxListener;
+#endif
+
 struct SessionHello {
     std::uint64_t session_id{0};
     Capability capabilities{Capability::none};
@@ -75,7 +79,12 @@ public:
     void shutdown();
     void offer_shared_memory(const std::string& name);
     void accept_shared_memory();
+#ifdef FOAMNORDIC_HAVE_UCX
+    void offer_ucx(UcxListener& listener);
+    void accept_ucx();
+#endif
     [[nodiscard]] RuneKind receive_control(std::uint64_t* exchange_index = nullptr);
+    void interrupt() noexcept;
     void close() noexcept;
 
 private:

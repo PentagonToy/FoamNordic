@@ -106,6 +106,15 @@ An independent native relay drains this ring with a condition-variable wakeup
 and frames records for Longship. There is no periodic polling and no write to
 the observation channel from the solver thread.
 
+Longship may merge any number of node-local receivers into one bounded stream.
+Every accepted record receives a monotonic `stream_index` at ingestion while
+retaining its source name, exchange index, and physical time. The merge always
+preserves each source's order. It deliberately does not delay a faster source
+to manufacture a physical-time ordering across nodes: observations are lossy,
+and a delayed or dropped source must never become a solver barrier. Consumers
+that require a timestep-wide summary combine matching source records by their
+explicit exchange metadata and report missing contributions.
+
 ## Bypass is a different policy
 
 Physics bypass selects cells that do not require model evaluation and supplies

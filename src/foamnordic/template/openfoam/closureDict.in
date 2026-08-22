@@ -10,6 +10,7 @@ FoamFile
 address          "@FOAMNORDIC_ADDRESS@";
 sessionId        @FOAMNORDIC_SESSION_ID@;
 sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+ucx              @FOAMNORDIC_UCX@;
 
 // Transport keys consumed by the closure artifact.
 inputs

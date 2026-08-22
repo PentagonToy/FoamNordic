@@ -93,6 +93,7 @@ foamNordicClosure
     address          "unix:///tmp/foamnordic-case-{rank}.sock";
     sessionId        2026;
     sharedMemory     true;
+    ucx              false;
 
     inputs           (velocity_grad filter_width);
     inputExpressions ("grad(U)" delta);
@@ -198,6 +199,20 @@ This native double-precision model consumes the packed
 same field packing, ONNX Runtime, output splitting, SHM publication, and
 OpenFOAM field replacement path used by a trained LES closure.
 
+`tools/openfoam/testNutFjordSolverSplitSlurm.sh` is the solver-integrated HPC
+gate. It copies an LES case into scratch, replaces only its turbulence model
+configuration with `nutFjord`, limits the run to three time steps, decomposes
+the case, and launches parallel `pimpleFoam` through the central Longship Slurm
+proxy. The original case remains unchanged. A pass requires runtime selection
+of `nutFjord`, UCX negotiation for every rank, clean ONNX runner shutdown, the
+requested final solver time, and coupled Longship completion.
+
+This gate passed on Roihu with two OpenFOAM v2512 ranks and a resident
+ClosureHost in separate Slurm allocations. Three `pimpleFoam` time steps
+completed through the native `grad(U), delta -> nut` ONNX contract over UCX,
+with clean rank, worker, scheduler-proxy, and Longship shutdown. This is the
+baseline solver acceptance gate for later `kEqnFjord` case validation.
+
 ### One-equation LES model
 
 `Foam::LESModels::kEqnFjord` extends the same native boundary to an SGS kinetic
@@ -217,6 +232,49 @@ publication checks, rank-local addressing, and SHM path as `nutFjord`.
 The canonical coefficient body is
 `src/foamnordic/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this
 model must also provide the normal OpenFOAM `k` field and boundary conditions.
+
+The native fixture generator emits `kEqnFjord.onnx` and `kEqnFjord.fnom` for
+this ordered contract. Its deterministic matrix keeps the integration test
+stable while exercising all packing and splitting paths:
+
+```text
+nut                   = 0.05 * delta
+kProduction           = 0.02 * k
+kDissipationCoeff     = 0.10 * k
+```
+
+The generator loads the completed artifact through ONNX Runtime and verifies
+all three numerical outputs before publishing it for a solver test. The same
+11-feature to 3-feature boundary also has a backend test independent of ONNX,
+so field ordering and output splitting are checked on workstation builds.
+
+`tools/openfoam/testKEqnFjordSolverSplitSlurm.sh` is the corresponding compact
+solver gate. It reuses a prepared native/ONNX build, copies the source case,
+selects `kEqnFjord`, runs two parallel `pimpleFoam` ranks against one resident
+ClosureHost, and requires UCX, all three written closure fields, the requested
+end time, and clean Longship shutdown. If the compact cavity has no `0/k`, the
+driver seeds its known wall patches from `k.cavity.in`; a production case that
+already owns `0/k`, such as NACA4412, retains its original field and boundary
+conditions. The compact Smagorinsky source also has no k-equation numerics, so
+the copied case receives an explicit `div(phi,k)` scheme. Its existing
+`(U|k|epsilon|omega|R|nuTilda).*` solver entry already covers both `k` and
+`kFinal` and is deliberately retained instead of being shadowed by generated
+literal entries. Existing source dictionaries remain unchanged. This keeps the
+cavity software gate distinct from later physical case validation.
+
+The compact gate passed on Roihu with two OpenFOAM v2512 ranks in a `small`
+allocation and one resident ClosureHost in an interactive allocation. Three
+time steps exercised model validation plus the pre- and post-k-equation closure
+updates; every rank used UCX, every expected field was written, and Longship
+completed cleanly. The run establishes solver integration only. Its seeded 2D
+field and maximum-iteration k solves are not reference settings for NACA4412.
+
+A subsequent two-rank NACA4412 smoke passed with the case's existing mesh,
+`0/k` boundary conditions, and PBiCG/DILU k solver. It exercised the same
+three-output ONNX closure over UCX through three copied-case time steps and
+completed under Longship. High Courant numbers and weak short-run pressure
+residuals make this an interoperability result only; it does not validate the
+fixture closure, the modified smoke numerics, or the aerodynamics.
 
 The development executable `foamnordicOpenFOAMClosureHookProbe` reads
 `system/foamnordicClosureDict` and performs two blocking calls at the same
@@ -284,6 +342,10 @@ Set `FOAMNORDIC_MPI_RANKS=2` (or a larger local rank count) when running
 test starts one worker per rank, requires every rank to negotiate its own SHM
 channel, and verifies two same-solver-time blocking calls without gathering
 fields through rank zero.
+It then launches one resident ONNX ClosureHost through Longship, connects every
+OpenFOAM rank to that shared node-local listener, verifies one SHM session per
+rank, and requires protocol shutdown to reap every runner before the coupled
+workload reports success.
 When Slurm grants one task with multiple CPUs, the test verifies that the CPU
 count covers all requested ranks and supplies PRRTE's oversubscribe mapping
 flag. This corrects PRRTE's slot accounting only; it does not launch more ranks
@@ -304,6 +366,7 @@ fjordClosure
     address         "unix:///tmp/foamnordic-case-{rank}.sock";
     sessionId       2026;
     sharedMemory    true;
+    ucx             false;
     exchangeControl timeStep;
 
     inputs          (c_tilde c_var T_tilde);
@@ -315,6 +378,20 @@ fjordClosure
 the native worker accepts SHM, the established UDS connection is upgraded
 before the first field exchange. TCP addresses remain on TCP and never pretend
 to provide same-node SHM.
+
+For a central host, use a TCP control address and request the UCX bulk path
+explicitly:
+
+```foam
+address          "tcp://closure-host:24026";
+sharedMemory     false;
+ucx              true;
+```
+
+The adapter connects the TCP control session, requires the ClosureHost to
+select UCX, and upgrades before publishing the first Rune tensor. Both the
+CMake native libraries and the wmake adapter must be built with UCX support.
+An explicit `ucx true` never falls back to TCP.
 
 `exchangeControl timeStep` is the default and processes each OpenFOAM
 `Time::timeIndex()` once. Re-entry at the same index—such as repeated PIMPLE
@@ -329,6 +406,8 @@ The wmake adapter expects:
 
 - `FOAMNORDIC_SOURCE`: repository root;
 - `FOAMNORDIC_BUILD`: CMake build containing the PIC native static libraries;
+- `FOAMNORDIC_UCX_FLAGS`: optional UCX compile definition and include path;
+- `FOAMNORDIC_UCX_LIBS`: optional UCX link and runtime-search flags;
 - `FOAM_USER_LIBBIN`: OpenFOAM library destination.
 
 The native libraries and adapter must be built with the compiler and ABI used

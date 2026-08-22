@@ -50,6 +50,7 @@ bool fjordExchange::read(const dictionary& dict) {
     dict.readEntry("outputs", outputs_);
     dict.readEntry("address", address_);
     sharedMemory_ = dict.getOrDefault<bool>("sharedMemory", true);
+    ucx_ = dict.getOrDefault<bool>("ucx", false);
     sessionId_ = static_cast<std::uint64_t>(
         dict.getOrDefault<label>("sessionId", 1));
     const auto cadence = dict.getOrDefault<word>("exchangeControl", "timeStep");
@@ -73,7 +74,7 @@ bool fjordExchange::read(const dictionary& dict) {
 
 void fjordExchange::connectPeer() {
     harbor_ = foamNordic::connectSession(
-        address_, sharedMemory_, sessionId_);
+        address_, sharedMemory_, ucx_, sessionId_);
     foamnordic::adapter::ExchangeContract contract;
     for (const auto& name : inputs_) {
         contract.inputs.emplace_back(name.c_str());

@@ -8,6 +8,7 @@ orchestration layer. They must not be read as runnable examples until Python
 packaging and API tests are added.
 
 - [API design](design.md)
+- [Provisional run-control API](run-control-api.md)
 - [Native C++ documentation](../native/README.md)
 
 The earlier SmartSim- and Redis-based FoamNordic APIs are historical reference

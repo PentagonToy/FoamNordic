@@ -73,3 +73,6 @@ fill only the observation ring, where the declared drop policy applies. A
 disconnected receiver marks the observation stream unhealthy and closes that
 stream without changing an in-flight model response. No observation plan
 means that none of the ring, relay thread, or framed channel is constructed.
+Longship merges configured node-local receivers into a byte-bounded event
+stream, assigns a monotonic ingestion index, and preserves source identity and
+per-source exchange order. It never waits for all nodes to reach a timestep.

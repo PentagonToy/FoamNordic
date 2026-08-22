@@ -13,8 +13,11 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "foamnordic/runtime/longship.hpp"
+#include "foamnordic/runtime/longship_cli.hpp"
 #include "foamnordic/runtime/longship_supervisor.hpp"
 
 #include <unistd.h>
@@ -83,6 +86,62 @@ void test_central_host_is_not_silently_attached() {
     require(rejected, "Longship silently accepted a central host.");
 }
 
+void test_longship_cli_preserves_component_arguments() {
+    const std::vector<std::string_view> arguments{
+        "--ready",
+        "/tmp/host-0.ready",
+        "--ready",
+        "/tmp/host-1.ready",
+        "--readiness-timeout-ms",
+        "45000",
+        "--termination-grace-ms",
+        "3000",
+        "--host-output",
+        "host.log",
+        "--solver-output",
+        "solver.log",
+        "--host",
+        "srun",
+        "--nodes=2",
+        "foamnordic_closure_worker",
+        "--solver",
+        "srun",
+        "--ntasks=32",
+        "pimpleFoam",
+        "-parallel",
+    };
+    const auto request = foamnordic::native::parse_longship_arguments(arguments);
+    require(
+        request.launch.host_ready_files.size() == 2
+            && request.launch.readiness_timeout == std::chrono::seconds(45)
+            && request.launch.termination_grace == std::chrono::seconds(3),
+        "Longship CLI changed lifecycle options.");
+    require(
+        request.launch.host.arguments
+                == std::vector<std::string>{
+                    "srun", "--nodes=2", "foamnordic_closure_worker"}
+            && request.launch.solver.arguments
+                   == std::vector<std::string>{
+                       "srun", "--ntasks=32", "pimpleFoam", "-parallel"},
+        "Longship CLI changed component arguments.");
+    require(
+        request.launch.host.output == "host.log"
+            && request.launch.solver.output == "solver.log",
+        "Longship CLI changed output paths.");
+}
+
+void test_longship_cli_rejects_incomplete_launch() {
+    const std::vector<std::string_view> arguments{
+        "--ready", "/tmp/host.ready", "--host", "host-only"};
+    bool rejected = false;
+    try {
+        static_cast<void>(foamnordic::native::parse_longship_arguments(arguments));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(rejected, "Longship CLI accepted a launch without a solver.");
+}
+
 std::filesystem::path readiness_path(const std::string& suffix) {
     return std::filesystem::temp_directory_path()
            / ("foamnordic-longship-"
@@ -108,6 +167,21 @@ void test_supervisor_completes_with_solver() {
     const auto result = foamnordic::native::sail_longship(launch);
     require(result.success(), "Longship rejected a successful solver.");
     std::filesystem::remove(ready);
+}
+
+void test_supervisor_removes_readiness_after_forced_host_stop() {
+    const auto ready = readiness_path("cleanup");
+    const auto result = foamnordic::native::sail_longship({
+        shell_command("touch " + ready.string() + "; while :; do sleep 1; done"),
+        shell_command("exit 0"),
+        {ready},
+        std::chrono::seconds(1),
+        std::chrono::milliseconds(20),
+    });
+    require(result.success(), "Forced host cleanup changed solver success.");
+    require(
+        !std::filesystem::exists(ready),
+        "Longship left its readiness marker after host termination.");
 }
 
 void test_supervisor_propagates_solver_failure() {
@@ -139,6 +213,35 @@ void test_supervisor_propagates_host_failure() {
     std::filesystem::remove(ready);
 }
 
+void test_supervisor_accepts_protocol_host_shutdown_before_solver_exit() {
+    const auto ready = readiness_path("protocol-shutdown");
+    const auto result = foamnordic::native::sail_longship({
+        shell_command("touch " + ready.string() + "; sleep 0.02; exit 0"),
+        shell_command("sleep 0.04; exit 0"),
+        {ready},
+        std::chrono::seconds(1),
+        std::chrono::milliseconds(100),
+    });
+    require(
+        result.success(),
+        "Longship rejected a host that shut down during solver finalization.");
+}
+
+void test_supervisor_rejects_early_clean_host_exit() {
+    const auto ready = readiness_path("early-clean-host");
+    const auto result = foamnordic::native::sail_longship({
+        shell_command("touch " + ready.string() + "; exit 0"),
+        shell_command("sleep 5"),
+        {ready},
+        std::chrono::seconds(1),
+        std::chrono::milliseconds(20),
+    });
+    require(
+        result.host_failed_first,
+        "Longship accepted a clean host exit while the solver remained active.");
+    require(!result.success(), "Early host exit produced a successful Longship.");
+}
+
 void test_supervisor_times_out_before_solver_start() {
     const auto ready = readiness_path("timeout");
     bool timed_out = false;
@@ -163,8 +266,13 @@ int main() {
     test_multi_node_longship();
     test_uneven_solver_layout_is_rejected();
     test_central_host_is_not_silently_attached();
+    test_longship_cli_preserves_component_arguments();
+    test_longship_cli_rejects_incomplete_launch();
     test_supervisor_completes_with_solver();
+    test_supervisor_removes_readiness_after_forced_host_stop();
     test_supervisor_propagates_solver_failure();
     test_supervisor_propagates_host_failure();
+    test_supervisor_accepts_protocol_host_shutdown_before_solver_exit();
+    test_supervisor_rejects_early_clean_host_exit();
     test_supervisor_times_out_before_solver_start();
 }

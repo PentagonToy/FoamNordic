@@ -1,6 +1,7 @@
 set(FOAMNORDIC_ADDRESS "unix:///tmp/foamnordic-closure.sock")
 set(FOAMNORDIC_SESSION_ID 2026)
 set(FOAMNORDIC_SHARED_MEMORY true)
+set(FOAMNORDIC_UCX false)
 set(FOAMNORDIC_INPUT_KEYS pressure_laplacian)
 set(FOAMNORDIC_INPUT_EXPRESSIONS "\"laplacian(p)\"")
 set(FOAMNORDIC_OUTPUT_FIELDS nut)
@@ -17,6 +18,7 @@ foreach(expected IN ITEMS
         "address          \"unix:///tmp/foamnordic-closure.sock\";"
         "sessionId        2026;"
         "sharedMemory     true;"
+        "ucx              false;"
         "    pressure_laplacian"
         "    \"laplacian(p)\""
         "probeExpression  \"laplacian(p)\";"

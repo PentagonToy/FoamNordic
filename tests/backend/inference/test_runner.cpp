@@ -27,27 +27,61 @@ void require(bool condition, const std::string& message) {
     }
 }
 
-Tensor scalar_field(
+Tensor field(
     std::string name,
+    std::uint64_t components,
     const std::vector<double>& values,
     std::uint64_t exchange_index,
     double physical_time) {
+    require(
+        components > 0 && values.size() % components == 0,
+        "Test field has an invalid component count.");
     std::vector<std::byte> bytes(values.size() * sizeof(double));
     std::memcpy(bytes.data(), values.data(), bytes.size());
+    std::vector<std::uint64_t> shape{
+        static_cast<std::uint64_t>(values.size() / components)};
+    if (components != 1) {
+        shape.push_back(components);
+    }
     return {
         std::move(name),
         Element::float64,
-        {static_cast<std::uint64_t>(values.size())},
+        std::move(shape),
         std::move(bytes),
         exchange_index,
         physical_time,
     };
 }
 
+Tensor scalar_field(
+    std::string name,
+    const std::vector<double>& values,
+    std::uint64_t exchange_index,
+    double physical_time) {
+    return field(
+        std::move(name), 1, values, exchange_index, physical_time);
+}
+
 std::vector<double> values_of(const Tensor& tensor) {
     std::vector<double> values(tensor.bytes.size() / sizeof(double));
     std::memcpy(values.data(), tensor.bytes.data(), tensor.bytes.size());
     return values;
+}
+
+bool values_close(
+    const Tensor& tensor,
+    const std::vector<double>& expected,
+    double tolerance = 1.0e-12) {
+    const auto actual = values_of(tensor);
+    if (actual.size() != expected.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        if (std::abs(actual[index] - expected[index]) > tolerance) {
+            return false;
+        }
+    }
+    return true;
 }
 
 class CombustionBypass final : public foamnordic::closure::BypassPolicy {
@@ -293,6 +327,69 @@ void test_scaled_affine_exchange(bool shared_memory) {
     }
 }
 
+void test_k_eqn_fjord_contract() {
+    std::vector<double> weights(33, 0.0);
+    weights[10] = 0.05;
+    weights[11] = 0.02;
+    weights[22] = 0.10;
+    foamnordic::closure::DenseAffineKernel affine(
+        11, 3, std::move(weights), {0.0, 0.0, 0.0});
+    foamnordic::closure::ArtifactModelKernel kernel(
+        {
+            1,
+            foamnordic::closure::ModelFormat::onnx,
+            "artifact/kEqnFjord.onnx",
+            {
+                "kEqnFjord-contract",
+                {
+                    {"k", Element::float64, 1},
+                    {"velocity_grad", Element::float64, 9},
+                    {"filter_width", Element::float64, 1},
+                },
+                {
+                    {"nut", Element::float64, 1},
+                    {"kProduction", Element::float64, 1},
+                    {"kDissipationCoeff", Element::float64, 1},
+                },
+            },
+            {},
+            std::nullopt,
+            std::nullopt,
+        },
+        affine);
+
+    TensorMap inputs;
+    inputs.emplace("k", scalar_field("k", {2.0, 4.0}, 21, 0.75));
+    inputs.emplace(
+        "velocity_grad",
+        field(
+            "velocity_grad",
+            9,
+            {
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0,
+                9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
+            },
+            21,
+            0.75));
+    inputs.emplace(
+        "filter_width",
+        scalar_field("filter_width", {0.5, 1.5}, 21, 0.75));
+
+    const auto outputs = kernel.evaluate(inputs, {0, 1}, 21, 0.75);
+    require(
+        outputs.size() == 3,
+        "kEqnFjord contract did not split all three outputs.");
+    require(
+        values_close(outputs.at("nut"), {0.025, 0.075}),
+        "kEqnFjord contract returned an incorrect nut field.");
+    require(
+        values_close(outputs.at("kProduction"), {0.04, 0.08}),
+        "kEqnFjord contract returned an incorrect production field.");
+    require(
+        values_close(outputs.at("kDissipationCoeff"), {0.2, 0.4}),
+        "kEqnFjord contract returned an incorrect dissipation field.");
+}
+
 void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
     auto channels = sharedMemory
                         ? foamnordic::fjord::shared_memory_channel_pair(8, 256)
@@ -355,6 +452,7 @@ int main() {
     test_native_combustion_exchange(true);
     test_scaled_affine_exchange(false);
     test_scaled_affine_exchange(true);
+    test_k_eqn_fjord_contract();
     test_worker_failure_is_reported_to_solver(false);
     test_worker_failure_is_reported_to_solver(true);
 }

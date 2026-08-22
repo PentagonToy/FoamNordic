@@ -2,6 +2,7 @@ add_library(
     foamnordic_runtime STATIC
     log.cpp
     longship.cpp
+    longship_cli.cpp
     longship_supervisor.cpp
     placement.cpp)
 add_library(FoamNordic::runtime ALIAS foamnordic_runtime)

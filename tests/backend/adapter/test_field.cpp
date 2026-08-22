@@ -1,6 +1,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -193,6 +194,70 @@ void test_observation_stream_is_separate_from_closure_transport() {
     publisher.stop();
     receiver.close();
     require(publisher.healthy(), "Healthy observation stream reported failure.");
+}
+
+void test_longship_aggregates_ordered_observation_sources() {
+    auto first_channels = foamnordic::fjord::local_channel_pair();
+    auto second_channels = foamnordic::fjord::local_channel_pair();
+    foamnordic::adapter::ObservationPublisher first(
+        std::move(first_channels.first), {4, 4'096});
+    foamnordic::adapter::ObservationPublisher second(
+        std::move(second_channels.first), {4, 4'096});
+
+    std::vector<foamnordic::adapter::ObservationSource> sources;
+    sources.push_back({
+        "node-0",
+        std::make_unique<foamnordic::adapter::ObservationReceiver>(
+            std::move(first_channels.second)),
+    });
+    sources.push_back({
+        "node-1",
+        std::make_unique<foamnordic::adapter::ObservationReceiver>(
+            std::move(second_channels.second)),
+    });
+    foamnordic::adapter::LongshipObservationStream stream(
+        std::move(sources), {8, 8'192});
+
+    require(
+        first.try_publish({1, 0.1, {{"U", {0.0, 1.0, 0.5, 4}}}})
+            && first.try_publish({2, 0.2, {{"U", {1.0, 2.0, 1.5, 4}}}})
+            && second.try_publish({1, 0.1, {{"p", {-1.0, 1.0, 0.0, 4}}}})
+            && second.try_publish({2, 0.2, {{"p", {-2.0, 2.0, 0.0, 4}}}}),
+        "Observation publishers rejected valid source records.");
+
+    std::vector<foamnordic::adapter::LongshipObservation> received;
+    while (received.size() < 4) {
+        auto observation = stream.receive(std::chrono::seconds(1));
+        require(observation.has_value(), "Longship aggregate stream timed out.");
+        received.push_back(std::move(*observation));
+    }
+    require(
+        received[0].stream_index == 0 && received[1].stream_index == 1
+            && received[2].stream_index == 2 && received[3].stream_index == 3,
+        "Longship aggregate stream did not assign a total arrival order.");
+
+    std::uint64_t node_zero_exchange = 0;
+    std::uint64_t node_one_exchange = 0;
+    for (const auto& observation : received) {
+        require(
+            observation.source == "node-0" || observation.source == "node-1",
+            "Longship aggregate stream lost source identity.");
+        auto& previous = observation.source == "node-0"
+                             ? node_zero_exchange
+                             : node_one_exchange;
+        require(
+            observation.record.exchange_index > previous,
+            "Longship aggregate stream changed per-source order.");
+        previous = observation.record.exchange_index;
+    }
+    require(
+        node_zero_exchange == 2 && node_one_exchange == 2,
+        "Longship aggregate stream lost a source record.");
+
+    stream.stop();
+    require(stream.healthy(), "Healthy aggregate observation stream reported failure.");
+    first.stop();
+    second.stop();
 }
 
 void test_atomic_field_exchange_applies_only_committed_output() {
@@ -555,6 +620,7 @@ int main() {
     test_compiled_plan_executes_outside_python_loop();
     test_execution_and_observation_ownership_are_separate();
     test_observation_stream_is_separate_from_closure_transport();
+    test_longship_aggregates_ordered_observation_sources();
     test_atomic_field_exchange_applies_only_committed_output();
     test_incomplete_output_never_modifies_field();
     test_stale_output_never_modifies_field();

@@ -19,6 +19,9 @@
 
 #include "foamnordic/fjord/rune.hpp"
 #include "foamnordic/fjord/shm_channel.hpp"
+#ifdef FOAMNORDIC_HAVE_UCX
+#include "foamnordic/fjord/ucx_channel.hpp"
+#endif
 
 namespace foamnordic::fjord {
 
@@ -314,6 +317,60 @@ void Harbor::accept_shared_memory() {
     channel_ = std::move(shared_memory);
 }
 
+#ifdef FOAMNORDIC_HAVE_UCX
+void Harbor::offer_ucx(UcxListener& listener) {
+    if (!any(session_.capabilities & Capability::ucx)) {
+        throw std::logic_error("UCX was not negotiated for this Harbor session.");
+    }
+    const auto address = listener.address().text();
+    if (address.size() > 4096) {
+        throw std::invalid_argument("FoamNordic UCX offer address is too long.");
+    }
+    const RunePrefix offer{
+        .kind = RuneKind::ucx_offer,
+        .name_bytes = static_cast<std::uint32_t>(address.size()),
+        .session_id = session_.session_id,
+    };
+    channel_->write_all(encode_prefix(offer));
+    channel_->write_all(std::as_bytes(std::span(address)));
+
+    auto ucx = listener.accept(options_.handshake_timeout);
+    std::array<std::byte, 1> bootstrap{};
+    ucx->read_all(bootstrap);
+    if (bootstrap.front() != std::byte{0x46}) {
+        throw std::runtime_error(
+            "FoamNordic peer sent an invalid UCX bootstrap.");
+    }
+    const auto ready = receive_prefix();
+    if (ready.kind != RuneKind::ucx_ready
+        || ready.session_id != session_.session_id) {
+        throw std::runtime_error("FoamNordic peer did not accept the UCX upgrade.");
+    }
+    channel_->close();
+    channel_ = std::move(ucx);
+}
+
+void Harbor::accept_ucx() {
+    if (!any(session_.capabilities & Capability::ucx)) {
+        throw std::logic_error("UCX was not negotiated for this Harbor session.");
+    }
+    const auto offer = receive_prefix();
+    if (offer.kind != RuneKind::ucx_offer
+        || offer.session_id != session_.session_id
+        || offer.name_bytes == 0 || offer.name_bytes > 4096) {
+        throw std::runtime_error("FoamNordic received an invalid UCX upgrade offer.");
+    }
+    std::string address_text(offer.name_bytes, '\0');
+    channel_->read_all(std::as_writable_bytes(std::span(address_text)));
+    auto ucx = connect_ucx(FjordAddress::parse(address_text));
+    const std::array bootstrap{std::byte{0x46}};
+    ucx->write_all(bootstrap);
+    send_control(RuneKind::ucx_ready, session_);
+    channel_->close();
+    channel_ = std::move(ucx);
+}
+#endif
+
 RuneKind Harbor::receive_control(std::uint64_t* exchange_index) {
     auto message = receive_message();
     if (message.kind != RuneKind::complete && message.kind != RuneKind::shutdown
@@ -325,6 +382,8 @@ RuneKind Harbor::receive_control(std::uint64_t* exchange_index) {
     }
     return message.kind;
 }
+
+void Harbor::interrupt() noexcept { channel_->interrupt(); }
 
 void Harbor::close() noexcept { channel_->close(); }
 

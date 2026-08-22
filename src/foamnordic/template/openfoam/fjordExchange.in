@@ -11,6 +11,7 @@
     address         "@FJORD_ADDRESS@";
     sessionId       @SESSION_ID@;
     sharedMemory    @SHARED_MEMORY@;
+    ucx             @UCX@;
     exchangeControl timeStep;
 
     inputs          (@INPUT_FIELDS@);

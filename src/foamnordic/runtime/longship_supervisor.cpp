@@ -156,7 +156,10 @@ private:
     const std::vector<std::filesystem::path>& files) {
     for (const auto& file : files) {
         std::error_code error;
-        if (!std::filesystem::is_regular_file(file, error) || error) {
+        const auto status = std::filesystem::status(file, error);
+        if (error
+            || (status.type() != std::filesystem::file_type::regular
+                && status.type() != std::filesystem::file_type::socket)) {
             return false;
         }
     }
@@ -176,6 +179,29 @@ void remove_stale_readiness(
         }
     }
 }
+
+void remove_readiness_noexcept(
+    const std::vector<std::filesystem::path>& files) noexcept {
+    for (const auto& file : files) {
+        std::error_code ignored;
+        static_cast<void>(std::filesystem::remove(file, ignored));
+    }
+}
+
+class ReadinessCleanup {
+public:
+    explicit ReadinessCleanup(
+        const std::vector<std::filesystem::path>& files)
+        : files_(files) {}
+
+    ~ReadinessCleanup() { remove_readiness_noexcept(files_); }
+
+    ReadinessCleanup(const ReadinessCleanup&) = delete;
+    ReadinessCleanup& operator=(const ReadinessCleanup&) = delete;
+
+private:
+    const std::vector<std::filesystem::path>& files_;
+};
 
 void wait_until_ready(
     const LongshipLaunch& launch,
@@ -225,6 +251,7 @@ void LongshipLaunch::validate() const {
 LongshipResult sail_longship(const LongshipLaunch& launch) {
     launch.validate();
     remove_stale_readiness(launch.host_ready_files);
+    const ReadinessCleanup readiness_cleanup(launch.host_ready_files);
 
     ChildState host(start_child(launch.host));
     host.watch();
@@ -242,11 +269,21 @@ LongshipResult sail_longship(const LongshipLaunch& launch) {
         solver.wait_for_change(std::chrono::milliseconds(100));
     }
 
-    const auto host_failed_first = host.finished() && !solver.finished();
-    if (host_failed_first) {
-        solver.terminate(launch.termination_grace);
+    bool host_failed_first =
+        host.finished() && solver.finished() && host.status() != 0;
+    if (host.finished() && !solver.finished()) {
+        if (host.status() == 0) {
+            solver.wait_for_change(launch.termination_grace);
+        }
+        if (!solver.finished()) {
+            host_failed_first = true;
+            solver.terminate(launch.termination_grace);
+        }
     } else {
-        host.terminate(launch.termination_grace);
+        host.wait_for_change(launch.termination_grace);
+        if (!host.finished()) {
+            host.terminate(launch.termination_grace);
+        }
     }
     host.join();
     solver.join();

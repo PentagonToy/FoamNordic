@@ -32,6 +32,7 @@ namespace Foam::foamNordic {
 [[nodiscard]] std::unique_ptr<foamnordic::fjord::Harbor> connectSession(
     const string& address,
     bool sharedMemory,
+    bool ucx,
     std::uint64_t sessionId);
 
 class ClosureSession final {

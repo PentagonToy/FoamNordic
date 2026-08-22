@@ -12,3 +12,11 @@ add_executable(foamnordic_longship_test test_longship.cpp)
 target_link_libraries(foamnordic_longship_test PRIVATE FoamNordic::runtime)
 
 add_test(NAME runtime.longship COMMAND foamnordic_longship_test)
+add_test(NAME runtime.longship_help COMMAND foamnordic-longship --help)
+
+add_test(
+    NAME runtime.longship_template
+    COMMAND
+        ${CMAKE_COMMAND}
+        -DTEMPLATE=${PROJECT_SOURCE_DIR}/src/foamnordic/template/slurm/longship.sbatch.in
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_longship_template.cmake)

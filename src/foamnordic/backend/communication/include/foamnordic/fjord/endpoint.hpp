@@ -22,6 +22,7 @@ namespace foamnordic::fjord {
 enum class FjordKind {
     unix_socket,
     tcp,
+    ucx,
 };
 
 struct FjordAddress {
@@ -31,6 +32,7 @@ struct FjordAddress {
 
     [[nodiscard]] static FjordAddress local(std::string path);
     [[nodiscard]] static FjordAddress network(std::string host, std::uint16_t port);
+    [[nodiscard]] static FjordAddress ucx(std::string host, std::uint16_t port);
     [[nodiscard]] static FjordAddress parse(const std::string& text);
     [[nodiscard]] std::string text() const;
     void validate() const;

@@ -103,17 +103,27 @@ FjordAddress FjordAddress::network(std::string host, std::uint16_t port) {
     return address;
 }
 
+FjordAddress FjordAddress::ucx(std::string host, std::uint16_t port) {
+    FjordAddress address{FjordKind::ucx, std::move(host), port};
+    address.validate();
+    return address;
+}
+
 FjordAddress FjordAddress::parse(const std::string& text) {
     constexpr std::string_view unix_prefix = "unix://";
     constexpr std::string_view tcp_prefix = "tcp://";
+    constexpr std::string_view ucx_prefix = "ucx://";
     if (text.starts_with(unix_prefix)) {
         return local(text.substr(unix_prefix.size()));
     }
-    if (!text.starts_with(tcp_prefix)) {
+    const auto is_tcp = text.starts_with(tcp_prefix);
+    const auto is_ucx = text.starts_with(ucx_prefix);
+    if (!is_tcp && !is_ucx) {
         throw std::invalid_argument(
-            "Fjord address must begin with unix:// or tcp://.");
+            "Fjord address must begin with unix://, tcp://, or ucx://.");
     }
-    const auto endpoint = text.substr(tcp_prefix.size());
+    const auto prefix_size = is_tcp ? tcp_prefix.size() : ucx_prefix.size();
+    const auto endpoint = text.substr(prefix_size);
     const auto separator = endpoint.rfind(':');
     if (separator == std::string::npos || separator == 0
         || separator + 1 == endpoint.size()) {
@@ -123,9 +133,11 @@ FjordAddress FjordAddress::parse(const std::string& text) {
     std::size_t consumed = 0;
     const auto parsed = std::stoul(port_text, &consumed);
     if (consumed != port_text.size() || parsed > 65535) {
-        throw std::invalid_argument("Fjord TCP port is invalid.");
+        throw std::invalid_argument("Fjord network port is invalid.");
     }
-    return network(endpoint.substr(0, separator), static_cast<std::uint16_t>(parsed));
+    const auto host = endpoint.substr(0, separator);
+    return is_tcp ? network(host, static_cast<std::uint16_t>(parsed))
+                  : ucx(host, static_cast<std::uint16_t>(parsed));
 }
 
 std::string FjordAddress::text() const {
@@ -133,7 +145,8 @@ std::string FjordAddress::text() const {
     if (kind == FjordKind::unix_socket) {
         return "unix://" + location;
     }
-    return "tcp://" + location + ":" + std::to_string(port);
+    const auto scheme = kind == FjordKind::tcp ? "tcp://" : "ucx://";
+    return scheme + location + ":" + std::to_string(port);
 }
 
 void FjordAddress::validate() const {
@@ -143,8 +156,8 @@ void FjordAddress::validate() const {
     if (kind == FjordKind::unix_socket && port != 0) {
         throw std::invalid_argument("A Fjord Unix address must not specify a port.");
     }
-    if (kind == FjordKind::tcp && port == 0) {
-        throw std::invalid_argument("A Fjord TCP address requires a non-zero port.");
+    if (kind != FjordKind::unix_socket && port == 0) {
+        throw std::invalid_argument("A Fjord network address requires a non-zero port.");
     }
 }
 
@@ -271,6 +284,11 @@ std::unique_ptr<FjordChannel> connect(const FjordAddress& address) {
             system_failure("Cannot connect to Fjord Unix listener");
         }
         return std::make_unique<SocketChannel>(descriptor);
+    }
+
+    if (address.kind == FjordKind::ucx) {
+        throw std::invalid_argument(
+            "Use connect_ucx for a Fjord UCX address.");
     }
 
     addrinfo hints{};

@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/runner.hpp"
@@ -23,6 +24,9 @@ namespace foamnordic::closure {
 
 struct WorkerOptions {
     bool shared_memory{true};
+    bool ucx{false};
+    std::string ucx_host;
+    std::uint32_t connections{1};
     std::uint64_t maximum_payload{16ULL * 1024ULL * 1024ULL * 1024ULL};
 
     void validate() const;
