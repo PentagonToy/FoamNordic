@@ -1,0 +1,24 @@
+EXE_INC = \
+    -std=c++20 \
+    -Wno-overloaded-virtual \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(LIB_SRC)/transportModels \
+    -I$(LIB_SRC)/TurbulenceModels/turbulenceModels/lnInclude \
+    -I$(LIB_SRC)/TurbulenceModels/incompressible/lnInclude \
+    -Imodels/nutFjord \
+    -Imodels/kEqnFjord \
+    -I$(FOAMNORDIC_SOURCE)/src \
+    -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
+
+LIB_LIBS = \
+    -L$(FOAMNORDIC_BUILD)/src/foamnordic/backend/adapter \
+    -L$(FOAMNORDIC_BUILD)/src/foamnordic/backend/communication \
+    -L$(FOAMNORDIC_BUILD)/src/foamnordic/runtime \
+    -lfoamnordic_adapter \
+    -lfoamnordic_fjord \
+    -lfoamnordic_runtime \
+    -lfiniteVolume \
+    -lmeshTools \
+    -lturbulenceModels \
+    -lincompressibleTransportModels

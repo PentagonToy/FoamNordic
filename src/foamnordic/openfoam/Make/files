@@ -1,0 +1,10 @@
+operations/expression.C
+operations/frame.C
+closureHook.C
+closureObservation.C
+closureSession.C
+fieldBridge.C
+fjordExchange.C
+models/makeClosureModels.C
+
+LIB = $(FOAM_USER_LIBBIN)/libfoamnordicOpenFOAM

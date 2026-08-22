@@ -1,0 +1,11 @@
+.DS_Store
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+Testing/
+*.o
+*.a
+*.so
+*.dylib
+*.log

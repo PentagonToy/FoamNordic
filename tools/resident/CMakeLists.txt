@@ -1,0 +1,4 @@
+add_executable(foamnordic_closure_worker main.cpp)
+target_link_libraries(foamnordic_closure_worker PRIVATE FoamNordic::closure)
+target_compile_features(foamnordic_closure_worker PRIVATE cxx_std_20)
+set_target_properties(foamnordic_closure_worker PROPERTIES CXX_EXTENSIONS OFF)

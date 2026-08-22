@@ -1,0 +1,13 @@
+simulationType  LES;
+
+LES
+{
+    LESModel        @CLOSURE_MODEL@;
+    turbulence      @TURBULENCE@;
+    printCoeffs     @PRINT_COEFFICIENTS@;
+
+    @CLOSURE_MODEL@Coeffs
+    {
+        @CLOSURE_CONFIGURATION@
+    }
+}

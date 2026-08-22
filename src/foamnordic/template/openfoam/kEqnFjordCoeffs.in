@@ -1,0 +1,27 @@
+foamNordicClosure
+{
+    address          "@FOAMNORDIC_ADDRESS@";
+    sessionId        @FOAMNORDIC_SESSION_ID@;
+    sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+
+    inputs
+    (
+        k
+        velocity_grad
+        filter_width
+    );
+
+    inputExpressions
+    (
+        k
+        "grad(U)"
+        delta
+    );
+
+    outputs
+    (
+        nut
+        kProduction
+        kDissipationCoeff
+    );
+}

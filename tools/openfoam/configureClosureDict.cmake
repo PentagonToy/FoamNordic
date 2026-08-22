@@ -1,0 +1,22 @@
+if(NOT DEFINED INPUT OR NOT DEFINED OUTPUT)
+    message(FATAL_ERROR "INPUT and OUTPUT are required")
+endif()
+
+foreach(variable IN ITEMS
+        FOAMNORDIC_ADDRESS
+        FOAMNORDIC_SESSION_ID
+        FOAMNORDIC_SHARED_MEMORY
+        FOAMNORDIC_INPUT_KEYS
+        FOAMNORDIC_INPUT_EXPRESSIONS
+        FOAMNORDIC_OUTPUT_FIELDS
+        FOAMNORDIC_PROBE_EXPRESSION
+        FOAMNORDIC_PROBE_OUTPUT
+        FOAMNORDIC_PROBE_SCALE
+        FOAMNORDIC_PROBE_SEED
+        FOAMNORDIC_PROBE_EXPECT_FAILURE)
+    if(NOT DEFINED ${variable})
+        message(FATAL_ERROR "${variable} is required")
+    endif()
+endforeach()
+
+configure_file("${INPUT}" "${OUTPUT}" @ONLY)

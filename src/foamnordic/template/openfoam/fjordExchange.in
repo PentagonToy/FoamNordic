@@ -1,0 +1,18 @@
+@FUNCTION_NAME@
+{
+    type            foamNordicExchange;
+    libs            ("libfoamnordicOpenFOAM.so");
+
+    enabled         true;
+    executeControl  timeStep;
+    executeInterval @EXECUTE_INTERVAL@;
+    writeControl    none;
+
+    address         "@FJORD_ADDRESS@";
+    sessionId       @SESSION_ID@;
+    sharedMemory    @SHARED_MEMORY@;
+    exchangeControl timeStep;
+
+    inputs          (@INPUT_FIELDS@);
+    outputs         (@OUTPUT_FIELDS@);
+}
