@@ -1,0 +1,42 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      combustionProperties;
+}
+
+combustionModel @FOAMNORDIC_MODEL@;
+active          true;
+
+@FOAMNORDIC_MODEL@Coeffs
+{
+    // This field is created and owned by the progress-variable solver.
+    reactionRateField      @FOAMNORDIC_OUTPUT_FIELDS@;
+    reactionRateDimensions @REACTION_RATE_DIMENSIONS@;
+
+    foamNordicClosure
+    {
+        address          "@FOAMNORDIC_ADDRESS@";
+        sessionId        1;
+        sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+        ucx              false;
+
+        inputs
+        (
+            @FOAMNORDIC_INPUT_KEYS@
+        );
+
+        inputExpressions
+        (
+            @FOAMNORDIC_INPUT_EXPRESSIONS@
+        );
+
+        outputs
+        (
+            @FOAMNORDIC_OUTPUT_FIELDS@
+        );
+
+        @FOAMNORDIC_OBSERVATION_BLOCK@
+    }
+}

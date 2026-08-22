@@ -1,8 +1,10 @@
-# Provisional combustion API
+# Combustion API
 
-The combustion namespace captures scientific ownership before a solver-native
-adapter is written. It currently validates and serializes declarations; it
-does not yet make stock OpenFOAM solvers solve progress-variable combustion.
+The combustion namespace captures scientific ownership independently of a
+particular solver family. It validates and serializes declarations. The native
+`reactionRateFjord` adapter now supplies the first equation-level boundary: it
+evaluates one learned reaction-rate source when an OpenFOAM combustion model's
+`correct()` method is called.
 
 ```python
 reaction_rate = fno.Closure(
@@ -47,3 +49,25 @@ The first beta-FDF contract accepts a pre-integrated `.fnom` table only.
 Runtime Python quadrature is deliberately excluded from the native hot path.
 See the [native combustion contract](../native/combustion-contract.md) for
 equation ordering, dimensions, parallel identity, and acceptance requirements.
+
+## Native reaction-rate adapter
+
+`reactionRateFjord` is registered for both `psiReactionThermo` and
+`rhoReactionThermo`. Its dictionary binds the semantic inputs `progress`,
+`variance`, and `temperature` to case expressions and declares exactly one
+solver-owned scalar output. The adapter validates the output field class and
+dimensions before opening the Fjord session.
+
+The output dimensions are intentionally explicit. A normalized progress rate
+may use `[0 0 -1 0 0 0 0]`, while a volumetric mass source may use
+`[1 -3 -1 0 0 0 0]`; the solver and model artifact must agree. The concrete
+dictionary template is
+`src/foamnordic/template/openfoam/combustion-model/reactionRateFjordProperties.in`.
+
+This is deliberately not a complete combustion solver. `R(Y)` and `Qdot()`
+return zero, the adapter does not call `thermo.correct()`, and it does not yet
+evaluate the beta-FDF manifold. A progress-variable solver must own the
+transport equations, consume the produced reaction-rate field, update the
+manifold, and correct thermodynamics in the ordering defined by the native
+contract. Consequently, selecting this model in stock `reactingFoam` does not
+implement progress-variable combustion.

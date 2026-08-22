@@ -1,8 +1,9 @@
 # Progress-variable combustion contract
 
-This document defines the provisional native boundary for FoamNordic
-progress-variable combustion. It is a design contract and guarded scaffold,
-not a claim that a combustion solver is currently implemented.
+This document defines the native boundary for FoamNordic progress-variable
+combustion. The reaction-rate source adapter is implemented; the manifold and
+solver equation integration remain a guarded scaffold, not a claim that a
+complete combustion solver is currently implemented.
 
 ## Scientific ownership
 
@@ -67,6 +68,20 @@ wholesale; compatibility and corrected-physics baselines must remain separate.
 
 The copyable guarded files live in
 `src/foamnordic/template/openfoam/combustion-model/`.
+
+## Implemented source boundary
+
+`reactionRateFjord` is a modern OpenFOAM `ThermoCombustion` runtime model for
+`psiReactionThermo` and `rhoReactionThermo`. It performs one native Fjord
+exchange from the required semantic inputs `progress`, `variance`, and
+`temperature` to one solver-owned `volScalarField`. Additional conditioning
+inputs are permitted. Field identity and dimensions are immutable during a
+run, and mismatches fail before the closure session starts.
+
+The model is only a reaction-rate producer. Its species matrix and heat-release
+methods return zero and it never corrects thermodynamics. This keeps equation
+assembly and correction order under solver ownership and prevents accidental
+double sources when it is integrated into a custom progress-variable solver.
 
 ## Single-cell reference oracle
 

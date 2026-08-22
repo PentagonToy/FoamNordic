@@ -6,5 +6,6 @@ closureSession.C
 fieldBridge.C
 fjordExchange.C
 models/makeClosureModels.C
+models/makeCombustionModels.C
 
 LIB = $(FOAM_USER_LIBBIN)/libfoamnordicOpenFOAM

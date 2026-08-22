@@ -152,6 +152,37 @@ class CombustionDeclarationTests(unittest.TestCase):
         self.assertNotIn("/Users/", rendered)
         self.assertNotIn("/scratch/", rendered)
 
+    def test_reaction_rate_adapter_has_a_narrow_equation_contract(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        model = root / "src/foamnordic/openfoam/models/reactionRateFjord"
+        header = (model / "reactionRateFjord.H").read_text(encoding="utf-8")
+        source = (model / "reactionRateFjord.C").read_text(encoding="utf-8")
+        registration = (
+            root / "src/foamnordic/openfoam/models/makeCombustionModels.C"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("ThermoCombustion<ReactionThermo>", header)
+        self.assertIn('TypeName("reactionRateFjord")', header)
+        self.assertIn('"progress", "variance", "temperature"', source)
+        self.assertIn("closure_->invoke", source)
+        self.assertNotIn("thermo().correct", source)
+        self.assertIn("dimMass / dimTime", source)
+        self.assertIn("dimEnergy / dimVolume / dimTime", source)
+        self.assertIn("psiReactionThermo", registration)
+        self.assertIn("rhoReactionThermo", registration)
+
+    def test_reaction_rate_dictionary_template_is_concrete(self) -> None:
+        template = (
+            Path(__file__).resolve().parents[2]
+            / "src/foamnordic/template/openfoam/combustion-model"
+            / "reactionRateFjordProperties.in"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("#error", template)
+        self.assertIn("reactionRateField", template)
+        self.assertIn("reactionRateDimensions", template)
+        self.assertIn("@REACTION_RATE_DIMENSIONS@", template)
+        self.assertIn("foamNordicClosure", template)
+
 
 if __name__ == "__main__":
     unittest.main()

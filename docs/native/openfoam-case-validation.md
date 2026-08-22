@@ -175,26 +175,27 @@ The gate is reproducible with
 It prepares an isolated mesh, writes all runs beneath the selected output
 directory, and emits `combustion-field-parity.json`.
 
-### Remaining equation-level boundary
+### Equation-level boundary
 
-This successful gate does not yet make `reactionRateFjord` a native combustion
-model. A generic `Transform` may deliberately modify temperature or species at
-a supported solver stage, but a learned reaction rate must enter the species
-and energy equations at the combustion or chemistry source-evaluation site.
-That next adapter needs:
+The generic parity gate was followed by a native `reactionRateFjord`
+`ThermoCombustion` adapter. It now evaluates a learned scalar source at the
+combustion model's correction site and validates its solver-owned field and
+dimensions. A generic `Transform` remains appropriate for deliberate field
+modification, while this adapter establishes the source-evaluation boundary.
 
-- a precise input contract, initially `c_tilde`, `c_var`, and `T_tilde` plus
-  beta-FDF table metadata;
-- a dimensioned `omega_c` output and an explicit mapping into the transported
-  progress-variable and energy source terms;
+The remaining complete-combustion integration needs:
+
+- explicit mapping of the dimensioned source into the transported
+  progress-variable equation and any energy coupling;
+- native beta-FDF table lookup and atomic species/thermochemical updates;
 - boundary, conservation, realizability, and failure-policy rules owned by
   OpenFOAM; and
 - a solver-integrated analytical/table reference case, not only an identity
   field exchange.
 
-The shared Fjord, resident, artifact, scaling, observation, and lifecycle
-layers already cover this adapter. Only the thin equation-level OpenFOAM entry
-point and its physical acceptance contract remain.
+The shared Fjord, resident, artifact, scaling, observation, lifecycle, and
+reaction-rate entry layers are now present. Solver equations, manifold lookup,
+and their physical acceptance trajectory remain.
 
 ## Known local limitation
 

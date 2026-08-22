@@ -51,3 +51,9 @@ policy instead of acquiring it accidentally from include-file order.
 `CombustionAdapter.H.in` and `CombustionAdapter.C.in` define the native model
 boundary. The equation files are insertion-point checklists, not reusable
 equations. A solver family should copy and resolve only the files it needs.
+
+`reactionRateFjordProperties.in` is the exception: it is a runnable dictionary
+template for the concrete `reactionRateFjord` source producer shipped in
+`libfoamnordicOpenFOAM`. It requires one solver-owned scalar output and an
+explicit `REACTION_RATE_DIMENSIONS` value. It does not perform manifold lookup,
+species transport, heat release, or thermodynamic correction.
