@@ -141,9 +141,10 @@ class CliTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(status, 0)
-            self.assertIn("[Step 1/4]", output.getvalue())
+            self.assertIn("[Step 1/5]", output.getvalue())
             self.assertIn("Configure native SDK", output.getvalue())
             self.assertIn("Build OpenFOAM integration", output.getvalue())
+            self.assertIn("Build progress-variable solver", output.getvalue())
             self.assertFalse(build_dir.exists())
             self.assertFalse(prefix.exists())
 

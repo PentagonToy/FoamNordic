@@ -92,6 +92,30 @@ an incompatible transport equation is rejected when OpenFOAM assembles it.
 The solver still owns convection, diffusion, relaxation, constraints, bounds,
 and the variance equation. It must call `combustion->correct()` once at its
 native outer-corrector site after the progress and variance solves. Selecting
-this model in stock `reactingFoam` does not create those equations. A guarded,
-copyable insertion template lives in
-`src/foamnordic/template/openfoam/combustion-model/progressVariableEqn.H.in`.
+this model in stock `reactingFoam` does not create those equations.
+
+For the portable reference path, build the ABI-matched runtime once and select
+the installed application by name:
+
+```text
+foamnordic build
+```
+
+```python
+case = fno.OpenFOAM.Case(
+    name="progressVariableFlame",
+    case_dir=CASE_DIR,
+    run_dir=OUTPUT_DIR,
+    of_cmd="openfoam",  # or an HPC module command
+    shell="zsh",
+    application="foamnordicProgressVariableFoam",
+    ranks=1,
+)
+```
+
+When the source case does not already provide
+`constant/progressVariableTransportProperties`, the compiler creates portable
+defaults and derives `varianceField` from the semantic `variance` binding. An
+existing file is preserved so a solver family can provide its own Schmidt
+numbers or transport policy. Guarded insertion templates remain available in
+`src/foamnordic/template/openfoam/combustion-model/` for production solvers.

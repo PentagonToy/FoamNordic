@@ -2,10 +2,10 @@
 
 This document defines the native boundary for FoamNordic progress-variable
 combustion. The reaction-rate source adapter, two-program coordinator,
-pre-integrated FNOM manifold dispatch, and native progress-equation source
-matrix are implemented. Solver-specific transport and variance equations
-remain guarded insertion templates, not a claim that a complete combustion
-solver is implemented.
+pre-integrated FNOM manifold dispatch, native progress-equation source matrix,
+and a deliberately narrow reference solver are implemented. Production solver
+families may replace the reference transport equations while retaining the
+same semantic and lifecycle contracts.
 
 ## Scientific ownership
 
@@ -88,12 +88,44 @@ families are expanded against the initial registry before launch. The shared
 Longship lifecycle starts and terminates the two workers together; there is no
 per-cell Python loop.
 
-The custom solver still owns steps 1, 2, 5, and 7 of the correction order. It
+The solver still owns steps 1, 2, 5, and 7 of the correction order. It
 assembles the source through the standard
 `transport == combustion->R(progress)` boundary and calls
 `combustion->correct()` exactly once at the agreed outer-corrector boundary.
 `R()` returns a positive explicit source only for the configured progress
 field; unrelated scalar and species equations receive a zero matrix.
+
+## Reference solver
+
+`foamnordicProgressVariableFoam` is the first solver-integrated acceptance
+path. `foamnordic build` compiles it beside the ABI-matched OpenFOAM adapter in
+the managed runtime `bin/` directory, and coupled launch adds that directory to
+the solver environment automatically.
+
+The reference solver uses `psiReactionThermo` and a transient PIMPLE loop. It
+solves configurable progress and variance fields, invokes
+`combustion->correct()` after those solves, and then continues pressure-density
+coupling. Progress diffusion uses `muEff/progressSchmidt`; variance is a
+portable passive-moment equation using `muEff/varianceSchmidt`, bounded by
+`0 <= variance <= progress*(1-progress)`. The field binding and Schmidt numbers
+live in `constant/progressVariableTransportProperties`.
+
+This scope is intentional. The solver does not copy fork-specific variance
+production/destruction methods, does not support local-time stepping, and does
+not solve stock species or energy equations. Manifold outputs own the selected
+species transaction. A production FPV thermodynamics adapter is still needed
+before manifold enthalpy and temperature can replace a solver family's native
+energy ownership.
+
+The reduced gate at `tools/openfoam/testProgressVariableCombustion.py` was run
+with OpenFOAM.com v2606 on the 4,000-cell counter-flow flame mesh for two
+transport steps. Both Joblib programs used native shared-memory exchanges; the
+progress equation, variance equation, reaction source, and two-field manifold
+transaction completed in one Longship lifecycle. Final ranges were
+`c = 0.245614 .. 0.260865` and
+`omega_c = 0.0147827 .. 0.0150877`; the maximum `|CH4 + CO2 - 1|` was exactly
+zero. The OpenFOAM solver execution time was 0.05 seconds; lifecycle startup
+and shutdown took about two seconds on the validation machine.
 
 ## Implemented source boundary
 

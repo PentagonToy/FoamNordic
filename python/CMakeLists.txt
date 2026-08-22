@@ -71,3 +71,10 @@ install(
     PATTERN "linux*" EXCLUDE
     PATTERN "darwin*" EXCLUDE
     PATTERN "lnInclude" EXCLUDE)
+install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/openfoam/progressVariableFoam
+    DESTINATION foamnordic/buildkit/tools/openfoam
+    COMPONENT Python
+    PATTERN "linux*" EXCLUDE
+    PATTERN "darwin*" EXCLUDE
+    PATTERN "lnInclude" EXCLUDE)

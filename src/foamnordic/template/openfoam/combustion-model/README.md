@@ -5,6 +5,10 @@ combustion adapter. It is not a solver and is intentionally impossible to
 compile without resolving every `@UPPER_SNAKE_CASE@` token and removing the
 top-level `#error` guards.
 
+`progressVariableTransportProperties.in` is the one runnable exception. The
+Python compiler uses it only when a source case has not supplied its own
+transport dictionary for `foamnordicProgressVariableFoam`.
+
 The scaffold separates three responsibilities:
 
 1. The solver owns transport equations and their transported fields.

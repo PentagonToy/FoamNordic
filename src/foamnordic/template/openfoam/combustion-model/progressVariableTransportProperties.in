@@ -1,0 +1,16 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      progressVariableTransportProperties;
+}
+
+// Solver-owned variance binding. The progress and source bindings are read
+// from combustionProperties to keep one authoritative field map.
+varianceField     @VARIANCE_FIELD@;
+
+// Reference-solver effective Schmidt numbers. Production solver families may
+// replace these diffusion terms while retaining the same source contract.
+progressSchmidt   1.0;
+varianceSchmidt   1.0;

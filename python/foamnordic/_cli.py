@@ -221,6 +221,10 @@ def _finalize_macos_openfoam_library(library_dir: Path, log: TextIO) -> Path:
         if stale != destination:
             stale.unlink()
     library.replace(destination)
+    # Keep the generic linker name for ABI-matched tools built into the same
+    # runtime. Runtime discovery and dictionary injection still select the
+    # content-addressed library.
+    library.symlink_to(destination.name)
     return destination
 
 
@@ -282,13 +286,17 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             )
 
     adapter_source = build_dir / "openfoam"
+    solver_source = build_dir / "progressVariableFoam"
     library_dir = prefix / "lib"
+    application_dir = prefix / "bin"
     environment = os.environ.copy()
     environment.update(
         {
             "FOAMNORDIC_SOURCE": str(source),
             "FOAMNORDIC_BUILD": str(build_dir),
             "FOAM_USER_LIBBIN": str(library_dir),
+            "FOAMNORDIC_OPENFOAM_LIB": str(library_dir),
+            "FOAM_USER_APPBIN": str(application_dir),
         }
     )
     cmake_environment = os.environ.copy()
@@ -338,6 +346,10 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             "Build OpenFOAM integration",
             [wmake, "libso"],
         ),
+        (
+            "Build progress-variable solver",
+            [wmake],
+        ),
     )
 
     if args.dry_run:
@@ -346,13 +358,24 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             with terminal.step(index, len(commands), description):
                 if description == "Build OpenFOAM integration":
                     print(f"$ cd {shlex.quote(str(adapter_source))}", file=log)
+                elif description == "Build progress-variable solver":
+                    print(f"$ cd {shlex.quote(str(solver_source))}", file=log)
                 _run_command(command, log, dry_run=True)
     else:
         try:
             if adapter_source.exists():
                 shutil.rmtree(adapter_source)
+            if solver_source.exists():
+                shutil.rmtree(solver_source)
             shutil.copytree(source / "src/foamnordic/openfoam", adapter_source)
+            shutil.copytree(
+                source / "tools/openfoam/progressVariableFoam", solver_source
+            )
             library_dir.mkdir(parents=True, exist_ok=True)
+            application_dir.mkdir(parents=True, exist_ok=True)
+            generic_macos_library = library_dir / "libfoamnordicOpenFOAM.dylib"
+            if sys.platform == "darwin" and generic_macos_library.is_symlink():
+                generic_macos_library.unlink()
             with log_path.open("w", encoding="utf-8") as log:
                 for index, (description, command) in enumerate(commands, start=1):
                     with terminal.step(index, len(commands), description):
@@ -367,6 +390,15 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                             )
                             if sys.platform == "darwin":
                                 _finalize_macos_openfoam_library(library_dir, log)
+                        elif description == "Build progress-variable solver":
+                            subprocess.run(
+                                command,
+                                cwd=solver_source,
+                                env=environment,
+                                check=True,
+                                stdout=log,
+                                stderr=subprocess.STDOUT,
+                            )
                         else:
                             _run_command(
                                 command,
@@ -399,6 +431,11 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         )
         if integration is None:
             raise RuntimeError("wmake completed without installing the OpenFOAM library")
+        solver = prefix / "bin/foamnordicProgressVariableFoam"
+        if not solver.is_file():
+            raise RuntimeError(
+                "wmake completed without installing the progress-variable solver"
+            )
         cache_text = (
             cache.read_text(encoding="utf-8", errors="ignore")
             if cache.is_file()
@@ -413,6 +450,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 metadata={"platform": selected.platform, "openfoam": selected.openfoam},
             )
         print(f"Build log:  {log_path}", file=stream)
+        print(f"Reference solver: {solver}", file=stream)
     return 0
 
 

@@ -94,7 +94,7 @@ installation; model backends do not require separate extras.
 
 `foamnordic build` uses the kit bundled by PyPI and GitHub installations, or
 the live sources of an editable checkout. It installs the C++ SDK plus
-OpenFOAM integration below
+OpenFOAM integration and `foamnordicProgressVariableFoam` reference solver below
 `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Its cache uses
 the same ABI partition below `~/.cache/foamnordic/build/`. This prevents a
 macOS build, a Linux build, or two OpenFOAM compiler ABIs from overwriting one

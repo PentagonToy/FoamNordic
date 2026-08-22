@@ -5,7 +5,11 @@ import tempfile
 import unittest
 
 import foamnordic as fno
-from foamnordic._case import render_combustion_dictionary
+from foamnordic._case import (
+    _dimensions,
+    render_combustion_dictionary,
+    render_combustion_transport_dictionary,
+)
 from foamnordic._openfoam_reader import Field
 
 
@@ -69,6 +73,12 @@ def combustion_case(root: Path) -> fno.OpenFOAM.Case:
 
 
 class CombustionDeclarationTests(unittest.TestCase):
+    def test_openfoam_dimension_objects_are_lowered_to_seven_exponents(self) -> None:
+        self.assertEqual(
+            _dimensions((1, -3, -1, 0, 0, 0, 0)),
+            "[1 -3 -1 0 0 0 0]",
+        )
+
     def test_public_api_matches_progress_variable_sketch(self) -> None:
         combustion = fno.Combustion.ProgressVariable(
             reaction_rate=reaction_rate(),
@@ -291,6 +301,28 @@ class CombustionDeclarationTests(unittest.TestCase):
         )
         self.assertIn("Y_CH4", rendered)
         self.assertIn("Y_O2", rendered)
+
+    def test_reference_solver_transport_binds_declared_variance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            case = combustion_case(Path(directory))
+            declaration = fno.Combustion.ProgressVariable(
+                reaction_rate=reaction_rate(),
+                manifold=manifold(),
+            )
+            longship = fno.Longship(case=case, combustion=declaration)
+            reaction, _ = longship.closure_programs
+
+            destination, rendered = render_combustion_transport_dictionary(
+                longship, reaction
+            )
+
+        self.assertEqual(
+            destination,
+            Path("constant/progressVariableTransportProperties"),
+        )
+        self.assertIn("varianceField     c_var", rendered)
+        self.assertIn("progressSchmidt   1.0", rendered)
+        self.assertIn("varianceSchmidt   1.0", rendered)
 
     def test_progress_variable_native_coordinator_preserves_call_order(
         self,

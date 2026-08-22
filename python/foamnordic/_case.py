@@ -174,6 +174,26 @@ def _combustion_template() -> str:
     raise RuntimeError("FoamNordic combustion dictionary template is unavailable")
 
 
+def _combustion_transport_template() -> str:
+    relative = (
+        "templates/openfoam/combustion-model/"
+        "progressVariableTransportProperties.in"
+    )
+    packaged = files("foamnordic").joinpath(relative)
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src/foamnordic/template/openfoam/combustion-model"
+        / "progressVariableTransportProperties.in"
+    )
+    if source.is_file():
+        return source.read_text(encoding="utf-8")
+    raise RuntimeError(
+        "FoamNordic progress-variable transport template is unavailable"
+    )
+
+
 def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
     packaged = files("foamnordic").joinpath(
         "templates/openfoam/derivedSchemes.json"
@@ -324,6 +344,15 @@ def _closure_body(
 
 
 def _dimensions(value: object) -> str:
+    if not isinstance(value, (str, bytes)):
+        try:
+            exponents = tuple(value)
+        except TypeError:
+            exponents = ()
+        if len(exponents) == 7 and all(
+            isinstance(item, (int, float)) for item in exponents
+        ):
+            return "[" + " ".join(str(item) for item in exponents) + "]"
     text = str(value).strip()
     numbers = re.findall(
         r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text
@@ -383,6 +412,31 @@ def render_combustion_dictionary(
     if unresolved:
         raise ValueError(f"unresolved combustion template variables: {unresolved}")
     return Path("constant/combustionProperties"), rendered
+
+
+def render_combustion_transport_dictionary(
+    longship: Longship,
+    reaction_rate: Closure,
+) -> tuple[Path, str]:
+    """Render the portable scalar-transport defaults for the reference solver."""
+
+    if longship.combustion is None:
+        raise ValueError("a progress-variable combustion declaration is required")
+    variance = reaction_rate.inputs["variance"]
+    if variance.operation != "field" or variance.field_name is None:
+        raise ValueError("reaction-rate variance input must bind to a scalar field")
+    metadata = longship.case.field(variance.field_name)
+    if metadata.field_class != "volScalarField":
+        raise ValueError("reaction-rate variance input must be a volScalarField")
+    rendered = _combustion_transport_template().replace(
+        "@VARIANCE_FIELD@", variance.field_name
+    )
+    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
+    if unresolved:
+        raise ValueError(
+            f"unresolved combustion transport variables: {unresolved}"
+        )
+    return Path("constant/progressVariableTransportProperties"), rendered
 
 
 def render_dictionary(
@@ -682,6 +736,17 @@ def prepare_case(
         output = case_dir / destination
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(contents, encoding="utf-8")
+        if longship.combustion is not None:
+            transport_destination = (
+                case_dir / "constant/progressVariableTransportProperties"
+            )
+            if not transport_destination.exists():
+                _, transport_contents = render_combustion_transport_dictionary(
+                    longship, closures[0]
+                )
+                transport_destination.write_text(
+                    transport_contents, encoding="utf-8"
+                )
 
     transform_dictionaries: list[tuple[Transform, str]] = []
     closure_offset = len(closures)
@@ -719,7 +784,9 @@ def prepare_case(
 
     control = case_dir / "system/controlDict"
     control_path = quote_command((control,))
-    application = quote_command((longship.case.application,))
+    # controlDict stores an OpenFOAM word, while the process command may be an
+    # absolute executable selected by an advanced user.
+    application = quote_command((Path(longship.case.application).name,))
     commands = [
         f"foamDictionary {control_path} -entry application -set {application}",
     ]

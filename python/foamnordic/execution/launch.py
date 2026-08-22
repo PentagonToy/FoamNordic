@@ -117,8 +117,10 @@ def _solver_command(
     if _programs(longship):
         library = openfoam_library or _openfoam_library(longship)
         library_directory = library if library.is_dir() else library.parent
+        application_directory = library_directory.parent / "bin"
         environment = (
             f"export FOAM_USER_LIBBIN={shlex.quote(str(library_directory))}; "
+            f"export PATH={shlex.quote(str(application_directory))}:${{PATH}}; "
             f"export LD_LIBRARY_PATH={shlex.quote(str(library_directory))}:${{LD_LIBRARY_PATH:-}}; "
         )
     solver: list[object] = [longship.case.application, "-case", case_dir]

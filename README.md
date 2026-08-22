@@ -45,8 +45,8 @@ foamnordic build
 ```
 
 The same command works after PyPI, GitHub, or editable installation. It builds
-with the active OpenFOAM compiler rather than reusing an ABI-unsafe generic
-binary.
+the integration library and reference progress-variable solver with the active
+OpenFOAM compiler rather than reusing ABI-unsafe generic binaries.
 
 ### Install from this repository
 
