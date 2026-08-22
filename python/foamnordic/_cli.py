@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import hashlib
 import os
 from pathlib import Path
 import shlex
@@ -199,6 +200,30 @@ def _cmake_source(cache: Path) -> Path | None:
     return Path(value).expanduser().resolve() if value else None
 
 
+def _finalize_macos_openfoam_library(library_dir: Path, log: TextIO) -> Path:
+    """Give each macOS adapter build a collision-proof install name."""
+
+    library = library_dir / "libfoamnordicOpenFOAM.dylib"
+    if not library.is_file():
+        raise RuntimeError("wmake completed without installing the OpenFOAM library")
+    identity = hashlib.sha256(library.read_bytes()).hexdigest()[:12]
+    destination = library.with_name(f"libfoamnordicOpenFOAM-{identity}.dylib")
+    install_name_tool = shutil.which("install_name_tool")
+    if install_name_tool is None:
+        raise RuntimeError("install_name_tool is required for the macOS OpenFOAM adapter")
+    subprocess.run(
+        [install_name_tool, "-id", f"@rpath/{destination.name}", str(library)],
+        check=True,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+    )
+    for stale in library_dir.glob("libfoamnordicOpenFOAM-*.dylib"):
+        if stale != destination:
+            stale.unlink()
+    library.replace(destination)
+    return destination
+
+
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
     terminal = _Terminal(stream)
     terminal.section("FoamNordic native build")
@@ -340,6 +365,8 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                                 stdout=log,
                                 stderr=subprocess.STDOUT,
                             )
+                            if sys.platform == "darwin":
+                                _finalize_macos_openfoam_library(library_dir, log)
                         else:
                             _run_command(
                                 command,
@@ -362,6 +389,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             (
                 path
                 for path in (
+                    *sorted(prefix.glob("lib/libfoamnordicOpenFOAM-*.dylib")),
                     prefix / "lib/libfoamnordicOpenFOAM.so",
                     prefix / "lib/libfoamnordicOpenFOAM.dylib",
                 )

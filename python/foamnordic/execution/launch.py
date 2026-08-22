@@ -91,6 +91,7 @@ def _openfoam_library(longship: Longship | None = None) -> Path:
             (path,)
             if path.is_file()
             else (
+                *sorted(path.glob("libfoamnordicOpenFOAM-*.dylib")),
                 path / "libfoamnordicOpenFOAM.so",
                 path / "libfoamnordicOpenFOAM.dylib",
             )

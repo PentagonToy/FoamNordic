@@ -110,6 +110,19 @@ class LaunchTests(unittest.TestCase):
             ):
                 self.assertEqual(_openfoam_library(), library.resolve())
 
+    def test_openfoam_library_prefers_a_collision_proof_macos_build(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "libfoamnordicOpenFOAM.dylib").touch()
+            unique = root / "libfoamnordicOpenFOAM-0123456789ab.dylib"
+            unique.touch()
+            with patch.dict(
+                os.environ,
+                {"FOAMNORDIC_OPENFOAM_LIB": str(root)},
+                clear=False,
+            ):
+                self.assertEqual(_openfoam_library(), unique.resolve())
+
     def test_openfoam_library_resolves_from_case_toolchain_abi(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

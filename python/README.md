@@ -98,7 +98,9 @@ OpenFOAM integration below
 `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Its cache uses
 the same ABI partition below `~/.cache/foamnordic/build/`. This prevents a
 macOS build, a Linux build, or two OpenFOAM compiler ABIs from overwriting one
-another. A source checkout can be used without a wheel:
+another. macOS adapters also receive a content-addressed install name, so an
+older `FOAM_USER_LIBBIN` copy cannot silently shadow the selected runtime.
+A source checkout can be used without a wheel:
 
 ```console
 git clone https://github.com/PentagonToy/FoamNordic.git
