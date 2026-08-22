@@ -67,3 +67,18 @@ wholesale; compatibility and corrected-physics baselines must remain separate.
 
 The copyable guarded files live in
 `src/foamnordic/template/openfoam/combustion-model/`.
+
+## Single-cell reference oracle
+
+`python/foamnordic/combustion/reference.py` provides a deliberately slow,
+single-cell beta-FDF oracle for acceptance tests. It handles zero variance as
+a delta distribution, maximum admissible variance as an endpoint mixture, and
+ordinary moments as a beta distribution. Piecewise-linear table segments are
+integrated using regularized incomplete-beta moments, without Monte Carlo
+sampling or runtime Python quadrature.
+
+The frozen fixture at
+`python/tests/fixtures/combustion/beta_fdf_single_cell.json` covers both
+endpoints, a delta state, a uniform beta distribution, and the maximum-variance
+limit. This oracle is the first comparison target for a future native/FNOM
+manifold backend; it must not be called from an OpenFOAM cell loop.
