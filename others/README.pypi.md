@@ -10,7 +10,7 @@ scaling, and lifecycle in the native runtime while exposing a compact
 declarative API for cases, placement, launch, observations, and results.
 
 FoamNordic is active research software. This development line is
-`1.0.3.dev4`.
+`1.0.3.dev6`.
 
 ## Install
 
@@ -20,17 +20,20 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install foamnordic
 
+# Load or enter the desired OpenFOAM environment once, then:
+foamnordic build
+
 foamnordic --version
 foamnordic --help
 foamnordic dir
-foamnordic build
 ```
 
 The same installation includes ONNX packaging, Joblib/scikit-learn models,
 and JAX/Equinox resident models. No backend-specific extra is required.
 
-Binary wheels carry the native Python control runtime. OpenFOAM integration is
-prepared from the `of_cmd` and `shell` declared by each case.
+Binary wheels carry the native Python control runtime and compact OpenFOAM
+source build kit. `foamnordic build` compiles it for the currently loaded ABI;
+each case later selects that runtime from its declared `of_cmd` and `shell`.
 
 ## First case
 

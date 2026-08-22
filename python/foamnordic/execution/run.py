@@ -57,7 +57,7 @@ def _banner() -> str:
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8").rstrip()
     source = (
-        Path(__file__).resolve().parents[2]
+        Path(__file__).resolve().parents[3]
         / "src/foamnordic/template/large_banner.txt"
     )
     if source.is_file():
@@ -68,6 +68,13 @@ def _banner() -> str:
 def _initialize_sailing_log(path: Path, name: str) -> None:
     path.write_text(
         f"{_banner()}\n\n[FoamNordic] Sailing: {name}\n",
+        encoding="utf-8",
+    )
+
+
+def _initialize_harbor_log(path: Path, name: str) -> None:
+    path.write_text(
+        f"{_banner()}\n\n[FoamNordic] Harbor: {name}\n",
         encoding="utf-8",
     )
 
@@ -158,7 +165,7 @@ class Result:
     def postprocess(self):
         """Open this result through the durable postprocessing API."""
 
-        from .postprocess import Case
+        from ..postprocess import Case
 
         return Case(self)
 
@@ -394,16 +401,25 @@ class Run:
     def _wait_for_start(
         self,
         timeout: float | None,
+        pending_callback: Callable[[str, str], None] | None = None,
     ) -> tuple[str | None, str]:
         """Wait for Slurm to start or terminate the submitted workload."""
 
         deadline = None if timeout is None else monotonic() + timeout
         job_id: str | None = None
         state = "submitting"
+        reported_pending: str | None = None
         while True:
             job_id = job_id or self._read_job_id()
             if job_id is not None:
                 state = _query_slurm(job_id).get("status", state)
+                if (
+                    state == "pending"
+                    and pending_callback is not None
+                    and reported_pending != job_id
+                ):
+                    pending_callback(job_id, _query_slurm_estimated_start(job_id))
+                    reported_pending = job_id
                 if state in {
                     RunStatus.RUNNING.value,
                     RunStatus.SUCCEEDED.value,
@@ -417,10 +433,19 @@ class Run:
                 return job_id, state
             sleep(0.25)
 
+    def _slurm_start_time(self, job_id: str, *, estimated: bool = False) -> str:
+        """Return Slurm's actual or estimated start timestamp when available."""
+
+        if not estimated:
+            actual = _query_slurm(job_id).get("start", "")
+            if actual and actual not in {"Unknown", "N/A", "None"}:
+                return actual
+        return _query_slurm_estimated_start(job_id)
+
     def observe(self, *, poll_interval: float = 0.1):
         """Return an iterable observation stream; no context manager is required."""
 
-        from ._observe import ObservationStream
+        from .observe import ObservationStream
 
         return ObservationStream(
             self,
@@ -559,7 +584,7 @@ def _query_slurm(job_id: str) -> dict[str, str]:
                 job_id,
                 "--noheader",
                 "--parsable2",
-                "--format=JobIDRaw,State,Partition,Elapsed,NodeList",
+                "--format=JobIDRaw,State,Partition,Elapsed,NodeList,Start",
             ],
             check=True,
             capture_output=True,
@@ -572,7 +597,7 @@ def _query_slurm(job_id: str) -> dict[str, str]:
         (record for record in records if record and record[0] == job_id),
         records[0] if records else None,
     )
-    if selected is None or len(selected) < 5:
+    if selected is None or len(selected) < 6:
         return {}
     state = selected[1].split("+", 1)[0].strip().split(" ", 1)[0].lower()
     status = _normalize_slurm_state(state)
@@ -581,7 +606,35 @@ def _query_slurm(job_id: str) -> dict[str, str]:
         "partition": selected[2] or "-",
         "elapsed": selected[3] or "-",
         "node": selected[4] or "Slurm",
+        "start": selected[5] or "",
     }
+
+
+def _query_slurm_estimated_start(job_id: str) -> str:
+    squeue = shutil.which("squeue")
+    if squeue is None:
+        return ""
+    try:
+        result = subprocess.run(
+            [
+                squeue,
+                "--start",
+                "--noheader",
+                "--job",
+                job_id,
+                "--format=%S",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    value = result.stdout.strip().splitlines()
+    if not value:
+        return ""
+    selected = value[0].strip()
+    return "" if selected in {"N/A", "Unknown", "None"} else selected
 
 
 def _normalize_slurm_state(state: str) -> str:
@@ -597,7 +650,7 @@ def _normalize_slurm_state(state: str) -> str:
 
 
 def _longship_executable() -> Path:
-    executable = Path(__file__).with_name("bin") / "foamnordic-longship"
+    executable = Path(__file__).resolve().parents[1] / "bin/foamnordic-longship"
     if not executable.is_file() or not os.access(executable, os.X_OK):
         raise RuntimeError(
             "The packaged Longship executable is unavailable; install a binary wheel"
@@ -679,6 +732,7 @@ def _launch_process(
     """Start a lifecycle-owning process and bind it to the public Run handle."""
 
     _initialize_sailing_log(longship_log, name)
+    _initialize_harbor_log(host_log, name)
     mode = "ab" if process_log == longship_log else "wb"
     stream = process_log.open(mode)
     try:

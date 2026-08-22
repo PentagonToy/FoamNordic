@@ -38,11 +38,16 @@ python -m pip install --upgrade pip
 python -m pip install \
     --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
-    foamnordic==1.0.3.dev4
+    foamnordic==1.0.3.dev6
 foamnordic --version
 foamnordic dir
+module load openfoam/2512  # use the target site's command
 foamnordic build
 ```
+
+The release-wheel gate verifies both the packaged Python/native control runtime
+and that its bundled build kit can produce an OpenFOAM ABI integration without
+a source checkout.
 
 After that clean installation passes, publish the same six immutable wheel
 files to PyPI:
@@ -51,6 +56,6 @@ files to PyPI:
 python -m twine upload wheelhouse/*.whl
 ```
 
-Use the exact `1.0.3.dev4` pin while validating the development release.
+Use the exact `1.0.3.dev6` pin while validating the development release.
 Publish `1.0.4` after that gate passes to establish the rebuilt project as a
 stable default installation.

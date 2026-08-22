@@ -105,7 +105,8 @@ DenseAffineKernel::DenseAffineKernel(
 fjord::Tensor DenseAffineKernel::evaluate(
     fjord::TensorView features,
     std::uint64_t exchange_index,
-    double physical_time) {
+    double physical_time,
+    std::uint32_t /*rank*/) {
     features.validate();
     if (features.shape.size() != 2 || features.shape[1] != input_features_
         || features.time_index != exchange_index

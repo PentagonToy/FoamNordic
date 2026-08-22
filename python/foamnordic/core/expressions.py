@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from ._validation import require_nonempty
+from .validation import require_nonempty
 
 
 _ARITIES = {

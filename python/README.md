@@ -29,11 +29,11 @@ same case, resource planner, Slurm submission, logs, summary, and result API
 without allocating or starting a ClosureHost. This keeps OpenFOAM and ML runs
 comparable without maintaining two orchestration stacks.
 
-Launch resolves the ABI-specific ClosureHost and OpenFOAM library from a
-prepared profile (`FOAMNORDIC_PREPARED_WORK_DIR`) or the explicit
-`FOAMNORDIC_CLOSURE_WORKER` and `FOAMNORDIC_OPENFOAM_LIB` paths. Local launch
-and one-node attached Slurm launch support `auto`, `shm`, and `uds`; multi-node
-rank-to-host rendering and central UCX remain explicit validation topologies.
+Launch probes the case toolchain and resolves its ABI-specific OpenFOAM runtime
+automatically. Prepared profiles and `FOAMNORDIC_CLOSURE_WORKER` or
+`FOAMNORDIC_OPENFOAM_LIB` remain advanced overrides. Local launch and one-node
+attached Slurm launch support `auto`, `shm`, and `uds`; multi-node rank-to-host
+rendering and central UCX remain explicit validation topologies.
 
 From the repository root, create a clean local environment and run the API
 tests with:
@@ -79,30 +79,48 @@ repository's top-level CMake project so the nanobind extension links the
 exported native facade targets rather than compiling private C++ sources a
 second time.
 
-A binary wheel already contains the native control runtime:
+A binary wheel contains the native Python control runtime and compact OpenFOAM
+build kit:
 
 ```console
 pip install foamnordic
-foamnordic dir
+module load openfoam/2512
 foamnordic build
+foamnordic dir
 ```
 
 Joblib/scikit-learn and JAX/Equinox resident runtimes are included in the same
 installation; model backends do not require separate extras.
 
-Outside a source tree, `foamnordic build` verifies that runtime and exits
-without compiling. Inside a FoamNordic source tree, the same command builds and
-installs the C++ development SDK with compact step, timing, and failure-log
-output. OpenFOAM-specific compilation uses the case's `of_cmd` and `shell`
-declaration because its ABI belongs to the selected OpenFOAM environment.
+`foamnordic build` uses the kit bundled by PyPI and GitHub installations, or
+the live sources of an editable checkout. It installs the C++ SDK plus
+OpenFOAM integration below
+`~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Its cache uses
+the same ABI partition below `~/.cache/foamnordic/build/`. This prevents a
+macOS build, a Linux build, or two OpenFOAM compiler ABIs from overwriting one
+another. A source checkout can be used without a wheel:
+
+```console
+git clone https://github.com/PentagonToy/FoamNordic.git
+cd FoamNordic
+python -m pip install -e ./python
+module load openfoam/2512  # site-specific; omit inside an OpenFOAM.app shell
+foamnordic build
+```
+
+`Case.of_cmd` is probed before launch, so a case declaring
+`of_cmd="module load openfoam/2512"` automatically finds that ABI's installed
+runtime even when the parent Jupyter kernel did not inherit `WM_*` variables.
+`FOAMNORDIC_OPENFOAM_LIB` remains an explicit diagnostic override only.
 
 `fno.Math` supplies backend-neutral scalar, array, and physical tensor
 operations for NumPy and JAX closure functions. See the
 [Math API](../docs/python/math-api.md).
 
 The binary wheel also owns the native Longship supervisor used by `Run`.
-For Slurm, `launch()` waits for `RUNNING`, reports the Job ID, and then returns
-the background handle; `start_timeout` can bound that pending wait without
+For Slurm, `launch()` waits for `RUNNING`, reports the Job ID and actual Slurm
+start timestamp, and then returns the background handle. If `start_timeout`
+expires while pending, an available Slurm estimated start is shown without
 cancelling the job. Local launch returns after the process starts. Slurm
 submission filters inherited `SLURM_*`, `SBATCH_*`, and `SRUN_*` variables in a
 private environment copy without mutating the Python process. Omitting
@@ -122,7 +140,8 @@ failure cannot provide the same cleanup guarantee.
 isolated run writes `Sailing_<name>_<jobid>.out` for OpenFOAM output and
 `Sailing_<name>_<jobid>.log` for the FoamNordic lifecycle; the latter begins
 with the standard large banner. Detailed ClosureHost output remains available
-in `Harbor_<name>_<jobid>.log`. These three files live under `logs/`, generated
+in `Harbor_<name>_<jobid>.log`, which begins with the same banner. These three
+files live under `logs/`, generated
 scheduler scripts live under `slurm/`, and native observation shards use an
 `observations/` directory only when requested. Local identities use
 `local-<pid>`. The hidden ownership manifest also carries the immutable
@@ -187,3 +206,55 @@ artifact = fno.Export.joblib(
 `StandardScaler`, `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, and affine
 `FunctionTransformer` are converted to FNOM coefficients once; C++ applies
 them for every backend. Both scaler arguments default to `None`.
+
+Field mutation and physical closure remain separate declarations while sharing
+the same native worker and Fjord transport. Use
+`fno.Operator.model("model.fnom")` inside `fno.Transform(...)` for a general
+field mapping, or use `fno.Operator.function(...)` without first exporting a
+model:
+
+```python
+key = fno.Random.key(42, scope="global")
+
+def perturb_velocity(velocity, *, key):
+    scale_key, noise_key = fno.Random.split(key, 2)
+    scale = fno.Random.uniform(scale_key, low=0.995, high=1.005)
+    noise = fno.Random.normal(noise_key, shape=velocity.shape, std=1.0e-6)
+    return {"updated_velocity": velocity * scale + noise}
+
+transform = fno.Transform(
+    name="perturbVelocity",
+    operator=fno.Operator.function(perturb_velocity),
+    inputs={"velocity": fno.field("U")},
+    outputs={"updated_velocity": fno.field("U")},
+    at="time_step_start",
+    key=key,
+)
+```
+
+Function arguments and returned mapping keys follow the logical port names.
+Functions may request `key`, `exchange_index`, `physical_time`, or `rank` as
+optional keyword arguments. The older `rng` and `seed` injections remain
+available for source compatibility. `U.x`, `U.y`, and `U.z` select
+one mutable vector component, for example `fno.field("U.x")` on both sides of
+a transform.
+
+Stock OpenFOAM applications support exact `time_step_start` and
+`time_step_end` boundaries. `outer_corrector` and `pressure_corrected` are
+valid plan stages for solver integrations, but launch is rejected unless the
+application provides the corresponding native FoamNordic hook.
+Both `Transform` and `Closure` accept an immutable `fno.Random.Key` and default
+to `fno.Random.key(42)`. Every invocation folds in the program identity and
+exchange index. `scope="global"` shares that key across ranks, while
+`scope="rank"` additionally folds in the actual solver rank. Equinox
+materializes the same public key as a JAX key inside its resident backend.
+
+The Python implementation is grouped by responsibility: `core/` owns public
+declarations, expressions, plans, and validation; `execution/` owns launch,
+Slurm, lifecycle, observation, and resident workers; `models/` and
+`postprocess/` contain their corresponding user-facing subsystems.
+
+One Longship may carry multiple transforms. They use separate sockets,
+readiness markers, and resident workers under one fail-together host group.
+The same output field can therefore be transformed at `time_step_start` and
+again at `time_step_end`; duplicate writers at one stage are rejected.

@@ -8,7 +8,7 @@ from unittest.mock import patch
 import numpy as np
 
 import foamnordic as fno
-from foamnordic._run import Result, RunStatus
+from foamnordic.execution.run import Result, RunStatus
 from foamnordic.postprocess import Case, compare
 from foamnordic.postprocess._field import read_field_file
 

@@ -23,7 +23,8 @@ public:
     [[nodiscard]] virtual fjord::Tensor evaluate(
         fjord::TensorView features,
         std::uint64_t exchange_index,
-        double physical_time) = 0;
+        double physical_time,
+        std::uint32_t rank = 0) = 0;
 };
 
 class ArtifactModelKernel final : public ModelKernel {
@@ -34,7 +35,8 @@ public:
         const TensorMap& inputs,
         const std::vector<std::uint64_t>& active_cells,
         std::uint64_t exchange_index,
-        double physical_time) override;
+        double physical_time,
+        std::uint32_t rank = 0) override;
 
     [[nodiscard]] const ModelArtifact& artifact() const noexcept;
 

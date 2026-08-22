@@ -130,7 +130,7 @@ case = fno.OpenFOAM.Case(
 
 closure = fno.Closure(
     name="kEqnFjord",
-    artifact=model_dir / "kEqnFjord.fnom",
+    operator=fno.Operator.model(model_dir / "kEqnFjord.fnom"),
     inputs={
         "k": fno.field("k"),
         "velocity_grad": fno.grad("U"),
@@ -141,6 +141,7 @@ closure = fno.Closure(
         "k_production": fno.field("kProduction"),
         "k_dissipation_coeff": fno.field("kDissipationCoeff"),
     },
+    key=fno.Random.key(42),
 )
 ```
 
@@ -157,12 +158,69 @@ and mutable output fields. The plan compiler rejects missing fields, component
 count mismatches, duplicate writers, and unsupported expressions before
 submission whenever case metadata is sufficient.
 
-A field-only native transformation uses a separate operation declaration. It
-does not use `operator=None` as an implicit mode:
+A general field mutation uses a separate declaration. Logical model ports can
+bind to different OpenFOAM field names, so both `U -> U` perturbations and
+models such as `x, y, p -> U` use the same contract:
 
 ```python
-velocity_scale = fno.Transform.scale(field="U", factor=1.00005)
+velocity_model = fno.Operator.model(model_dir / "velocity.fnom")
+velocity_transform = fno.Transform(
+    name="predictVelocity",
+    operator=velocity_model,
+    inputs={
+        "x_coordinate": fno.field("x"),
+        "y_coordinate": fno.field("y"),
+        "pressure": fno.field("p"),
+    },
+    outputs={"predicted_velocity": fno.field("U")},
+    at="time_step_start",
+    key=fno.Random.key(42),
+)
 ```
+
+`Operator.model()` accepts only `.fnom`; its metadata selects ONNX, Joblib, or
+Equinox without exposing backend-specific launch classes.
+`Operator.function()` packages a callable and its inferred stored-field
+contract inside the marker-owned run directory. Logical input names become
+keyword arguments and a returned mapping uses logical output names:
+
+```python
+root_key = fno.Random.key(42, scope="global")
+
+def perturb_velocity(velocity, *, key):
+    scale_key, noise_key = fno.Random.split(key, 2)
+    scale = fno.Random.uniform(scale_key, low=0.995, high=1.005)
+    noise = fno.Random.normal(noise_key, shape=velocity.shape, std=1.0e-6)
+    return {"updated_velocity": velocity * scale + noise}
+
+velocity_transform = fno.Transform(
+    name="perturbVelocity",
+    operator=fno.Operator.function(perturb_velocity),
+    inputs={"velocity": fno.field("U")},
+    outputs={"updated_velocity": fno.field("U")},
+    at="time_step_start",
+    key=root_key,
+)
+```
+
+`key`, `exchange_index`, `physical_time`, and `rank` are injected only when
+explicitly named by the callable. The key is derived from the declared root,
+stable program identity, exchange index, and—under `scope="rank"`—the actual
+solver rank. Legacy `rng` and `seed` injection remains available temporarily.
+`fno.field("U.x")`, `.y`, and `.z` provide mutable component views without
+copying an entire vector field through Python.
+
+The public reproducibility input is `fno.Random.Key`, defaulting to
+`fno.Random.key(42)`. Equinox materializes it as a JAX key internally.
+`scope="global"` gives every rank the same invocation key; `scope="rank"`
+derives independent rank-local keys. See the [Random API](random-api.md).
+
+The generic OpenFOAM function-object path guarantees `at="time_step_start"`
+and `at="time_step_end"`. `outer_corrector` and `pressure_corrected` are
+distinct native stage identifiers—not aliases for a time-step callback—but a
+stock application is rejected because it does not publish those internal
+PIMPLE boundaries. A combustion or custom PIMPLE solver can implement the
+solver-native hook without changing this Python declaration.
 
 ## Longship and Slurm
 
@@ -344,6 +402,7 @@ bounded monitoring rather than publication-quality result analysis.
 | `Environment.load()` | `OpenFOAM.Case(of_cmd=..., shell=...)` compiled into launch |
 | `Case.initialize(clean=True)` | isolated `Case.prepare(reset="generated")` |
 | `Operator.closure(...)` | exported artifact plus `Closure(...)` bindings |
+| field mutation loop | `Operator.model(...)` plus `Transform(...)` |
 | `Bridge.couple(...)` | closure and observation declarations in the plan |
 | `Flow.allocate(...)` | `Slurm(...)` plus explicit attached placement |
 | Redis database and port | removed |

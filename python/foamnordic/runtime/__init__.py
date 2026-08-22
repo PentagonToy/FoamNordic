@@ -1,8 +1,8 @@
 """Workload declarations, lifecycle handles, observations, and results."""
 
-from .._observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
-from .._run import Result, ResultArtifacts, Run, RunStatus, RunSummary
-from .._spec import Attached, Closure, Longship, Observe, Retention, Slurm
+from ..execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
+from ..execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
+from ..core.spec import Attached, Closure, Longship, Observe, Retention, Slurm
 
 __all__ = [
     "Attached",

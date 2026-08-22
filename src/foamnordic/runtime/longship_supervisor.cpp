@@ -46,7 +46,7 @@ struct Child {
 [[noreturn]] void execute_child(const LongshipCommand& command) {
     if (!command.output.empty()) {
         const auto descriptor = ::open(
-            command.output.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0660);
+            command.output.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0660);
         if (descriptor < 0) {
             _exit(126);
         }

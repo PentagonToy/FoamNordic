@@ -9,11 +9,11 @@ import subprocess
 import time
 from typing import Mapping, Sequence, TYPE_CHECKING
 
-from ._run import _banner, _internal_path, _longship_executable, _sailing_paths
-from ._shell import quote_command
+from .run import _banner, _internal_path, _longship_executable, _sailing_paths
+from .shell import quote_command
 
 if TYPE_CHECKING:
-    from ._spec import Longship
+    from ..core.spec import Longship
 
 
 def _template(name: str) -> str:
@@ -21,7 +21,7 @@ def _template(name: str) -> str:
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8")
     source = (
-        Path(__file__).resolve().parents[2]
+        Path(__file__).resolve().parents[3]
         / f"src/foamnordic/template/slurm/{name}"
     )
     if source.is_file():
@@ -75,7 +75,7 @@ def write_batch(
         f"printf '%s\\n' {quote_command((f'[FoamNordic] Sailing: {longship.name}',))}"
     )
     if host is None:
-        launch_body = f""": > {quote_command((host_log,))}
+        launch_body = f""": >> {quote_command((host_log,))}
 exec srun \\
   --nodes={scheduler.nodes} \\
   --ntasks={scheduler.ntasks} \\

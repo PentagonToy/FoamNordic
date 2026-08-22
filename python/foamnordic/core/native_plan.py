@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from . import _native
+    from .. import _native
 except ImportError:
     _native = None
 
@@ -54,8 +54,11 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
     request.solver_nodes = solver_nodes
     request.solver_tasks = solver_tasks
     request.solver_cpus_per_task = solver_cpus_per_task
-    request.host_cpus_per_node = longship.placement.closure_cpus_per_node
-    request.use_closure_host = bool(longship.closures)
+    program_count = len(longship.closures) + len(longship.transforms)
+    request.host_cpus_per_node = (
+        longship.placement.closure_cpus_per_node * max(1, program_count)
+    )
+    request.use_closure_host = bool(longship.closures or longship.transforms)
     request.placement = placement
 
     plan = _native.plan_longship(request)
@@ -69,7 +72,7 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
         _native.DataPath.UCX: "ucx",
         _native.DataPath.TCP: "tcp",
     }
-    has_closure = bool(longship.closures)
+    has_program = bool(longship.closures or longship.transforms)
     return {
         "allocation_nodes": plan.allocation_nodes,
         "allocation_cpus_per_node": plan.allocation_cpus_per_node,
@@ -79,8 +82,8 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
         "host_tasks": plan.host_tasks,
         "host_cpus_per_task": plan.host_cpus_per_task,
         "placement": {
-            "kind": placement_names[plan.placement.placement] if has_closure else "none",
-            "data_path": data_path_names[plan.placement.data_path] if has_closure else "none",
+            "kind": placement_names[plan.placement.placement] if has_program else "none",
+            "data_path": data_path_names[plan.placement.data_path] if has_program else "none",
             "host_instances": plan.placement.host_instances,
             "same_allocation": plan.placement.same_allocation,
             "same_node": plan.placement.same_node,

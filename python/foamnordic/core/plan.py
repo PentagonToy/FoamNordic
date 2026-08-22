@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from ._paths import PathInput, path_from
+from .paths import PathInput, path_from
 
 
 def _canonical_bytes(value: Mapping[str, Any]) -> bytes:

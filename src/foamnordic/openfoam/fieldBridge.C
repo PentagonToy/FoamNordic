@@ -14,6 +14,7 @@
 #include "volFields.H"
 
 #include <span>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -119,6 +120,26 @@ void correct(const fvMesh& mesh, const word& name) {
         + std::string(name.c_str()));
 }
 
+struct ComponentSelection final {
+    word field;
+    direction component;
+};
+
+std::optional<ComponentSelection> componentSelection(const word& name) {
+    const std::string value(name.c_str());
+    if (value.size() < 3 || value[value.size() - 2] != '.') {
+        return std::nullopt;
+    }
+    const auto suffix = value.back();
+    if (suffix != 'x' && suffix != 'y' && suffix != 'z') {
+        return std::nullopt;
+    }
+    return ComponentSelection{
+        word(value.substr(0, value.size() - 2)),
+        static_cast<direction>(suffix == 'x' ? 0 : (suffix == 'y' ? 1 : 2)),
+    };
+}
+
 }  // namespace
 
 #define FOAMNORDIC_DISPATCH_FIELD(ACTION)                                      \
@@ -145,7 +166,31 @@ foamnordic::fjord::TensorView inputFieldView(
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
-    double physicalTime) {
+    double physicalTime,
+    scalarField* scratch) {
+    if (name == "x" || name == "y" || name == "z") {
+        if (scratch == nullptr) {
+            throw std::invalid_argument(
+                "FoamNordic coordinate input requires exchange-owned storage");
+        }
+        const direction component = name == "x" ? 0 : (name == "y" ? 1 : 2);
+        *scratch = mesh.C().primitiveField().component(component);
+        return makeInputView(
+            name, *scratch, exchangeIndex, physicalTime);
+    }
+    if (const auto selected = componentSelection(name)) {
+        if (scratch == nullptr) {
+            throw std::invalid_argument(
+                "FoamNordic component input requires exchange-owned storage");
+        }
+        if (!contains<volVectorField>(mesh, selected->field)) {
+            unsupported(name);
+        }
+        *scratch = mesh.lookupObject<volVectorField>(selected->field)
+                       .primitiveField()
+                       .component(selected->component);
+        return makeInputView(name, *scratch, exchangeIndex, physicalTime);
+    }
     FOAMNORDIC_DISPATCH_FIELD(input);
 }
 
@@ -153,13 +198,31 @@ foamnordic::fjord::MutableTensorView outputFieldView(
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
-    double physicalTime) {
+    double physicalTime,
+    scalarField* scratch) {
+    if (const auto selected = componentSelection(name)) {
+        if (scratch == nullptr) {
+            throw std::invalid_argument(
+                "FoamNordic component output requires exchange-owned storage");
+        }
+        if (!contains<volVectorField>(mesh, selected->field)) {
+            unsupported(name);
+        }
+        *scratch = mesh.lookupObject<volVectorField>(selected->field)
+                       .primitiveField()
+                       .component(selected->component);
+        return makeOutputView(name, *scratch, exchangeIndex, physicalTime);
+    }
     FOAMNORDIC_DISPATCH_FIELD(output);
 }
 
 #undef FOAMNORDIC_DISPATCH_FIELD
 
 void correctFieldBoundary(const fvMesh& mesh, const word& name) {
+    if (const auto selected = componentSelection(name)) {
+        correct<volVectorField>(mesh, selected->field);
+        return;
+    }
 #define FOAMNORDIC_CORRECT_FIELD(FIELD_TYPE)     \
     if (contains<FIELD_TYPE>(mesh, name)) {      \
         correct<FIELD_TYPE>(mesh, name);         \
@@ -172,6 +235,22 @@ void correctFieldBoundary(const fvMesh& mesh, const word& name) {
     FOAMNORDIC_CORRECT_FIELD(volTensorField)
 #undef FOAMNORDIC_CORRECT_FIELD
     unsupported(name);
+}
+
+void commitOutputField(
+    const fvMesh& mesh,
+    const word& name,
+    const scalarField* scratch) {
+    const auto selected = componentSelection(name);
+    if (!selected) {
+        return;
+    }
+    if (scratch == nullptr || !contains<volVectorField>(mesh, selected->field)) {
+        unsupported(name);
+    }
+    mesh.lookupObjectRef<volVectorField>(selected->field)
+        .primitiveFieldRef()
+        .replace(selected->component, *scratch);
 }
 
 }  // namespace Foam::foamNordic

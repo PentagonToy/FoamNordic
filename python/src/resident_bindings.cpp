@@ -48,7 +48,8 @@ public:
     foamnordic::fjord::Tensor evaluate(
         foamnordic::fjord::TensorView features,
         std::uint64_t exchange_index,
-        double physical_time) override {
+        double physical_time,
+        std::uint32_t rank) override {
         features.validate();
         if (features.shape.size() != 2) {
             throw std::invalid_argument("Python model features must be rank two.");
@@ -74,7 +75,8 @@ public:
                 features.shape[1],
                 dtype,
                 exchange_index,
-                physical_time);
+                physical_time,
+                rank);
             Py_buffer buffer{};
             if (PyObject_GetBuffer(result.ptr(), &buffer, PyBUF_CONTIG_RO) < 0) {
                 throw nb::python_error();

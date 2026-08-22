@@ -44,6 +44,12 @@ add_library(FoamNordic::fjord ALIAS foamnordic_fjord)
 
 target_compile_features(foamnordic_fjord PUBLIC cxx_std_20)
 target_link_libraries(foamnordic_fjord PUBLIC Threads::Threads FoamNordic::runtime)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # shm_open/shm_unlink live in librt on the oldest glibc supported by
+    # manylinux wheels.  Newer glibc folds them into libc, but retaining the
+    # explicit dependency keeps the binary portable across both layouts.
+    target_link_libraries(foamnordic_fjord PUBLIC rt)
+endif()
 target_include_directories(foamnordic_fjord PUBLIC include)
 if(FOAMNORDIC_UCX)
     target_compile_definitions(foamnordic_fjord PUBLIC FOAMNORDIC_HAVE_UCX=1)

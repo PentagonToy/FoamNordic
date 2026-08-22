@@ -84,6 +84,7 @@ public:
     void accept_ucx();
 #endif
     [[nodiscard]] RuneKind receive_control(std::uint64_t* exchange_index = nullptr);
+    [[nodiscard]] std::uint32_t rank() const noexcept;
     void interrupt() noexcept;
     void close() noexcept;
 

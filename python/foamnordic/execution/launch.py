@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shlex
@@ -9,21 +10,26 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
-from ._case import prepare_case, validate_case
-from ._run import Run, _internal_path, _launch_local, _launch_process, _sailing_paths
-from ._shell import quote_command, toolchain_shell
-from ._slurm import force_cancel, write_batch, write_submission_wrapper
+from .._case import PreparedProgram, prepare_case, validate_case
+from .run import Run, _internal_path, _launch_local, _launch_process, _sailing_paths
+from .shell import quote_command, toolchain_shell
+from .slurm import force_cancel, write_batch, write_submission_wrapper
+from .runtime_paths import active_runtime_candidates, toolchain_runtime_candidates
 
 try:
-    from . import _native
+    from .. import _native
 except ImportError:
     _native = None
 
 if TYPE_CHECKING:
-    from ._spec import Longship
+    from ..core.spec import Longship
 
 
 _INHERITED_SLURM_PREFIXES = ("SLURM_", "SBATCH_", "SRUN_")
+
+
+def _programs(longship: Longship):
+    return (*longship.closures, *longship.transforms)
 
 
 def _submission_environment() -> dict[str, str]:
@@ -36,7 +42,7 @@ def _submission_environment() -> dict[str, str]:
     }
 
 
-def _worker() -> Path:
+def _worker(longship: Longship | None = None) -> Path:
     explicit = os.environ.get("FOAMNORDIC_CLOSURE_WORKER")
     candidates = [] if explicit is None else [Path(explicit)]
     prepared = os.environ.get("FOAMNORDIC_PREPARED_WORK_DIR")
@@ -44,6 +50,15 @@ def _worker() -> Path:
         candidates.append(
             Path(prepared) / "build/tools/resident/foamnordic_closure_worker"
         )
+    if longship is not None:
+        candidates.extend(
+            path / "bin/foamnordic_closure_worker"
+            for path in toolchain_runtime_candidates(longship.case._toolchain)
+        )
+    candidates.extend(
+        path / "bin/foamnordic_closure_worker"
+        for path in active_runtime_candidates()
+    )
     candidates.append(
         Path.home() / ".local/share/foamnordic/native/bin/foamnordic_closure_worker"
     )
@@ -57,21 +72,36 @@ def _worker() -> Path:
     )
 
 
-def _openfoam_library() -> Path:
+def _openfoam_library(longship: Longship | None = None) -> Path:
     explicit = os.environ.get("FOAMNORDIC_OPENFOAM_LIB")
     prepared = os.environ.get("FOAMNORDIC_PREPARED_WORK_DIR")
     candidates = [] if explicit is None else [Path(explicit)]
     if prepared:
         candidates.append(Path(prepared) / "lib")
+    if longship is not None:
+        candidates.extend(
+            path / "lib"
+            for path in toolchain_runtime_candidates(longship.case._toolchain)
+        )
+    candidates.extend(path / "lib" for path in active_runtime_candidates())
     candidates.append(Path.home() / ".local/share/foamnordic/native/lib")
     for candidate in candidates:
         path = candidate.expanduser().resolve()
-        library = path if path.is_file() else path / "libfoamnordicOpenFOAM.so"
-        if library.is_file():
-            return library.parent
+        libraries = (
+            (path,)
+            if path.is_file()
+            else (
+                path / "libfoamnordicOpenFOAM.so",
+                path / "libfoamnordicOpenFOAM.dylib",
+            )
+        )
+        for library in libraries:
+            if library.is_file():
+                return library
     raise RuntimeError(
-        "OpenFOAM integration library is unavailable. Set "
-        "FOAMNORDIC_OPENFOAM_LIB to its directory or library file."
+        "OpenFOAM integration library is unavailable for the Case.of_cmd ABI. "
+        "Load that OpenFOAM environment and run `foamnordic build`; "
+        "FOAMNORDIC_OPENFOAM_LIB remains available as an explicit override."
     )
 
 
@@ -80,13 +110,15 @@ def _solver_command(
     case_dir: Path,
     *,
     local_mpi: bool,
+    openfoam_library: Path | None = None,
 ) -> tuple[str, ...]:
     environment = ""
-    if longship.closures:
-        library = _openfoam_library()
+    if _programs(longship):
+        library = openfoam_library or _openfoam_library(longship)
+        library_directory = library if library.is_dir() else library.parent
         environment = (
-            f"export FOAM_USER_LIBBIN={shlex.quote(str(library))}; "
-            f"export LD_LIBRARY_PATH={shlex.quote(str(library))}:${{LD_LIBRARY_PATH:-}}; "
+            f"export FOAM_USER_LIBBIN={shlex.quote(str(library_directory))}; "
+            f"export LD_LIBRARY_PATH={shlex.quote(str(library_directory))}:${{LD_LIBRARY_PATH:-}}; "
         )
     solver: list[object] = [longship.case.application, "-case", case_dir]
     if longship.case.ranks > 1:
@@ -105,44 +137,80 @@ def _artifact_metadata(path: Path) -> dict[str, object]:
     return dict(_native.read_model_manifest(str(path.expanduser().resolve())))
 
 
-def _host_command(longship: Longship, ready: Path) -> tuple[str, ...]:
-    closure = longship.closures[0]
-    artifact = closure.artifact.expanduser().resolve()
+def _host_command(
+    longship: Longship,
+    prepared: PreparedProgram,
+) -> tuple[str, ...]:
+    program = prepared.program
+    if program.artifact is None and prepared.artifact is None:
+        raise RuntimeError("a model-backed field program is required")
+    selected_artifact = prepared.artifact or program.artifact
+    assert selected_artifact is not None
+    artifact = selected_artifact.expanduser().resolve()
     metadata = _artifact_metadata(artifact)
     model_format = str(metadata["format"])
     manifest_inputs = tuple(str(item[0]) for item in metadata["inputs"])
     manifest_outputs = tuple(str(item[0]) for item in metadata["outputs"])
-    if manifest_inputs != tuple(closure.inputs):
+    if manifest_inputs != tuple(program.inputs):
         raise ValueError(
-            "closure input order does not match its FNOM manifest: "
-            f"{tuple(closure.inputs)!r} != {manifest_inputs!r}"
+            "field-program input order does not match its FNOM manifest: "
+            f"{tuple(program.inputs)!r} != {manifest_inputs!r}"
         )
-    if manifest_outputs != tuple(closure.outputs):
+    if manifest_outputs != tuple(program.outputs):
         raise ValueError(
-            "closure output order does not match its FNOM manifest: "
-            f"{tuple(closure.outputs)!r} != {manifest_outputs!r}"
+            "field-program output order does not match its FNOM manifest: "
+            f"{tuple(program.outputs)!r} != {manifest_outputs!r}"
         )
     executable: list[object]
     if model_format == "onnx":
-        executable = [_worker()]
+        executable = [_worker(longship)]
     elif model_format in {"joblib", "equinox"}:
-        executable = [sys.executable, "-m", "foamnordic._resident"]
+        executable = [sys.executable, "-m", "foamnordic.execution.resident"]
     else:
-        raise ValueError(f"unsupported closure artifact format: {model_format}")
+        raise ValueError(f"unsupported field-program artifact format: {model_format}")
     values: list[object] = [
         *executable,
-        f"unix://{ready.parent / 'closure.sock'}",
+        f"unix://{prepared.socket}",
         artifact,
         "--connections",
         str(longship.case.ranks),
         "--ready-file",
-        ready,
+        prepared.ready,
     ]
+    if model_format in {"joblib", "equinox"}:
+        values.extend(("--key", program.key.to_json(), "--program", program.name))
     if longship.placement.data_path == "uds":
         values.append("--no-shm")
     return toolchain_shell(
         longship.case._toolchain,
         "exec " + quote_command(values),
+    )
+
+
+def _host_group_command(
+    longship: Longship,
+    prepared: tuple[PreparedProgram, ...],
+    work_dir: Path,
+) -> tuple[tuple[str, ...], tuple[Path, ...]]:
+    commands = [_host_command(longship, item) for item in prepared]
+    if len(commands) == 1:
+        return commands[0], (prepared[0].ready,)
+    aggregate = _internal_path(work_dir, "programs.ready")
+    configuration = _internal_path(work_dir, "host-programs.json")
+    configuration.write_text(
+        json.dumps(
+            {
+                "commands": [list(command) for command in commands],
+                "ready_files": [str(item.ready) for item in prepared],
+                "aggregate_ready": str(aggregate),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return (sys.executable, "-m", "foamnordic.execution.host_group", str(configuration)), (
+        aggregate,
     )
 
 
@@ -158,10 +226,26 @@ def launch(
         raise ValueError("lifecycle timeouts must be positive")
     validate_case(longship)
     plan = longship.compile()
-    work_dir, case_dir, ready = prepare_case(longship, plan)
+    integration_library = (
+        _openfoam_library(longship) if _programs(longship) else None
+    )
+    work_dir, case_dir, prepared = prepare_case(
+        longship,
+        plan,
+        integration_library,
+    )
     local = longship.scheduler is None
-    solver = _solver_command(longship, case_dir, local_mpi=local)
-    host = _host_command(longship, ready) if longship.closures else None
+    solver = _solver_command(
+        longship,
+        case_dir,
+        local_mpi=local,
+        openfoam_library=integration_library,
+    )
+    host, ready_files = (
+        _host_group_command(longship, prepared, work_dir)
+        if prepared
+        else (None, ())
+    )
 
     if local and host is None:
         longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
@@ -182,7 +266,7 @@ def launch(
         return _launch_local(
             host=host,
             solver=solver,
-            ready_files=(ready,),
+            ready_files=ready_files,
             work_dir=work_dir,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
@@ -201,7 +285,7 @@ def launch(
         work_dir,
         host,
         solver,
-        ready if host is not None else None,
+        ready_files[0] if host is not None else None,
         readiness_timeout,
         termination_grace,
     )

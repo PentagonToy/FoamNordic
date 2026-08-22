@@ -9,8 +9,8 @@ import shutil
 import tempfile
 from typing import Mapping, Sequence
 
-from ._paths import PathInput, path_from
-from ._validation import require_nonempty, require_positive
+from .core.paths import PathInput, path_from
+from .core.validation import require_nonempty, require_positive
 
 try:
     from . import _native

@@ -113,7 +113,7 @@ class OpenFOAMReaderTests(unittest.TestCase):
         self.assertEqual(case._toolchain.command, "openfoam")
         self.assertTrue(case._toolchain.wrapper)
 
-        from foamnordic._shell import toolchain_shell
+        from foamnordic.execution.shell import toolchain_shell
 
         command = toolchain_shell(case._toolchain, "exec pimpleFoam -help")
         self.assertEqual(command[:2], ("zsh", "-lc"))
@@ -121,7 +121,7 @@ class OpenFOAMReaderTests(unittest.TestCase):
         self.assertIn("exec pimpleFoam -help", command[2])
 
     def test_macos_wrapper_contains_local_mpi_solver(self) -> None:
-        from foamnordic._launch import _solver_command
+        from foamnordic.execution.launch import _solver_command
 
         case = fno.OpenFOAM.Case(
             name="lidDrivenCavity",

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import hashlib
 from importlib.resources import files
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -11,17 +14,42 @@ import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 
-from ._managed import mark_generated
-from ._plan import CompiledPlan
-from ._run import _internal_path
-from ._shell import quote_command, toolchain_shell
+from .core.managed import mark_generated
+from .core.plan import CompiledPlan
+from .execution.run import _internal_path
+from .execution.shell import quote_command, toolchain_shell
 
 if TYPE_CHECKING:
-    from ._expressions import FieldExpression
-    from ._spec import Closure, Longship
+    from .core.expressions import FieldExpression
+    from .core.spec import Closure, Longship, Transform
 
 
 def validate_case(longship: Longship) -> None:
+    programs = (*longship.closures, *longship.transforms)
+    if len(longship.closures) > 1:
+        raise NotImplementedError(
+            "one solver closure may be active at a time; use multiple Transform "
+            "programs for independent field exchanges"
+        )
+    if longship.closures and longship.closures[0].operator.kind == "function":
+        raise NotImplementedError(
+            "Operator.function is currently a Transform operator; Closure "
+            "functions require derived-expression component inference"
+        )
+    unsupported = next(
+        (
+            transform
+            for transform in longship.transforms
+            if transform.at in {"outer_corrector", "pressure_corrected"}
+        ),
+        None,
+    )
+    if unsupported is not None:
+        raise NotImplementedError(
+            f"Transform at={unsupported.at!r} requires a "
+            "solver-native FoamNordic hook; stock applications expose only "
+            "time_step_start and time_step_end"
+        )
     source = longship.case.case_dir.resolve()
     initial = longship.case.initial_directory
     required = (
@@ -39,22 +67,27 @@ def validate_case(longship: Longship) -> None:
         raise NotImplementedError(
             "automatic Slurm launch currently supports one attached solver node"
         )
-    if len(longship.closures) > 1:
-        raise NotImplementedError("launch currently supports at most one ClosureHost artifact")
     if len(longship.observations) > 1:
         raise NotImplementedError("launch currently supports one observation schedule")
-    if not longship.closures:
+    if longship.transforms and longship.observations:
+        raise NotImplementedError(
+            "Transform observation requires the forthcoming general observation hook"
+        )
+    if not programs:
         if longship.observations:
             raise NotImplementedError(
                 "pure OpenFOAM observation requires the forthcoming function-object hook"
             )
         return
-    closure = longship.closures[0]
-    if not closure.artifact.expanduser().is_file():
-        raise FileNotFoundError(f"closure artifact does not exist: {closure.artifact}")
+    for program in programs:
+        if program.artifact is not None and not program.artifact.expanduser().is_file():
+            raise FileNotFoundError(
+                f"field-program artifact does not exist: {program.artifact}"
+            )
     if (
         longship.case.integration is None
-        and closure.name == "kEqnFjord"
+        and longship.closures
+        and longship.closures[0].name == "kEqnFjord"
         and not (initial / "k").is_file()
     ):
         raise FileNotFoundError("kEqnFjord requires a source-case 0/k field")
@@ -93,6 +126,19 @@ def _observation_template() -> str:
     raise RuntimeError("FoamNordic observation template is unavailable")
 
 
+def _transform_template() -> str:
+    packaged = files("foamnordic").joinpath("templates/openfoam/fjordExchange.in")
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src/foamnordic/template/openfoam/fjordExchange.in"
+    )
+    if source.is_file():
+        return source.read_text(encoding="utf-8")
+    raise RuntimeError("FoamNordic transform template is unavailable")
+
+
 def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
     packaged = files("foamnordic").joinpath(
         "templates/openfoam/derivedSchemes.json"
@@ -121,8 +167,8 @@ def _scheme_requirements(longship: Longship) -> tuple[tuple[str, str, str], ...]
 
     defaults = _derived_scheme_defaults()
     requirements: dict[tuple[str, str], str] = {}
-    for closure in longship.closures:
-        for expression in closure.inputs.values():
+    for program in (*longship.closures, *longship.transforms):
+        for expression in program.inputs.values():
             for node in _walk_expression(expression):
                 configuration = defaults.get(node.operation)
                 if configuration is None:
@@ -245,10 +291,179 @@ def render_dictionary(
     return destination, rendered
 
 
+def render_transform_dictionary(
+    transform: Transform,
+    address: str,
+    shared: bool,
+) -> str:
+    """Render a generic field exchange at the supported solver boundary."""
+
+    values = {
+        "FJORD_ADDRESS": address,
+        "SESSION_ID": 1,
+        "SHARED_MEMORY": str(shared).lower(),
+        "UCX": "false",
+        "EXECUTE_INTERVAL": 1,
+        "EXCHANGE_STAGE": {
+            "time_step_start": "timeStepStart",
+            "outer_corrector": "outerCorrector",
+            "pressure_corrected": "pressureCorrected",
+            "time_step_end": "timeStepEnd",
+        }[transform.at],
+        "EXECUTE_CONTROL": (
+            "timeStep" if transform.at == "time_step_start" else "none"
+        ),
+        "WRITE_CONTROL": (
+            "timeStep" if transform.at == "time_step_end" else "none"
+        ),
+        "INPUT_KEYS": " ".join(transform.inputs),
+        "INPUT_FIELDS": " ".join(
+            str(value.field_name) for value in transform.inputs.values()
+        ),
+        "OUTPUT_KEYS": " ".join(transform.outputs),
+        "OUTPUT_FIELDS": " ".join(
+            str(value.field_name) for value in transform.outputs.values()
+        ),
+    }
+    rendered = _transform_template()
+    for name, value in values.items():
+        rendered = rendered.replace(f"@{name}@", str(value))
+    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
+    if unresolved:
+        raise ValueError(f"unresolved OpenFOAM transform variables: {unresolved}")
+    return rendered.strip()
+
+
+_FIELD_COMPONENTS = {
+    "volScalarField": 1,
+    "volVectorField": 3,
+    "volSphericalTensorField": 1,
+    "volSymmTensorField": 6,
+    "volTensorField": 9,
+}
+
+
+def _field_width(longship: Longship, expression: FieldExpression) -> int:
+    """Resolve a stored field port width from the source-case header."""
+
+    assert expression.field_name is not None
+    name = expression.field_name
+    if name in {"x", "y", "z"}:
+        return 1
+    base, separator, component = name.partition(".")
+    metadata = longship.case.field(base)
+    try:
+        width = _FIELD_COMPONENTS[metadata.field_class]
+    except KeyError:
+        raise ValueError(
+            f"unsupported OpenFOAM field class for {base!r}: "
+            f"{metadata.field_class}"
+        ) from None
+    if separator:
+        if metadata.field_class != "volVectorField" or component not in {
+            "x", "y", "z"
+        }:
+            raise ValueError(
+                f"component selector {name!r} requires U.x/U.y/U.z-style "
+                "access to a volVectorField"
+            )
+        return 1
+    return width
+
+
+def _package_function(
+    longship: Longship,
+    transform: Transform,
+    work_dir: Path,
+) -> Path | None:
+    """Serialize one direct function and its inferred native tensor contract."""
+
+    if transform.operator.kind != "function":
+        return None
+    try:
+        import cloudpickle
+        from . import _native
+    except ImportError as error:
+        raise RuntimeError(
+            "Operator.function requires cloudpickle and a FoamNordic binary wheel"
+        ) from error
+    internal = _internal_path(work_dir, "function")
+    internal.mkdir(parents=True, exist_ok=True)
+    payload = internal / f"{transform.name}.function"
+    manifest = internal / f"{transform.name}.fnom"
+    with payload.open("wb") as stream:
+        input_widths = tuple(
+            _field_width(longship, expression)
+            for expression in transform.inputs.values()
+        )
+        cloudpickle.dump(
+            {
+                "schema": "foamnordic.function/v1",
+                "function": transform.operator.source,
+                "inputs": tuple(transform.inputs),
+                "input_widths": input_widths,
+                "outputs": tuple(transform.outputs),
+                "program": transform.name,
+                "key": transform.key.to_plan(),
+            },
+            stream,
+            protocol=5,
+        )
+    inputs = list(zip(transform.inputs, input_widths, strict=True))
+    outputs = [
+        (name, _field_width(longship, expression))
+        for name, expression in transform.outputs.items()
+    ]
+    _native.write_model_manifest(
+        str(manifest),
+        payload.name,
+        transform.name,
+        "joblib",
+        inputs,
+        outputs,
+        "float64",
+        [],
+        None,
+        None,
+    )
+    return manifest
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedProgram:
+    """One isolated field program and its worker lifecycle endpoints."""
+
+    program: Closure | Transform
+    ready: Path
+    socket: Path
+    artifact: Path | None
+
+
+def _program_slug(name: str, index: int) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-") or "program"
+    return f"{index:02d}-{cleaned}"
+
+
+def _socket_path(work_dir: Path, index: int) -> Path:
+    """Return a node-local address safely below sockaddr_un.sun_path limits."""
+
+    root = Path(os.environ.get("FOAMNORDIC_SOCKET_DIR", "/tmp")).expanduser()
+    identity = hashlib.sha256(str(work_dir).encode("utf-8")).hexdigest()[:16]
+    user = getattr(os, "getuid", lambda: 0)()
+    path = root / f"fn-{user}-{identity}-{index:02d}.sock"
+    if len(os.fsencode(path)) >= 104:
+        raise ValueError(
+            "FOAMNORDIC_SOCKET_DIR is too long for a portable Unix socket path: "
+            f"{root}"
+        )
+    return path
+
+
 def prepare_case(
     longship: Longship,
     plan: CompiledPlan,
-) -> tuple[Path, Path, Path]:
+    openfoam_library: Path | None = None,
+) -> tuple[Path, Path, tuple[PreparedProgram, ...]]:
     workspace = longship.case.run_dir.expanduser().resolve()
     runs = workspace / "runs"
     runs.mkdir(parents=True, exist_ok=True)
@@ -262,12 +477,24 @@ def prepare_case(
     shutil.copytree(longship.case.case_dir.expanduser().resolve(), case_dir)
     if not (case_dir / "0").exists() and (case_dir / "0.orig").is_dir():
         shutil.copytree(case_dir / "0.orig", case_dir / "0")
-    ready = _internal_path(work_dir, "closure.ready")
+    prepared: list[PreparedProgram] = []
+    for index, program in enumerate(longship.closures):
+        slug = _program_slug(program.name, index)
+        ready = _internal_path(work_dir, f"{slug}.ready")
+        socket = _socket_path(work_dir, index)
+        prepared.append(PreparedProgram(program, ready, socket, None))
+    for offset, transform in enumerate(longship.transforms, len(prepared)):
+        slug = _program_slug(transform.name, offset)
+        ready = _internal_path(work_dir, f"{slug}.ready")
+        socket = _socket_path(work_dir, offset)
+        artifact = _package_function(longship, transform, work_dir)
+        prepared.append(PreparedProgram(transform, ready, socket, artifact))
     if longship.closures:
         observations = work_dir / "observations"
         if longship.observations:
             observations.mkdir(parents=True, exist_ok=True)
-        address = f"unix://{_internal_path(work_dir, 'closure.sock')}"
+        closure_runtime = prepared[0]
+        address = f"unix://{closure_runtime.socket}"
         destination, contents = render_dictionary(
             longship,
             longship.closures[0],
@@ -279,15 +506,47 @@ def prepare_case(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(contents, encoding="utf-8")
 
+    transform_dictionaries: list[tuple[Transform, str]] = []
+    closure_offset = len(longship.closures)
+    for index, transform in enumerate(longship.transforms):
+        runtime = prepared[closure_offset + index]
+        transform_dictionaries.append(
+            (
+                transform,
+                render_transform_dictionary(
+                    transform,
+                    f"unix://{runtime.socket}",
+                    longship.placement.data_path != "uds",
+                ),
+            )
+        )
+
     control = case_dir / "system/controlDict"
     control_path = quote_command((control,))
     application = quote_command((longship.case.application,))
     commands = [
         f"foamDictionary {control_path} -entry application -set {application}",
     ]
+    for transform, transform_dictionary in transform_dictionaries:
+        function_name = quote_command((f"functions/{transform.name}",))
+        dictionary = quote_command((transform_dictionary,))
+        commands.append(
+            f"if ! foamDictionary {control_path} -entry functions >/dev/null 2>&1; "
+            f"then foamDictionary {control_path} -entry functions -add '{{}}'; fi; "
+            f"if foamDictionary {control_path} -entry {function_name} "
+            f">/dev/null 2>&1; then foamDictionary {control_path} "
+            f"-entry {function_name} -set {dictionary}; else foamDictionary "
+            f"{control_path} -entry {function_name} -add {dictionary}; fi"
+        )
     commands.extend(_scheme_commands(longship, case_dir))
-    if longship.closures:
-        libraries = quote_command(('("libfoamnordicOpenFOAM.so")',))
+    if longship.closures or longship.transforms:
+        if openfoam_library is None:
+            raise RuntimeError(
+                "field-program case preparation requires the selected "
+                "OpenFOAM integration library"
+            )
+        library_value = str(openfoam_library.resolve()).replace('"', '\\"')
+        libraries = quote_command((f'("{library_value}")',))
         commands.append(
             f"if foamDictionary {control_path} -entry libs >/dev/null 2>&1; "
             f"then foamDictionary {control_path} -entry libs -set {libraries}; "
@@ -308,4 +567,4 @@ def prepare_case(
             stdout=stream,
             stderr=subprocess.STDOUT,
         )
-    return work_dir, case_dir, ready
+    return work_dir, case_dir, tuple(prepared)

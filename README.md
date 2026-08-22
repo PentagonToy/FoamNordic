@@ -11,11 +11,11 @@ over SHM, UDS, UCX, or TCP, while Longship owns placement, launch, lifecycle,
 logs, observations, and results.
 
 FoamNordic is active research software. The current package version is
-`1.0.3.dev4`.
+`1.0.3.dev6`.
 
 ## Install
 
-The eventual PyPI installation is intentionally simple:
+The PyPI installation is intentionally simple:
 
 ```console
 python3 -m venv .venv
@@ -26,16 +26,27 @@ pip install foamnordic
 foamnordic --version
 foamnordic --help
 foamnordic dir
-foamnordic build
 ```
 
 The same installation includes ONNX packaging, Joblib/scikit-learn models,
 and JAX/Equinox resident models. No backend-specific install command is needed.
 
-Binary wheels include the native Python control runtime, so ordinary users do
-not rebuild the C++ core after `pip install`. The selected OpenFOAM integration
-is prepared from the case's `of_cmd` and `shell` because OpenFOAM has its own
-platform and version ABI.
+Binary wheels include the native Python control runtime and a compact source
+build kit for the OpenFOAM ABI selected on the machine:
+
+```console
+# HPC
+module load openfoam/2512
+foamnordic build
+
+# Apple Silicon: run inside the OpenFOAM.app shell
+openfoam
+foamnordic build
+```
+
+The same command works after PyPI, GitHub, or editable installation. It builds
+with the active OpenFOAM compiler rather than reusing an ABI-unsafe generic
+binary.
 
 ### Install from this repository
 
@@ -46,10 +57,37 @@ environment. Non-relocatable read-only container interpreters cannot.
 ```console
 git clone https://github.com/PentagonToy/FoamNordic.git
 cd FoamNordic
-bash tools/python/createVirtual.sh
-source ../Virtual/FoamNordic/bin/activate
-python -m unittest discover -s python/tests -v
+python -m pip install -e ./python
+
+# macOS: enter the OpenFOAM.app shell, then build.
+openfoam
+foamnordic build
+
+# HPC alternative:
+module load openfoam/2512
+foamnordic build
 ```
+
+This is a wheel-free developer installation: changes in the checkout are used
+directly. `foamnordic build` detects the repository or installed build kit, the
+active Python environment, and the loaded OpenFOAM version. Pass `--source`
+only to select a different checkout explicitly.
+The result is installed below
+`~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`, so different
+OpenFOAM versions and compiler ABIs can coexist.
+
+GitHub can also be installed without keeping a checkout:
+
+```console
+pip install \
+  "git+https://github.com/PentagonToy/FoamNordic.git#subdirectory=python"
+module load openfoam/2512
+foamnordic build
+```
+
+At launch, `Case.of_cmd` is probed in an isolated shell and selects the matching
+runtime automatically. `FOAMNORDIC_OPENFOAM_LIB` is only an advanced override;
+normal notebooks do not set it or inspect `site-packages` paths.
 
 The script selects a usable interpreter and rejects personal non-relocatable
 Tykky-style paths. Site-managed Python modules remain supported even when
@@ -135,6 +173,36 @@ run = fno.Longship(case=case).launch()
 With no `scheduler`, rank one runs directly and multiple ranks use the MPI
 launcher supplied by the declared OpenFOAM environment.
 
+General model-driven field mutation is kept distinct from turbulence or
+combustion closure semantics:
+
+```python
+transform = fno.Transform(
+    name="predictVelocity",
+    operator=fno.Operator.model("velocity.fnom"),
+    inputs={"pressure": fno.field("p")},
+    outputs={"velocity": fno.field("U")},
+    at="time_step_start",
+    key=fno.Random.key(42, scope="global"),
+)
+
+run = fno.Longship(case=case, transforms=(transform,)).launch()
+```
+
+Several independent transforms may be attached to one run. Each receives its
+own Fjord session and resident worker, while Longship starts, monitors, and
+stops the group as one fail-together workload. Writing the same field at
+different stages is supported; two programs writing the same field at the same
+stage are rejected as ambiguous.
+
+FNOM selects ONNX, Joblib, or Equinox internally. Stochastic field programs
+use the backend-neutral `fno.Random.Key`; the default root key is 42 and each
+program receives an exchange-specific derivation. `scope="global"` shares one
+invocation key across ranks and `scope="rank"` derives independent rank keys.
+Stock OpenFOAM applications
+support the exact `time_step_start` and `time_step_end` boundaries; inner
+corrector stages remain available to solver-native integrations.
+
 See the [run-control API](docs/python/run-control-api.md) for closure,
 observation, Slurm, and pure-OpenFOAM examples.
 Stored fields and baseline/ML comparisons are covered by the
@@ -150,10 +218,20 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Optional backends are selected explicitly, for example with
+Optional native developer backends are selected explicitly, for example with
 `FOAMNORDIC_ONNX_RUNTIME=ON`, `FOAMNORDIC_ONNX_RUNTIME_ROOT=...`, or
-`FOAMNORDIC_UCX=ON`. `foamnordic build --source .` provides the corresponding
-compact SDK build frontend; use `foamnordic build --help` for its options.
+`FOAMNORDIC_UCX=ON`. For the normal source workflow, the compact frontend is
+preferred:
+
+```console
+foamnordic build
+foamnordic dir
+foamnordic clobber --dry-run
+```
+
+`clobber` removes only directories carrying FoamNordic's exact ownership
+marker, including ABI-specific caches and runtimes. Source files and unmarked
+directories are preserved.
 
 ## Target platforms
 
@@ -182,7 +260,9 @@ native prerequisites.
 - [Documentation index](docs/README.md)
 - [Python package guide](python/README.md)
 - [Backend-neutral mathematics](docs/python/math-api.md)
+- [Reproducible random keys](docs/python/random-api.md)
 - [PyPI README](others/README.pypi.md)
+- [Maintainer assets and wheel preparation](others/README.md)
 
 ### Architecture
 
@@ -211,6 +291,7 @@ native prerequisites.
 - [Python design](docs/python/design.md)
 - [Run-control API](docs/python/run-control-api.md)
 - [Postprocess API](docs/python/postprocess-api.md)
+- [Random API](docs/python/random-api.md)
 
 ## License
 

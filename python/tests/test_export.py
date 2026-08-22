@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import foamnordic as fno
-from foamnordic._native_plan import available as native_available
+from foamnordic.core.native_plan import available as native_available
 
 
 class _LinearPrediction:
@@ -188,7 +188,7 @@ class ExportTests(unittest.TestCase):
             import numpy as np
         except ImportError:
             self.skipTest("Joblib test dependencies are unavailable")
-        from foamnordic._resident import _joblib_evaluator
+        from foamnordic.execution.resident import _joblib_evaluator
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -218,7 +218,7 @@ class ExportTests(unittest.TestCase):
             import numpy as np
         except ImportError:
             self.skipTest("Equinox test dependencies are unavailable")
-        from foamnordic._resident import _equinox_evaluator
+        from foamnordic.execution.resident import _equinox_evaluator
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

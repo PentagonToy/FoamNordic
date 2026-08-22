@@ -4,6 +4,7 @@ from contextlib import redirect_stdout
 import inspect
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -12,12 +13,16 @@ from unittest.mock import Mock, patch
 
 import foamnordic as fno
 from foamnordic._case import (
+    PreparedProgram,
     _scheme_commands,
     _scheme_requirements,
+    _socket_path,
     render_dictionary,
+    render_transform_dictionary,
+    validate_case,
 )
-from foamnordic._native_plan import available as native_available
-from foamnordic._launch import _host_command
+from foamnordic.core.native_plan import available as native_available
+from foamnordic.execution.launch import _host_command
 
 
 def example_longship() -> fno.Longship:
@@ -64,6 +69,13 @@ def example_longship() -> fno.Longship:
 
 
 class PlanTests(unittest.TestCase):
+    def test_runtime_socket_path_stays_short_for_long_scratch_workspaces(self) -> None:
+        work = Path("/scratch") / ("very-long-project-segment/" * 12) / "run"
+        first = _socket_path(work, 0)
+        second = _socket_path(work, 1)
+        self.assertLess(len(os.fsencode(first)), 104)
+        self.assertNotEqual(first, second)
+
     def test_slurm_uses_native_scheduler_vocabulary(self) -> None:
         parameters = inspect.signature(fno.Slurm).parameters
         self.assertIn("ntasks", parameters)
@@ -87,6 +99,8 @@ class PlanTests(unittest.TestCase):
     def test_public_help_and_dir_are_discoverable(self) -> None:
         self.assertIn("declarative coupled workload", fno.Longship.__doc__)
         self.assertIn("Longship", dir(fno))
+        self.assertIn("Operator", dir(fno))
+        self.assertIn("Transform", dir(fno))
         self.assertIn("Run", dir(fno))
         self.assertIn("non-blocking native Longship", fno.Run.__doc__)
         self.assertIn("openfoam", dir(fno))
@@ -100,12 +114,17 @@ class PlanTests(unittest.TestCase):
     def test_launch_reports_background_sailing_unless_quiet(self) -> None:
         expected = Mock()
         expected._wait_for_start.return_value = ("123456", "running")
-        with patch("foamnordic._launch.launch", return_value=expected):
+        expected._slurm_start_time.return_value = "2026-08-22T15:42:10"
+        with patch("foamnordic.execution.launch.launch", return_value=expected):
             stream = io.StringIO()
             with redirect_stdout(stream):
                 actual = example_longship().launch()
             self.assertIs(actual, expected)
             self.assertIn("launched with Job ID: 123456", stream.getvalue())
+            self.assertIn(
+                "Sailing started at: 2026-08-22T15:42:10",
+                stream.getvalue(),
+            )
             self.assertIn("Sailing in background: cavity-keqn", stream.getvalue())
 
             stream = io.StringIO()
@@ -114,6 +133,20 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(stream.getvalue(), "")
             self.assertEqual(expected._wait_for_start.call_count, 2)
 
+    def test_pending_launch_reports_slurm_estimated_start(self) -> None:
+        expected = Mock()
+        expected._wait_for_start.return_value = ("123456", "pending")
+        expected._slurm_start_time.return_value = "2026-08-22T16:10:00"
+        with patch("foamnordic.execution.launch.launch", return_value=expected):
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                example_longship().launch(start_timeout=0.1)
+        self.assertIn("remains pending with Job ID: 123456", stream.getvalue())
+        self.assertIn(
+            "Slurm estimates start at: 2026-08-22T16:10:00",
+            stream.getvalue(),
+        )
+
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_plan_is_deterministic_and_content_addressed(self) -> None:
         first = example_longship().compile()
@@ -121,7 +154,7 @@ class PlanTests(unittest.TestCase):
 
         self.assertEqual(first.digest, second.digest)
         self.assertTrue(first.digest.startswith("sha256:"))
-        self.assertEqual(first.schema_version, 1)
+        self.assertEqual(first.schema_version, 2)
         self.assertEqual(first.as_dict(), second.as_dict())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
@@ -151,6 +184,11 @@ class PlanTests(unittest.TestCase):
             value["closures"][0]["inputs"]["velocity_grad"],
             {"operation": "grad", "field": "U"},
         )
+        self.assertEqual(
+            value["closures"][0]["key"],
+            {"entropy": [42, 0], "path": [], "scope": "global"},
+        )
+        self.assertEqual(value["transforms"], [])
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_solver_only_plan_reserves_no_closure_host(self) -> None:
@@ -180,6 +218,128 @@ class PlanTests(unittest.TestCase):
         )
         inputs["later"] = fno.field("U")
         self.assertNotIn("later", closure.inputs)
+
+    def test_operator_model_uses_one_fnom_entry_point(self) -> None:
+        operator = fno.Operator.model(Path("model.fnom"))
+        self.assertEqual(operator.artifact, Path("model.fnom"))
+        self.assertEqual(
+            operator.to_plan(),
+            {"kind": "model", "manifest": "model.fnom"},
+        )
+        with self.assertRaisesRegex(ValueError, ".fnom"):
+            fno.Operator.model("model.onnx")
+        closure = fno.Closure(
+            name="closure",
+            operator=operator,
+            inputs={"velocity": fno.field("U")},
+            outputs={"viscosity": fno.field("nut")},
+        )
+        self.assertIs(closure.operator, operator)
+        self.assertEqual(closure.artifact, Path("model.fnom"))
+
+    def test_function_operator_is_declarative_and_transform_launchable(self) -> None:
+        operator = fno.Operator.function(lambda velocity: velocity)
+        transform = fno.Transform(
+            name="perturbVelocity",
+            operator=operator,
+            inputs={"velocity": fno.field("U")},
+            outputs={"velocity": fno.field("U")},
+        )
+        plan = transform.to_plan()
+        self.assertEqual(
+            plan["key"],
+            {"entropy": [42, 0], "path": [], "scope": "global"},
+        )
+        self.assertEqual(plan["operator"]["kind"], "function")
+        self.assertTrue(plan["operator"]["identity"].startswith("sha256:"))
+        self.assertIsNone(operator.artifact)
+
+    def test_legacy_seed_is_normalized_to_a_public_key(self) -> None:
+        transform = fno.Transform(
+            "legacySeed",
+            fno.Operator.model("model.fnom"),
+            {"velocity": fno.field("U")},
+            {"velocity": fno.field("U")},
+            "time_step_start",
+            7,
+        )
+        self.assertEqual(transform.key, fno.Random.key(7))
+        with self.assertRaisesRegex(ValueError, "either key or seed"):
+            fno.Transform(
+                name="ambiguousSeed",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                key=fno.Random.key(7),
+                seed=8,
+            )
+
+    def test_transform_renders_logical_keys_separately_from_fields(self) -> None:
+        transform = fno.Transform(
+            name="predictVelocity",
+            operator=fno.Operator.model("velocity.fnom"),
+            inputs={
+                "x_coordinate": fno.field("x"),
+                "pressure": fno.field("p"),
+            },
+            outputs={"predicted_velocity": fno.field("U")},
+            seed=7,
+        )
+        rendered = render_transform_dictionary(
+            transform,
+            "unix:///tmp/transform.sock",
+            True,
+        )
+        self.assertIn("exchangeStage   timeStepStart;", rendered)
+        self.assertIn("inputKeys       (x_coordinate pressure);", rendered)
+        self.assertIn("inputs          (x p);", rendered)
+        self.assertIn("outputKeys      (predicted_velocity);", rendered)
+        self.assertIn("outputs         (U);", rendered)
+        self.assertEqual(transform.to_plan()["key"]["entropy"], [7, 0])
+
+    def test_transform_declares_all_solver_stages_without_aliasing_them(self) -> None:
+        expected = {
+            "time_step_start": "timeStepStart",
+            "outer_corrector": "outerCorrector",
+            "pressure_corrected": "pressureCorrected",
+            "time_step_end": "timeStepEnd",
+        }
+        for public, native in expected.items():
+            transform = fno.Transform(
+                name="lateTransform",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                at=public,
+            )
+            self.assertEqual(transform.to_plan()["at"], public)
+            rendered = render_transform_dictionary(
+                transform, "unix:///tmp/transform.sock", True
+            )
+            self.assertIn(f"exchangeStage   {native};", rendered)
+        with self.assertRaisesRegex(ValueError, "transform at must"):
+            fno.Transform(
+                name="invalidTransform",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                at="somewhere",
+            )
+
+    def test_stock_solver_rejects_only_inner_iteration_stages(self) -> None:
+        example = example_longship()
+        for stage in ("outer_corrector", "pressure_corrected"):
+            transform = fno.Transform(
+                name="innerTransform",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                at=stage,
+            )
+            with self.assertRaisesRegex(NotImplementedError, "solver-native"):
+                validate_case(
+                    fno.Longship(case=example.case, transforms=(transform,))
+                )
 
     def test_nested_openfoam_operations_render_into_closure_dictionary(self) -> None:
         example = example_longship()
@@ -217,12 +377,49 @@ class PlanTests(unittest.TestCase):
             "inputs": [("features", 3, "float64")],
             "outputs": [("prediction", 1, "float64")],
         }
-        with patch("foamnordic._launch._artifact_metadata", return_value=metadata):
-            command = _host_command(longship, Path("/tmp/ready"))
+        with patch("foamnordic.execution.launch._artifact_metadata", return_value=metadata):
+            command = _host_command(
+                longship,
+                PreparedProgram(
+                    closure,
+                    Path("/tmp/ready"),
+                    Path("/tmp/program.sock"),
+                    None,
+                ),
+            )
         rendered = " ".join(command)
         self.assertIn(sys.executable, rendered)
-        self.assertIn("foamnordic._resident", rendered)
+        self.assertIn("foamnordic.execution.resident", rendered)
         self.assertIn(f"--connections {longship.case.ranks}", rendered)
+        self.assertIn('--key \'{"entropy":[42,0],"path":[],"scope":"global"}\'', rendered)
+
+    def test_transform_selects_the_same_managed_resident(self) -> None:
+        example = example_longship()
+        transform = fno.Transform(
+            name="predictVelocity",
+            operator=fno.Operator.model("model.fnom"),
+            inputs={"features": fno.field("U")},
+            outputs={"prediction": fno.field("U")},
+        )
+        longship = fno.Longship(case=example.case, transforms=(transform,))
+        metadata = {
+            "format": "equinox",
+            "inputs": [("features", 3, "float64")],
+            "outputs": [("prediction", 3, "float64")],
+        }
+        with patch("foamnordic.execution.launch._artifact_metadata", return_value=metadata):
+            command = _host_command(
+                longship,
+                PreparedProgram(
+                    transform,
+                    Path("/tmp/ready"),
+                    Path("/tmp/program.sock"),
+                    None,
+                ),
+            )
+        rendered = " ".join(command)
+        self.assertIn("foamnordic.execution.resident", rendered)
+        self.assertIn('--key \'{"entropy":[42,0],"path":[],"scope":"global"}\'', rendered)
 
     def test_ml_expression_schemes_are_planned_without_overriding_defaults(self) -> None:
         example = example_longship()
@@ -401,6 +598,40 @@ class PlanTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "same output field"):
             fno.Longship(case=run.case, closures=run.closures + (duplicate,))
+
+    def test_same_field_may_be_transformed_at_distinct_stages(self) -> None:
+        run = example_longship()
+        start = fno.Transform(
+            name="startVelocity",
+            operator=fno.Operator.model("start.fnom"),
+            inputs={"U": fno.field("U")},
+            outputs={"U": fno.field("U")},
+            at="time_step_start",
+        )
+        end = fno.Transform(
+            name="endVelocity",
+            operator=fno.Operator.model("end.fnom"),
+            inputs={"U": fno.field("U")},
+            outputs={"U": fno.field("U")},
+            at="time_step_end",
+        )
+        longship = fno.Longship(case=run.case, transforms=(start, end))
+        self.assertEqual(len(longship.transforms), 2)
+
+    def test_same_field_and_stage_remain_ambiguous(self) -> None:
+        run = example_longship()
+        programs = tuple(
+            fno.Transform(
+                name=f"velocity{index}",
+                operator=fno.Operator.model(f"model{index}.fnom"),
+                inputs={"U": fno.field("U")},
+                outputs={"U": fno.field("U")},
+                at="time_step_start",
+            )
+            for index in range(2)
+        )
+        with self.assertRaisesRegex(ValueError, "same solver stage"):
+            fno.Longship(case=run.case, transforms=programs)
 
 
 if __name__ == "__main__":

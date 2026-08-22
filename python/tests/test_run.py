@@ -5,14 +5,16 @@ import json
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from foamnordic._run import (
+from foamnordic.execution.run import (
     RunStatus,
     _launch_local,
     _launch_process,
     _longship_executable,
     _normalize_slurm_state,
+    _query_slurm,
+    _query_slurm_estimated_start,
     _sailing_paths,
 )
 
@@ -23,6 +25,34 @@ def packaged_longship_available() -> bool:
     except RuntimeError:
         return False
     return True
+
+
+class SlurmMetadataTests(unittest.TestCase):
+    def test_accounting_exposes_actual_start_timestamp(self) -> None:
+        completed = Mock(
+            stdout=(
+                "783528|RUNNING|small|00:00:04|rc5130|"
+                "2026-08-22T15:42:10\n"
+            )
+        )
+        with (
+            patch("foamnordic.execution.run.shutil.which", return_value="/usr/bin/sacct"),
+            patch("foamnordic.execution.run.subprocess.run", return_value=completed),
+        ):
+            details = _query_slurm("783528")
+        self.assertEqual(details["status"], "running")
+        self.assertEqual(details["start"], "2026-08-22T15:42:10")
+
+    def test_pending_job_exposes_slurm_estimated_start(self) -> None:
+        completed = Mock(stdout="2026-08-22T16:10:00\n")
+        with (
+            patch("foamnordic.execution.run.shutil.which", return_value="/usr/bin/squeue"),
+            patch("foamnordic.execution.run.subprocess.run", return_value=completed),
+        ):
+            self.assertEqual(
+                _query_slurm_estimated_start("783528"),
+                "2026-08-22T16:10:00",
+            )
 
 
 @unittest.skipUnless(packaged_longship_available(), "Longship executable is not installed")
@@ -299,7 +329,7 @@ class RunTests(unittest.TestCase):
                 partition="small",
             )
             with patch(
-                "foamnordic._run._query_slurm",
+                "foamnordic.execution.run._query_slurm",
                 side_effect=({"status": "pending"}, {"status": "running"}),
             ):
                 self.assertEqual(

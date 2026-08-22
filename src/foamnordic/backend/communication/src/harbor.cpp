@@ -273,6 +273,8 @@ void Harbor::fail_exchange(std::uint64_t exchange_index) {
 
 void Harbor::shutdown() { send_control(RuneKind::shutdown, session_); }
 
+std::uint32_t Harbor::rank() const noexcept { return session_.rank; }
+
 void Harbor::offer_shared_memory(const std::string& name) {
     if (!any(session_.capabilities & Capability::shm)) {
         throw std::logic_error("Shared memory was not negotiated for this Harbor session.");

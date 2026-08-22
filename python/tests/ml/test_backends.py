@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 
 import foamnordic as fno
-from foamnordic._native_plan import available as native_available
+from foamnordic.core.native_plan import available as native_available
 
 
 @unittest.skipUnless(native_available(), "nanobind extension is not installed")
@@ -32,7 +32,7 @@ class ModelBackendTests(unittest.TestCase):
             weights=[0.7, 0.3],
         ).fit(scaled, targets)
 
-        from foamnordic._resident import _joblib_evaluator
+        from foamnordic.execution.resident import _joblib_evaluator
 
         with tempfile.TemporaryDirectory() as directory:
             manifest = fno.export.joblib(
@@ -71,7 +71,7 @@ class ModelBackendTests(unittest.TestCase):
         )
         values = np.asarray([[0.0, 1.0], [2.0, -1.0]], dtype=np.float32)
 
-        from foamnordic._resident import _equinox_evaluator
+        from foamnordic.execution.resident import _equinox_evaluator
 
         with tempfile.TemporaryDirectory() as directory:
             manifest = fno.export.equinox(
@@ -86,6 +86,40 @@ class ModelBackendTests(unittest.TestCase):
             actual = evaluator(memoryview(values), 2, 2, "float32", 0, 0.0)
             expected = jax.vmap(model)(jnp.asarray(values))
             np.testing.assert_allclose(actual, expected, rtol=1.0e-6)
+
+    def test_equinox_key_is_derived_from_seed_and_exchange_index(self) -> None:
+        import cloudpickle
+        import jax
+        import jax.numpy as jnp
+
+        def stochastic(value, *, key):
+            return value[:1] + jax.random.uniform(key, (1,), dtype=value.dtype)
+
+        from foamnordic.execution.resident import _equinox_evaluator
+
+        values = np.asarray([[0.0], [1.0]], dtype=np.float32)
+        with tempfile.TemporaryDirectory() as directory:
+            payload = Path(directory) / "stochastic.eqx"
+            with payload.open("wb") as stream:
+                cloudpickle.dump(
+                    {
+                        "schema": "foamnordic.equinox/v1",
+                        "model": stochastic,
+                        "batched": False,
+                    },
+                    stream,
+                )
+            first = _equinox_evaluator(
+                payload, (("prediction", 1),), "float32", seed=42
+            )
+            second = _equinox_evaluator(
+                payload, (("prediction", 1),), "float32", seed=42
+            )
+            first_zero = first(memoryview(values), 2, 1, "float32", 0, 0.0)
+            second_zero = second(memoryview(values), 2, 1, "float32", 0, 0.0)
+            first_one = first(memoryview(values), 2, 1, "float32", 1, 0.1)
+            np.testing.assert_allclose(first_zero, second_zero)
+            self.assertFalse(np.allclose(first_zero, first_one))
 
     def test_real_onnx_graph_round_trip(self) -> None:
         import onnx

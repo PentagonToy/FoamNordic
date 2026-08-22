@@ -1,15 +1,25 @@
 """Declarative control plane for native FoamNordic workloads."""
 
-__version__ = "1.0.3.dev4"
+__version__ = "1.0.3.dev6"
 
-from . import export, math, models, openfoam, postprocess, runtime
+from . import export, math, models, openfoam, postprocess, random, runtime
 from .export import Tensor
-from ._expressions import FieldExpression, field, filter_width, grad
-from ._plan import CompiledPlan
-from ._observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
-from ._run import Result, ResultArtifacts, Run, RunStatus, RunSummary
-from ._spec import Attached, Closure, Longship, Observe, Retention, Slurm
+from .core.expressions import FieldExpression, field, filter_width, grad
+from .core.plan import CompiledPlan
+from .execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
+from .execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
+from .core.spec import (
+    Attached,
+    Closure,
+    Longship,
+    Observe,
+    Operator,
+    Retention,
+    Slurm,
+    Transform,
+)
 from .math import Math
+from .random import Random
 
 OpenFOAM = openfoam
 Export = export
@@ -28,6 +38,7 @@ __all__ = [
     "Models",
     "OpenFOAM",
     "Observe",
+    "Operator",
     "ObservationRecord",
     "ObservationStream",
     "ObservationTiming",
@@ -39,8 +50,10 @@ __all__ = [
     "RunSummary",
     "Runtime",
     "Postprocess",
+    "Random",
     "Slurm",
     "Tensor",
+    "Transform",
     "Export",
     "__version__",
     "export",
@@ -50,6 +63,7 @@ __all__ = [
     "models",
     "openfoam",
     "postprocess",
+    "random",
     "runtime",
 ]
 

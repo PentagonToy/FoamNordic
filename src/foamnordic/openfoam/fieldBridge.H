@@ -13,6 +13,7 @@
 #define Foam_foamNordic_fieldBridge_H
 
 #include "fvMesh.H"
+#include "scalarField.H"
 #include "word.H"
 
 #include "foamnordic/fjord/tensor.hpp"
@@ -25,13 +26,20 @@ namespace Foam::foamNordic {
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
-    double physicalTime);
+    double physicalTime,
+    scalarField* scratch = nullptr);
 
 [[nodiscard]] foamnordic::fjord::MutableTensorView outputFieldView(
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
-    double physicalTime);
+    double physicalTime,
+    scalarField* scratch = nullptr);
+
+void commitOutputField(
+    const fvMesh& mesh,
+    const word& name,
+    const scalarField* scratch = nullptr);
 
 void correctFieldBoundary(const fvMesh& mesh, const word& name);
 

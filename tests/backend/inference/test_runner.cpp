@@ -135,7 +135,8 @@ public:
         const TensorMap& inputs,
         const std::vector<std::uint64_t>& active_cells,
         std::uint64_t exchange_index,
-        double physical_time) override {
+        double physical_time,
+        std::uint32_t /*rank*/) override {
         require(inputs.size() == 3, "Kernel did not receive the complete input batch.");
         require(
             active_cells == std::vector<std::uint64_t>{1, 3},

@@ -14,7 +14,8 @@ import threading
 from time import monotonic
 from typing import Iterator, Sequence, TextIO
 
-from ._managed import generated_kind, mark_generated
+from .core.managed import generated_kind, mark_generated
+from .execution.runtime_paths import active_runtime_candidates, profile
 
 
 _FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -97,7 +98,16 @@ def _duration(seconds: float) -> str:
 
 
 def _source_root(explicit: Path | None) -> Path | None:
-    candidates = [explicit] if explicit is not None else [Path.cwd(), *Path.cwd().parents]
+    candidates = (
+        [explicit]
+        if explicit is not None
+        else [
+            Path.cwd(),
+            *Path.cwd().parents,
+            Path(__file__).resolve().parent / "buildkit",
+            Path(__file__).resolve().parents[2],
+        ]
+    )
     for candidate in candidates:
         if candidate is None:
             continue
@@ -118,15 +128,6 @@ def _default_jobs() -> int:
     return min(os.cpu_count() or 1, 8)
 
 
-def _verify_packaged_runtime() -> None:
-    from . import _native
-
-    request = _native.LongshipRequest()
-    plan = _native.plan_longship(request)
-    if not plan.host_starts_first or not plan.fail_together:
-        raise RuntimeError("packaged native runtime violated lifecycle invariants")
-
-
 def _directories(stream: TextIO) -> int:
     terminal = _Terminal(stream)
     terminal.section("FoamNordic directories")
@@ -139,13 +140,29 @@ def _directories(stream: TextIO) -> int:
     except ImportError:
         native_file = None
 
+    selected = profile(required=False)
     rows = (
         ("Python environment", Path(sys.prefix).resolve()),
         ("Python package", package),
         ("Native module", native_file or "not installed"),
-        ("Source tree", source or "not detected"),
-        ("Build cache", Path.home() / ".cache/foamnordic/build"),
-        ("Native SDK", Path.home() / ".local/share/foamnordic/native"),
+        ("Build source", source or "not detected"),
+        (
+            "OpenFOAM ABI",
+            selected.openfoam if selected is not None else "not loaded",
+        ),
+        (
+            "Build cache",
+            selected.build_dir
+            if selected is not None
+            else Path.home() / ".cache/foamnordic/build/<platform>/<openfoam-abi>",
+        ),
+        (
+            "Native runtime",
+            selected.runtime_dir
+            if selected is not None
+            else Path.home()
+            / ".local/share/foamnordic/runtime/<platform>/<openfoam-abi>",
+        ),
     )
     width = max(len(label) for label, _ in rows)
     for label, value in rows:
@@ -153,11 +170,33 @@ def _directories(stream: TextIO) -> int:
     return 0
 
 
-def _run_command(command: Sequence[str], log: TextIO, *, dry_run: bool) -> None:
+def _run_command(
+    command: Sequence[str],
+    log: TextIO,
+    *,
+    dry_run: bool,
+    environment: dict[str, str] | None = None,
+) -> None:
     if dry_run:
         print(f"$ {shlex.join(command)}", file=log)
         return
-    subprocess.run(command, check=True, stdout=log, stderr=subprocess.STDOUT)
+    subprocess.run(
+        command,
+        check=True,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        env=environment,
+    )
+
+
+def _cmake_source(cache: Path) -> Path | None:
+    try:
+        lines = cache.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    prefix = "CMAKE_HOME_DIRECTORY:INTERNAL="
+    value = next((line[len(prefix) :] for line in lines if line.startswith(prefix)), "")
+    return Path(value).expanduser().resolve() if value else None
 
 
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
@@ -166,29 +205,73 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
     source = _source_root(args.source)
 
     if source is None:
-        with terminal.step(1, 1, "Verify packaged native runtime"):
-            _verify_packaged_runtime()
-        print("\nFoamNordic is ready. This wheel requires no native core rebuild.", file=stream)
-        print("OpenFOAM integration will use the case environment.", file=stream)
-        return 0
+        raise RuntimeError(
+            "FoamNordic build kit is unavailable; reinstall FoamNordic from "
+            "PyPI or GitHub, or pass a source checkout with --source"
+        )
 
     cmake = shutil.which("cmake")
     if cmake is None:
         raise RuntimeError("cmake is required to build the native SDK")
+    wmake = shutil.which("wmake")
+    if wmake is None:
+        raise RuntimeError(
+            "wmake is unavailable; load OpenFOAM before running foamnordic build"
+        )
 
-    build_dir = (args.build_dir or Path.home() / ".cache/foamnordic/build").expanduser()
-    prefix = (args.prefix or Path.home() / ".local/share/foamnordic/native").expanduser()
+    selected = profile(build_dir=args.build_dir, runtime_dir=args.prefix)
+    assert selected is not None
+    build_dir = selected.build_dir
+    prefix = selected.runtime_dir
     log_path = build_dir / "foamnordic-build.log"
+    configured_source = _cmake_source(build_dir / "CMakeCache.txt")
+    if configured_source is not None and configured_source != source:
+        if generated_kind(build_dir) != "build":
+            raise RuntimeError(
+                "the selected build directory belongs to another CMake source "
+                f"and is not FoamNordic-owned: {build_dir}"
+            )
+        if args.dry_run:
+            print(
+                f"[FoamNordic] Would refresh build cache for source: {source}",
+                file=stream,
+            )
+        else:
+            shutil.rmtree(build_dir)
     build_was_present = build_dir.exists()
     prefix_was_present = prefix.exists()
     if not args.dry_run:
         build_dir.mkdir(parents=True, exist_ok=True)
         prefix.mkdir(parents=True, exist_ok=True)
         if not build_was_present:
-            mark_generated(build_dir, kind="build")
+            mark_generated(
+                build_dir,
+                kind="build",
+                metadata={"platform": selected.platform, "openfoam": selected.openfoam},
+            )
         if not prefix_was_present:
-            mark_generated(prefix, kind="native-prefix")
+            mark_generated(
+                prefix,
+                kind="native-runtime",
+                metadata={"platform": selected.platform, "openfoam": selected.openfoam},
+            )
 
+    adapter_source = build_dir / "openfoam"
+    library_dir = prefix / "lib"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "FOAMNORDIC_SOURCE": str(source),
+            "FOAMNORDIC_BUILD": str(build_dir),
+            "FOAM_USER_LIBBIN": str(library_dir),
+        }
+    )
+    cmake_environment = os.environ.copy()
+    if sys.platform == "darwin":
+        # OpenFOAM.app ships its own libiconv.  Let Homebrew CMake resolve its
+        # own dependencies, then restore the OpenFOAM environment for wmake.
+        cmake_environment.pop("DYLD_LIBRARY_PATH", None)
+        cmake_environment.pop("DYLD_FALLBACK_LIBRARY_PATH", None)
     commands = (
         (
             "Configure native SDK",
@@ -200,6 +283,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 str(build_dir),
                 "-DCMAKE_BUILD_TYPE=Release",
                 "-DFOAMNORDIC_TESTS=OFF",
+                "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
                 f"-DCMAKE_INSTALL_PREFIX={prefix}",
             ],
         ),
@@ -210,13 +294,13 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 "--build",
                 str(build_dir),
                 "--target",
-                "foamnordic_runtime",
+                "foamnordic_adapter",
                 "--parallel",
                 str(args.jobs),
             ],
         ),
         (
-            "Install C++ development SDK",
+            "Install native C++ SDK",
             [
                 cmake,
                 "--install",
@@ -225,19 +309,44 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 "Development",
             ],
         ),
+        (
+            "Build OpenFOAM integration",
+            [wmake, "libso"],
+        ),
     )
 
     if args.dry_run:
         log: TextIO = stream
         for index, (description, command) in enumerate(commands, start=1):
             with terminal.step(index, len(commands), description):
+                if description == "Build OpenFOAM integration":
+                    print(f"$ cd {shlex.quote(str(adapter_source))}", file=log)
                 _run_command(command, log, dry_run=True)
     else:
         try:
+            if adapter_source.exists():
+                shutil.rmtree(adapter_source)
+            shutil.copytree(source / "src/foamnordic/openfoam", adapter_source)
+            library_dir.mkdir(parents=True, exist_ok=True)
             with log_path.open("w", encoding="utf-8") as log:
                 for index, (description, command) in enumerate(commands, start=1):
                     with terminal.step(index, len(commands), description):
-                        _run_command(command, log, dry_run=False)
+                        if description == "Build OpenFOAM integration":
+                            subprocess.run(
+                                command,
+                                cwd=adapter_source,
+                                env=environment,
+                                check=True,
+                                stdout=log,
+                                stderr=subprocess.STDOUT,
+                            )
+                        else:
+                            _run_command(
+                                command,
+                                log,
+                                dry_run=False,
+                                environment=cmake_environment,
+                            )
         except Exception:
             print(f"Build log: {log_path}", file=stream)
             if log_path.is_file():
@@ -245,10 +354,23 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 print("\n".join(lines[-60:]), file=stream)
             raise
 
-    print(f"\nNative SDK: {prefix}", file=stream)
+    print(f"\nOpenFOAM ABI:  {selected.openfoam}", file=stream)
+    print(f"Native runtime: {prefix}", file=stream)
     if not args.dry_run:
         cache = build_dir / "CMakeCache.txt"
-        package = prefix / "lib/cmake/FoamNordic/FoamNordicConfig.cmake"
+        integration = next(
+            (
+                path
+                for path in (
+                    prefix / "lib/libfoamnordicOpenFOAM.so",
+                    prefix / "lib/libfoamnordicOpenFOAM.dylib",
+                )
+                if path.is_file()
+            ),
+            None,
+        )
+        if integration is None:
+            raise RuntimeError("wmake completed without installing the OpenFOAM library")
         cache_text = (
             cache.read_text(encoding="utf-8", errors="ignore")
             if cache.is_file()
@@ -256,17 +378,35 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         )
         if generated_kind(build_dir) is None and "FoamNordic" in cache_text:
             mark_generated(build_dir, kind="build")
-        if generated_kind(prefix) is None and package.is_file():
-            mark_generated(prefix, kind="native-prefix")
+        if generated_kind(prefix) is None and integration.is_file():
+            mark_generated(
+                prefix,
+                kind="native-runtime",
+                metadata={"platform": selected.platform, "openfoam": selected.openfoam},
+            )
         print(f"Build log:  {log_path}", file=stream)
     return 0
 
 
 def _clobber_targets(args: argparse.Namespace) -> list[Path]:
-    candidates = [
-        (Path.home() / ".cache/foamnordic/build").resolve(),
-        (Path.home() / ".local/share/foamnordic/native").resolve(),
-    ]
+    candidates = list(active_runtime_candidates())
+    selected = profile(required=False)
+    if selected is not None:
+        candidates.append(selected.build_dir)
+    for root in (
+        Path.home() / ".cache/foamnordic/build",
+        Path.home() / ".local/share/foamnordic/runtime",
+    ):
+        if root.is_dir():
+            candidates.extend(
+                marker.parent for marker in root.glob("*/*/.foamnordic-generated.json")
+            )
+    candidates.extend(
+        (
+            Path.home() / ".cache/foamnordic/build",
+            Path.home() / ".local/share/foamnordic/native",
+        )
+    )
     for workspace in args.workspace:
         runs = workspace.expanduser().resolve() / "runs"
         if runs.is_dir():
@@ -322,15 +462,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     build = subcommands.add_parser(
         "build",
-        help="verify a binary wheel or build the native C++ SDK",
+        help="build the runtime for the active OpenFOAM ABI",
         description=(
-            "Verify the native runtime bundled in a binary wheel. When run in "
-            "a FoamNordic source tree, build and install its C++ SDK instead."
+            "Build the native C++ core and OpenFOAM integration for the currently "
+            "loaded OpenFOAM ABI, then install them in the user runtime directory."
         ),
     )
     build.add_argument("--source", type=Path, help="FoamNordic source tree")
     build.add_argument("--build-dir", type=Path, help="CMake build directory")
-    build.add_argument("--prefix", type=Path, help="native SDK install prefix")
+    build.add_argument("--prefix", type=Path, help="native runtime install prefix")
     build.add_argument("--jobs", type=int, default=_default_jobs(), help="parallel jobs")
     build.add_argument("--dry-run", action="store_true", help="show commands only")
     clobber = subcommands.add_parser(

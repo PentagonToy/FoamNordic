@@ -9,8 +9,8 @@ import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 
-from ._paths import PathInput, path_from
-from ._shell import quote_command, toolchain_shell
+from .core.paths import PathInput, path_from
+from .execution.shell import quote_command, toolchain_shell
 
 if TYPE_CHECKING:
     from .openfoam import _Toolchain

@@ -11,7 +11,7 @@ import time
 from typing import Iterator, Mapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._run import Run
+    from .run import Run
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,8 +5,8 @@ import tempfile
 import unittest
 
 import foamnordic as fno
-from foamnordic._native_plan import available as native_available
-from foamnordic._slurm import write_batch, write_submission_wrapper
+from foamnordic.core.native_plan import available as native_available
+from foamnordic.execution.slurm import write_batch, write_submission_wrapper
 
 
 @unittest.skipUnless(native_available(), "nanobind extension is not installed")
@@ -60,6 +60,7 @@ class SlurmRenderingTests(unittest.TestCase):
             script = batch.read_text(encoding="utf-8")
         self.assertNotIn("foamnordic-longship", script)
         self.assertNotIn("--host srun", script)
+        self.assertIn(": >>", script)
         self.assertIn("--ntasks=2", script)
         self.assertIn("#SBATCH --ntasks=2", script)
         self.assertIn("#SBATCH --cpus-per-task=1", script)

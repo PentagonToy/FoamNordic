@@ -218,7 +218,8 @@ OnnxPackedKernel& OnnxPackedKernel::operator=(OnnxPackedKernel&&) noexcept = def
 fjord::Tensor OnnxPackedKernel::evaluate(
     fjord::TensorView features,
     std::uint64_t exchange_index,
-    double physical_time) {
+    double physical_time,
+    std::uint32_t /*rank*/) {
     return implementation_->evaluate(features, exchange_index, physical_time);
 }
 

@@ -33,9 +33,10 @@ public:
         const TensorMap& inputs,
         const std::vector<std::uint64_t>& active_cells,
         std::uint64_t exchange_index,
-        double physical_time) override {
+        double physical_time,
+        std::uint32_t rank) override {
         return kernel_.evaluate(
-            inputs, active_cells, exchange_index, physical_time);
+            inputs, active_cells, exchange_index, physical_time, rank);
     }
 
 private:

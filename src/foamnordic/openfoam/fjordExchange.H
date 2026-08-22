@@ -13,11 +13,13 @@
 #define Foam_functionObjects_fjordExchange_H
 
 #include "fvMeshFunctionObject.H"
+#include "scalarField.H"
 #include "wordList.H"
 
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace foamnordic::adapter {
 class AtomicFieldExchange;
@@ -31,7 +33,9 @@ class Harbor;
 namespace Foam::functionObjects {
 
 class fjordExchange final : public fvMeshFunctionObject {
+    wordList inputKeys_;
     wordList inputs_;
+    wordList outputKeys_;
     wordList outputs_;
     string address_;
     bool sharedMemory_{true};
@@ -40,8 +44,14 @@ class fjordExchange final : public fvMeshFunctionObject {
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::AtomicFieldExchange> exchange_;
     std::unique_ptr<foamnordic::adapter::ExchangeSequence> sequence_;
+    std::vector<scalarField> inputScratch_;
+    std::vector<scalarField> outputScratch_;
+
+    enum class Stage { timeStepStart, outerCorrector, pressureCorrected, timeStepEnd };
+    Stage stage_{Stage::timeStepStart};
 
     void connectPeer();
+    bool exchange();
 
 public:
 #if defined(__clang__)

@@ -6,7 +6,7 @@ import builtins
 import math as scalar_math
 from typing import Any, Iterable
 
-from ._expressions import (
+from .core.expressions import (
     FieldExpression,
     field,
     filter_width,

@@ -204,7 +204,8 @@ public:
     foamnordic::fjord::Tensor evaluate(
         foamnordic::fjord::TensorView features,
         std::uint64_t exchange_index,
-        double physical_time) override {
+        double physical_time,
+        std::uint32_t /*rank*/) override {
         require(exchange_index == 9 && physical_time == 0.25, "Packed exchange metadata failed.");
         std::vector<double> values(features.bytes.size() / sizeof(double));
         std::memcpy(values.data(), features.bytes.data(), features.bytes.size());

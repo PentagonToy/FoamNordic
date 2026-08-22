@@ -76,7 +76,8 @@ bool NativeClosureRunner::run_one() {
             exchange_.inputs(),
             active_cells,
             exchange_.exchange_index(),
-            exchange_.physical_time());
+            exchange_.physical_time(),
+            harbor_.rank());
         for (auto& [name, tensor] : predictions) {
             (void)name;
             tensor.solver_time_index = exchange_.solver_time_index();

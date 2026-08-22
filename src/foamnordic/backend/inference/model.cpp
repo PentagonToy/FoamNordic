@@ -160,7 +160,8 @@ TensorMap ArtifactModelKernel::evaluate(
     const TensorMap& inputs,
     const std::vector<std::uint64_t>& active_cells,
     std::uint64_t exchange_index,
-    double physical_time) {
+    double physical_time,
+    std::uint32_t rank) {
     auto packed = pack_inputs(inputs, active_cells, exchange_index, physical_time);
     if (active_cells.empty()) {
         const auto element = common_element(artifact_.contract.outputs);
@@ -173,7 +174,8 @@ TensorMap ArtifactModelKernel::evaluate(
             physical_time,
         });
     }
-    auto predictions = kernel_.evaluate(packed.view(), exchange_index, physical_time);
+    auto predictions = kernel_.evaluate(
+        packed.view(), exchange_index, physical_time, rank);
     if (predictions.time_index != exchange_index
         || std::abs(predictions.physical_time - physical_time) > 1.0e-12
         || predictions.shape.empty() || predictions.shape.front() != active_cells.size()) {

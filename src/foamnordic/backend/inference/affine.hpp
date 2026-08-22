@@ -29,7 +29,8 @@ public:
     [[nodiscard]] fjord::Tensor evaluate(
         fjord::TensorView features,
         std::uint64_t exchange_index,
-        double physical_time) override;
+        double physical_time,
+        std::uint32_t rank = 0) override;
 
     [[nodiscard]] std::uint64_t input_features() const noexcept;
     [[nodiscard]] std::uint64_t output_features() const noexcept;

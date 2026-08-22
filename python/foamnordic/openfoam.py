@@ -9,8 +9,8 @@ from types import MappingProxyType
 from typing import Mapping
 
 from ._openfoam_reader import Field, read_case_fields
-from ._paths import PathInput, path_from
-from ._validation import require_nonempty, require_positive
+from .core.paths import PathInput, path_from
+from .core.validation import require_nonempty, require_positive
 
 
 @dataclass(frozen=True, slots=True)

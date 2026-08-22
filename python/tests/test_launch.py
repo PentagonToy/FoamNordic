@@ -6,12 +6,14 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import sys
 
 import foamnordic as fno
-from foamnordic._launch import _submission_environment
-from foamnordic._managed import generated_kind
-from foamnordic._native_plan import available as native_available
-from foamnordic._run import _longship_executable
+from foamnordic.execution.launch import _openfoam_library, _submission_environment
+from foamnordic.core.managed import generated_kind
+from foamnordic.core.native_plan import available as native_available
+from foamnordic.execution.run import _longship_executable
+from foamnordic.execution.host_group import main as run_host_group
 
 
 def runtime_available() -> bool:
@@ -24,8 +26,74 @@ def runtime_available() -> bool:
     return True
 
 
+class HostGroupTests(unittest.TestCase):
+    def test_multiple_workers_publish_one_group_readiness_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            aggregate = root / "all.ready"
+            commands = []
+            ready_files = []
+            for index in range(2):
+                ready = root / f"worker-{index}.ready"
+                ready_files.append(str(ready))
+                script = (
+                    "from pathlib import Path; import time; "
+                    f"Path({str(ready)!r}).touch(); "
+                    f"aggregate=Path({str(aggregate)!r}); "
+                    "\nwhile not aggregate.exists(): time.sleep(0.01)"
+                )
+                commands.append([sys.executable, "-c", script])
+            configuration = root / "group.json"
+            configuration.write_text(
+                json.dumps(
+                    {
+                        "commands": commands,
+                        "ready_files": ready_files,
+                        "aggregate_ready": str(aggregate),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(run_host_group(str(configuration)), 0)
+            self.assertFalse(aggregate.exists())
+            self.assertTrue(all(not Path(path).exists() for path in ready_files))
+
+
 @unittest.skipUnless(runtime_available(), "binary wheel runtime is not installed")
 class LaunchTests(unittest.TestCase):
+    def test_openfoam_library_resolution_preserves_the_exact_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            library = root / "libfoamnordicOpenFOAM.dylib"
+            library.touch()
+            with patch.dict(
+                os.environ,
+                {"FOAMNORDIC_OPENFOAM_LIB": str(root)},
+                clear=False,
+            ):
+                self.assertEqual(_openfoam_library(), library.resolve())
+
+    def test_openfoam_library_resolves_from_case_toolchain_abi(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            library = root / "lib/libfoamnordicOpenFOAM.so"
+            library.parent.mkdir()
+            library.touch()
+            case = fno.OpenFOAM.Case(
+                case_dir=root / "case",
+                run_dir=root / "runs",
+                of_cmd="module load openfoam/2512",
+            )
+            longship = fno.Longship(case=case)
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch(
+                    "foamnordic.execution.launch.toolchain_runtime_candidates",
+                    return_value=(root,),
+                ),
+            ):
+                self.assertEqual(_openfoam_library(longship), library.resolve())
+
     def test_submission_environment_does_not_mutate_or_inherit_slurm(self) -> None:
         inherited = {
             "SLURM_JOB_ID": "123",
@@ -137,6 +205,11 @@ class LaunchTests(unittest.TestCase):
                 result.host_log.name, f"Harbor_launch-test_{identity}.log"
             )
             self.assertIn("███████╗", result.longship_log.read_text())
+            self.assertIn("███████╗", result.host_log.read_text())
+            self.assertIn(
+                "[FoamNordic] Harbor: launch-test",
+                result.host_log.read_text(),
+            )
             self.assertEqual(result.longship_log.parent.name, "logs")
             self.assertEqual(
                 {path.name for path in result.work_dir.iterdir() if not path.name.startswith(".")},
@@ -181,6 +254,7 @@ class LaunchTests(unittest.TestCase):
                 result.solver_log.name, f"Sailing_baseline_local-{run.pid}.out"
             )
             self.assertIn("succeeded", result.longship_log.read_text())
+            self.assertIn("███████╗", result.host_log.read_text())
 
     def test_zero_orig_is_copied_only_into_the_isolated_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

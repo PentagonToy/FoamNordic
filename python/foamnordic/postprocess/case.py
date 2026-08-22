@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from .._paths import path_from
+from ..core.paths import path_from
 from ._field import available_times, read_case_field, select_time
 
 

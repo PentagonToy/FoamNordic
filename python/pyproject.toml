@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "foamnordic"
-version = "1.0.3.dev4"
+version = "1.0.3.dev6"
 description = "Declarative orchestration for native OpenFOAM closure workloads"
 readme = { file = "../others/README.pypi.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.13"
@@ -24,6 +24,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
+    "cmake>=3.20",
     "cloudpickle>=3,<4",
     "equinox>=0.13.1,<0.14",
     "foamlib>=1.7,<2",
