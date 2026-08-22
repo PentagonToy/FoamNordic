@@ -236,17 +236,7 @@ observations = fno.Observe(
         "nut": ("min", "max"),
         "U": ("min", "max", "l2"),
     },
-    every=100,
-    snapshots={
-        "airfoil": fno.Sample.plane(
-            normal="y",
-            origin=(0.0, 0.0, 0.0),
-            fields=("U", "nut"),
-            maximum_points=10_000,
-        ),
-    },
-    snapshot_every=1_000,
-    retention=fno.Retention.latest(2, maximum="64 MiB"),
+    interval=100,
 )
 
 longship = fno.Longship(
@@ -317,8 +307,11 @@ model artifact identities, resource arithmetic, and observation limits.
 ## Read-only observation
 
 Observation declarations are part of the plan because node-local reductions
-and samples must be compiled before launch. Consuming the stream is optional,
-and slow plotting does not block the solver.
+must be compiled before launch. The same declaration works for Closure and
+general Transform workloads. Transform observations are emitted after the
+latest declared solver stage has committed its output fields to OpenFOAM
+memory. Consuming the stream is optional, and slow plotting does not block the
+solver.
 
 ```python
 for observation in run.observe():

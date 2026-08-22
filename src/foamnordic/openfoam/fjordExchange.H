@@ -30,6 +30,10 @@ namespace foamnordic::fjord {
 class Harbor;
 }
 
+namespace Foam::foamNordic {
+class ClosureObservation;
+}
+
 namespace Foam::functionObjects {
 
 class fjordExchange final : public fvMeshFunctionObject {
@@ -44,6 +48,7 @@ class fjordExchange final : public fvMeshFunctionObject {
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::AtomicFieldExchange> exchange_;
     std::unique_ptr<foamnordic::adapter::ExchangeSequence> sequence_;
+    std::unique_ptr<foamNordic::ClosureObservation> observation_;
     std::vector<scalarField> inputScratch_;
     std::vector<scalarField> outputScratch_;
 

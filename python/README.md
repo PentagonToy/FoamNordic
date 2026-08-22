@@ -230,6 +230,17 @@ transform = fno.Transform(
     at="time_step_start",
     key=key,
 )
+
+observations = fno.Observe(
+    summaries={"U": ("min", "max", "mean", "l2")},
+    interval=100,
+)
+
+longship = fno.Longship(
+    case=case,
+    transforms=(transform,),
+    observations=(observations,),
+)
 ```
 
 Function arguments and returned mapping keys follow the logical port names.
@@ -258,3 +269,8 @@ One Longship may carry multiple transforms. They use separate sockets,
 readiness markers, and resident workers under one fail-together host group.
 The same output field can therefore be transformed at `time_step_start` and
 again at `time_step_end`; duplicate writers at one stage are rejected.
+Live summaries work for Transform workloads as well as Closure workloads. For
+Transform workloads, each due record observes fields after the latest declared
+solver stage has committed its output. `interval` controls the exchange
+cadence; queue bounds and stale-record eviction remain internal non-blocking
+safety policies.

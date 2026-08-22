@@ -2,7 +2,7 @@
 
 from ..execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
 from ..execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
-from ..core.spec import Attached, Closure, Longship, Observe, Retention, Slurm
+from ..core.spec import Attached, Closure, Longship, Observe, Slurm
 
 __all__ = [
     "Attached",
@@ -13,7 +13,6 @@ __all__ = [
     "ObservationRecord",
     "ObservationStream",
     "ObservationTiming",
-    "Retention",
     "Result",
     "ResultArtifacts",
     "Run",

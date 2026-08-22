@@ -69,10 +69,6 @@ def validate_case(longship: Longship) -> None:
         )
     if len(longship.observations) > 1:
         raise NotImplementedError("launch currently supports one observation schedule")
-    if longship.transforms and longship.observations:
-        raise NotImplementedError(
-            "Transform observation requires the forthcoming general observation hook"
-        )
     if not programs:
         if longship.observations:
             raise NotImplementedError(
@@ -213,15 +209,11 @@ def _observation_block(longship: Longship, path: Path) -> str:
     values = {
         "FOAMNORDIC_OBSERVATION_PATH": str(path),
         "FOAMNORDIC_OBSERVATION_FIELDS": " ".join(observation.summaries),
-        "FOAMNORDIC_OBSERVATION_EVERY": observation.every,
-        "FOAMNORDIC_OBSERVATION_OFFSET": observation.offset,
-        "FOAMNORDIC_OBSERVATION_MAX_RECORDS": observation.retention.records,
-        "FOAMNORDIC_OBSERVATION_MAX_BYTES": observation.retention.maximum_bytes,
-        "FOAMNORDIC_OBSERVATION_OVERFLOW": (
-            "dropOldest"
-            if observation.retention.overflow == "drop_oldest"
-            else "dropNewest"
-        ),
+        "FOAMNORDIC_OBSERVATION_EVERY": observation.interval,
+        "FOAMNORDIC_OBSERVATION_OFFSET": 0,
+        "FOAMNORDIC_OBSERVATION_MAX_RECORDS": 64,
+        "FOAMNORDIC_OBSERVATION_MAX_BYTES": 256 * 1024,
+        "FOAMNORDIC_OBSERVATION_OVERFLOW": "dropOldest",
     }
     rendered = _observation_template()
     for name, value in values.items():
@@ -295,6 +287,7 @@ def render_transform_dictionary(
     transform: Transform,
     address: str,
     shared: bool,
+    observation_block: str = "",
 ) -> str:
     """Render a generic field exchange at the supported solver boundary."""
 
@@ -324,6 +317,7 @@ def render_transform_dictionary(
         "OUTPUT_FIELDS": " ".join(
             str(value.field_name) for value in transform.outputs.values()
         ),
+        "FOAMNORDIC_OBSERVATION_BLOCK": observation_block,
     }
     rendered = _transform_template()
     for name, value in values.items():
@@ -489,10 +483,10 @@ def prepare_case(
         socket = _socket_path(work_dir, offset)
         artifact = _package_function(longship, transform, work_dir)
         prepared.append(PreparedProgram(transform, ready, socket, artifact))
+    observations = work_dir / "observations"
+    if longship.observations:
+        observations.mkdir(parents=True, exist_ok=True)
     if longship.closures:
-        observations = work_dir / "observations"
-        if longship.observations:
-            observations.mkdir(parents=True, exist_ok=True)
         closure_runtime = prepared[0]
         address = f"unix://{closure_runtime.socket}"
         destination, contents = render_dictionary(
@@ -508,8 +502,26 @@ def prepare_case(
 
     transform_dictionaries: list[tuple[Transform, str]] = []
     closure_offset = len(longship.closures)
+    observation_transform = None
+    if longship.observations and not longship.closures and longship.transforms:
+        stage_order = {
+            "time_step_start": 0,
+            "outer_corrector": 1,
+            "pressure_corrected": 2,
+            "time_step_end": 3,
+        }
+        observation_transform = max(
+            range(len(longship.transforms)),
+            key=lambda item: (stage_order[longship.transforms[item].at], item),
+        )
     for index, transform in enumerate(longship.transforms):
         runtime = prepared[closure_offset + index]
+        observation_block = ""
+        if index == observation_transform:
+            observation_block = _observation_block(
+                longship,
+                observations / "observations.{rank}.jsonl",
+            )
         transform_dictionaries.append(
             (
                 transform,
@@ -517,6 +529,7 @@ def prepare_case(
                     transform,
                     f"unix://{runtime.socket}",
                     longship.placement.data_path != "uds",
+                    observation_block,
                 ),
             )
         )

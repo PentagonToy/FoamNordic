@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 import foamnordic as fno
 from foamnordic._case import (
     PreparedProgram,
+    _observation_block,
     _scheme_commands,
     _scheme_requirements,
     _socket_path,
@@ -49,8 +50,7 @@ def example_longship() -> fno.Longship:
     )
     observation = fno.Observe(
         summaries={"nut": ("min", "max"), "U": ("l2",)},
-        every=100,
-        retention=fno.Retention.latest(2, maximum_bytes=64 * 1024 * 1024),
+        interval=100,
     )
     return fno.Longship(
         name="cavity-keqn",
@@ -84,6 +84,13 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn("solver_tasks", parameters)
         self.assertNotIn("solver_tasks_per_node", parameters)
         self.assertNotIn("solver_cpus_per_task", parameters)
+
+    def test_observe_uses_solver_friendly_cadence(self) -> None:
+        parameters = inspect.signature(fno.Observe).parameters
+        self.assertIn("interval", parameters)
+        self.assertNotIn("every", parameters)
+        self.assertNotIn("retention", parameters)
+        self.assertNotIn("Retention", dir(fno))
 
     def test_longship_name_inherits_from_case(self) -> None:
         case = fno.openfoam.Case(
@@ -523,7 +530,38 @@ class PlanTests(unittest.TestCase):
         self.assertIn('path        "/runs/cavity/observations.{rank}.jsonl";', rendered)
         self.assertIn("fields      (nut U);", rendered)
         self.assertIn("every       100;", rendered)
-        self.assertIn("maxRecords  2;", rendered)
+        self.assertIn("maxRecords  64;", rendered)
+
+    def test_transform_dictionary_embeds_general_observation(self) -> None:
+        longship = example_longship()
+        transform = fno.Transform(
+            name="perturbVelocity",
+            operator=fno.Operator.model("velocity.fnom"),
+            inputs={"velocity": fno.field("U")},
+            outputs={"velocity": fno.field("U")},
+        )
+        observed = fno.Longship(
+            case=longship.case,
+            transforms=(transform,),
+            observations=(
+                fno.Observe(
+                    summaries={"U": ("min", "max")},
+                    interval=10,
+                ),
+            ),
+        )
+        rendered = render_transform_dictionary(
+            transform,
+            "unix:///tmp/transform.sock",
+            True,
+            _observation_block(
+                observed,
+                Path("/runs/cavity/observations.{rank}.jsonl"),
+            ),
+        )
+        self.assertIn("observation", rendered)
+        self.assertIn("every       10;", rendered)
+        self.assertIn("fields      (U);", rendered)
 
     def test_custom_dictionary_template_renders_combustion_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -269,44 +269,18 @@ class Transform:
 
 
 @dataclass(frozen=True, slots=True)
-class Retention:
-    """Byte- and record-bounded observation retention policy."""
-
-    records: int = 64
-    maximum_bytes: int = 256 * 1024
-    overflow: str = "drop_oldest"
-
-    def __post_init__(self) -> None:
-        require_positive(self.records, "retention records")
-        require_positive(self.maximum_bytes, "retention maximum_bytes")
-        if self.overflow not in {"drop_oldest", "drop_newest"}:
-            raise ValueError("retention overflow must be drop_oldest or drop_newest")
-
-    @classmethod
-    def latest(cls, records: int, *, maximum_bytes: int) -> "Retention":
-        return cls(records=records, maximum_bytes=maximum_bytes)
-
-    def to_plan(self) -> dict[str, object]:
-        return {
-            "records": self.records,
-            "maximum_bytes": self.maximum_bytes,
-            "overflow": self.overflow,
-        }
-
-
-@dataclass(frozen=True, slots=True)
 class Observe:
-    """Read-only summary observations compiled before solver launch."""
+    """Read-only field summaries sampled at a solver-friendly interval.
+
+    ``interval`` is the only cadence control. Queue length, byte limits, and
+    overflow behavior remain private runtime safety details.
+    """
 
     summaries: Mapping[str, tuple[str, ...]]
-    every: int = 1
-    offset: int = 0
-    retention: Retention = dataclass_field(default_factory=Retention)
+    interval: int = 1
 
     def __post_init__(self) -> None:
-        require_positive(self.every, "observation every")
-        if self.offset < 0:
-            raise ValueError("observation offset must not be negative")
+        require_positive(self.interval, "observation interval")
         normalized: dict[str, tuple[str, ...]] = {}
         supported = {"min", "max", "mean", "l2"}
         for field_name, reductions in self.summaries.items():
@@ -325,8 +299,7 @@ class Observe:
     def to_plan(self) -> dict[str, object]:
         return {
             "summaries": {name: list(values) for name, values in self.summaries.items()},
-            "schedule": {"every": self.every, "offset": self.offset},
-            "retention": self.retention.to_plan(),
+            "schedule": {"interval": self.interval},
         }
 
 

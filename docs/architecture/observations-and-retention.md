@@ -12,21 +12,16 @@ Only the last two belong near an interactive notebook. Closure progress and
 field replacement move entirely into the node-local native execution plan.
 The notebook becomes a read-only observer and never calls `step.send()`.
 
-An optional future interface may still feel iterative:
+The interface remains iterative without owning solver progress:
 
 ```python
-monitor = longship.observe(
-    summaries={"U": ["min", "max"], "p": ["min", "max"]},
-    every=100,
-    snapshots={"U": plane(z=0.0, resolution=(256, 256))},
-    snapshot_every=1000,
-    retention=retention.latest(2, maximum="64 MiB"),
+observations = fno.Observe(
+    summaries={"U": ("min", "max"), "p": ("min", "max")},
+    interval=100,
 )
 
-for observation in monitor:
+for observation in run.observe():
     table.update(observation.summary)
-    if observation.snapshot is not None:
-        plot(observation.snapshot)
 ```
 
 This loop consumes observation events. Stopping it, restarting the kernel, or
@@ -45,18 +40,18 @@ The default does not preserve ten historical full fields.
 
 ### Observation retention
 
-Compact summaries and sampled views use a byte-bounded ring. The policy
-declares both record and byte limits. When a nonessential observer falls
-behind, the default is `drop_oldest`; closure execution never waits for free
-observation memory.
+Compact summaries use a bounded ring. The public API declares only the
+solver-friendly `interval`. Internal queue length, byte limits, and stale-record
+eviction remain implementation safety details. When a nonessential observer
+falls behind, closure or Transform execution never waits for free observation
+memory.
 
 Useful policies are:
 
 ```text
-latest(1)                    current display only
-latest(2, maximum=64 MiB)    double-buffered visualization
-every(100, keep=10)          bounded monitoring history
-none                         no live observation
+interval=1                         observe each exchange
+interval=100                       sparse monitoring
+no Observe declaration             no live observation
 ```
 
 ### Artifact retention

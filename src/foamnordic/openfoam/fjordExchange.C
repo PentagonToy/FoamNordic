@@ -10,6 +10,7 @@
 // clang-format on
 
 #include "fjordExchange.H"
+#include "closureObservation.H"
 #include "closureSession.H"
 #include "fieldBridge.H"
 
@@ -17,6 +18,7 @@
 
 #include "foamnordic/backend/adapter/exchange.hpp"
 #include "foamnordic/backend/adapter/sequence.hpp"
+#include <chrono>
 #include <utility>
 
 namespace Foam::functionObjects {
@@ -32,10 +34,15 @@ fjordExchange::fjordExchange(
     fvMeshFunctionObject(name, runTime, dict) {
     sequence_ = std::make_unique<foamnordic::adapter::ExchangeSequence>();
     read(dict);
+    observation_ = foamNordic::ClosureObservation::create(dict);
     connectPeer();
 }
 
 fjordExchange::~fjordExchange() {
+    if (observation_) {
+        observation_->shutdown();
+        observation_.reset();
+    }
     if (harbor_) {
         try {
             harbor_->shutdown();
@@ -122,6 +129,7 @@ bool fjordExchange::exchange() {
         }
         const auto exchangeIndex = *selected;
         const auto physicalTime = static_cast<double>(mesh_.time().value());
+        const auto exchangeStarted = std::chrono::steady_clock::now();
         foamnordic::adapter::InputFieldMap inputs;
         foamnordic::adapter::OutputFieldMap outputs;
         inputScratch_.clear();
@@ -153,6 +161,12 @@ bool fjordExchange::exchange() {
             foamNordic::commitOutputField(
                 mesh_, outputs_[index], &outputScratch_[index]);
             foamNordic::correctFieldBoundary(mesh_, outputs_[index]);
+        }
+        if (observation_) {
+            const auto exchangeWait = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - exchangeStarted).count();
+            observation_->publish(
+                mesh_, mesh_.time(), exchangeIndex, exchangeWait);
         }
         return true;
     } catch (const std::exception& error) {

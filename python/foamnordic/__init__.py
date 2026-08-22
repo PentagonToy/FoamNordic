@@ -14,7 +14,6 @@ from .core.spec import (
     Longship,
     Observe,
     Operator,
-    Retention,
     Slurm,
     Transform,
 )
@@ -42,7 +41,6 @@ __all__ = [
     "ObservationRecord",
     "ObservationStream",
     "ObservationTiming",
-    "Retention",
     "Result",
     "ResultArtifacts",
     "Run",

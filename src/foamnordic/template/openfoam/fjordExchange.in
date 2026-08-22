@@ -1,6 +1,5 @@
 {
     type            foamNordicExchange;
-    libs            ("libfoamnordicOpenFOAM.so");
 
     enabled         true;
     executeControl  @EXECUTE_CONTROL@;
@@ -18,4 +17,6 @@
     inputs          (@INPUT_FIELDS@);
     outputKeys      (@OUTPUT_KEYS@);
     outputs         (@OUTPUT_FIELDS@);
+
+    @FOAMNORDIC_OBSERVATION_BLOCK@
 }
