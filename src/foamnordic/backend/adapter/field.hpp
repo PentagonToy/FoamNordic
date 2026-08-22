@@ -36,6 +36,7 @@ struct FieldStatistics {
     double maximum{0.0};
     double mean{0.0};
     std::uint64_t count{0};
+    double l2{0.0};
 };
 
 [[nodiscard]] std::uint64_t field_components(const fjord::TensorView& field);

@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
     };
 
     Foam::Info
-        << "[FoamNord] OpenFOAM operation probe" << Foam::nl
+        << "[FoamNordic] OpenFOAM operation probe" << Foam::nl
         << "Expression                  Shape            Minimum           Maximum"
         << Foam::nl;
 
@@ -129,6 +129,6 @@ int main(int argc, char* argv[]) {
             << range.minimum << "    " << range.maximum << Foam::nl;
     }
 
-    Foam::Info << "[FoamNord] OpenFOAM operations: PASS" << Foam::nl;
+    Foam::Info << "[FoamNordic] OpenFOAM operations: PASS" << Foam::nl;
     return 0;
 }

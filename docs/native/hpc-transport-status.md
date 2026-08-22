@@ -12,11 +12,11 @@ itself satisfy the second or third claim.
 
 ## Current status
 
-| Data plane | Intended placement | FoamNordic implementation | Roihu validation |
+| Data plane | Intended placement | FoamNordic implementation | Example HPC validation |
 | --- | --- | --- | --- |
 | UDS | Same node, separate processes | Complete | PASS: OpenFOAM and native ONNX worker over forced pure UDS |
 | SHM | Same node, solver rank and ClosureHost | Complete | PASS: two OpenFOAM ranks, shared resident ONNX ClosureHost, and Longship lifecycle |
-| TCP | Different nodes | Complete | PASS: split Slurm allocations on two Roihu compute nodes |
+| TCP | Different nodes | Complete | PASS: split Slurm allocations on two compute nodes |
 | UCX | Different nodes, high-performance bulk transfer | UCP stream channel and TCP-to-UCX upgrade complete | PASS: split-allocation OpenFOAM field exchange with a resident ONNX ClosureHost |
 
 The safe automatic policy is therefore:
@@ -28,33 +28,34 @@ different node  UCX when its build and site probe are verified
 different node  TCP otherwise
 ```
 
-UCX is now a Roihu-validated Fjord data plane. The optional `UcxChannel` links
+UCX is now an HPC-validated Fjord data plane. The optional `UcxChannel` links
 directly to the UCP API and upgrades a TCP Harbor before its first payload.
 Automatic mode may select it only when the UCX build is present and the site
 connectivity probe has passed. An explicit UCX request must fail before the
 first exchange if it cannot be honored; it must never silently become TCP.
 The native ClosureHost and OpenFOAM adapter expose an explicit UCX upgrade.
-Their split-allocation integration gate has passed on Roihu: an actual
+Their split-allocation integration gate has passed on a Slurm HPC system: an actual
 OpenFOAM probe on a `small` node exchanged fields with the resident ONNX
 ClosureHost in an interactive allocation.
 
-## Roihu validation record
+## HPC validation record (CSC Roihu example)
 
-These results were observed on 2026-08-21 under project
-`project_2015384`. They are site evidence, not portable performance promises.
+These results were observed on 2026-08-21 on CSC Roihu. The allocation account,
+user identity, job identifiers, node names, and fabric addresses are redacted.
+They are site evidence, not portable performance promises.
 
 ### UDS
 
-Slurm job `764473` ran an actual OpenFOAM case and resident ONNX worker with
+A Slurm job ran an actual OpenFOAM case and resident ONNX worker with
 the SHM upgrade disabled. The worker reported `Data plane: UDS`, inference and
 field exchange passed, and the endpoint was cleaned up.
 
 ### SHM
 
-Slurm job `764217` connected two OpenFOAM ranks to one shared native ONNX
+Another Slurm job connected two OpenFOAM ranks to one shared native ONNX
 ClosureHost on the node. Both rank sessions negotiated SHM, performed atomic
 field replacement, and completed under Longship supervision. The broader
-native OpenFOAM hook also passed in job `764000`.
+native OpenFOAM hook also passed independently.
 
 SHM uses UDS for rendezvous and control. Linux waits through process-shared
 futex words; macOS retains the connected UDS as its blocking wake path. The
@@ -68,8 +69,8 @@ one-node interactive allocation and submits a one-node `small` client while
 excluding the server node. This avoids waiting for a scarce full two-node
 allocation.
 
-Server allocation `764646` ran on `rc4283`; client job `764650` ran in
-`small`. The probe completed 100 atomic round trips with a 1 MiB payload in
+The server ran in an interactive allocation and the client ran in `small` on
+a different node. The probe completed 100 atomic round trips with a 1 MiB payload in
 each direction per exchange:
 
 | Result | Value |
@@ -105,8 +106,8 @@ Rune, and Harbor path rather than relying on that MPI component.
 
 ### UCX two-node validation
 
-Interactive server allocation `766158` ran on `rc4283`; client job `766161`
-ran in the one-node `small` partition. TCP established the Harbor control
+The interactive server and one-node `small` client ran on different nodes.
+TCP established the Harbor control
 session, after which the server advertised its `ib0` address and both peers
 upgraded to a UCP stream. The probe completed 100 atomic round trips with one
 1 MiB tensor sent and returned per exchange:
@@ -160,11 +161,10 @@ its TCP transport. Success requires all of the following: the worker reports
 and the host readiness marker disappears. Failed or interrupted drivers cancel
 the submitted client and terminate the host.
 
-The central acceptance gate passed on 2026-08-21. Interactive allocation
-`766654` hosted the resident ONNX ClosureHost on `rc5183`; `small` job `766661`
-ran the OpenFOAM v2512 closure-hook probe on `rc4129`. TCP established control
-at `tcp://rc5183:30654`, after which the peers upgraded through the host's
-`ib0` address `10.144.6.165`. The run forced
+The central acceptance gate passed on 2026-08-21. An interactive allocation
+hosted the resident ONNX ClosureHost; a `small` job on another node ran the
+OpenFOAM v2512 closure-hook probe. TCP established control, after which the
+peers upgraded through the host's `ib0` fabric address. The run forced
 `UCX_TLS=rc,ud,sm,self`, excluding UCP's TCP transport.
 
 The ClosureHost reported `data plane: UCX`, the OpenFOAM client verified two
@@ -174,35 +174,35 @@ runners stopped cleanly, and the Slurm client completed. The driver reported
 warning disabled only the auxiliary ARGOS integration, as in the earlier TCP
 and UCX transport probes; it did not affect the allocation or data path.
 
-The multi-rank central gate subsequently passed in interactive allocation
-`766739`. One resident ClosureHost on `rc5183` accepted global OpenFOAM ranks
-0 and 1 from `small` job `766898` on `rc4129`. Each rank negotiated an
+The multi-rank central gate subsequently passed across an interactive host
+allocation and a `small` client allocation. One resident ClosureHost accepted
+global OpenFOAM ranks 0 and 1 from the client node. Each rank negotiated an
 independent UCX channel, performed two exact atomic field replacements through
 the shared ONNX model, and shut down its runner cleanly. The parallel OpenFOAM
 probe and driver both reported `PASS`; arrival order was deliberately not
 assumed, and rank 1 connected before rank 0 in this run.
 
 The same two-rank topology passed under cross-allocation Longship supervision
-with `small` client job `767089`. Longship waited for the central host marker,
+with a `small` client job. Longship waited for the central host marker,
 started the Slurm client proxy, observed successful client accounting, allowed
 both UCX runners to consume shutdown, and removed the readiness marker. The
 proxy and Longship both reported successful completion, so this run validates
 the coupled success lifecycle as well as the field data path.
 
-The split-allocation failure gates also passed. Client job `767139` exited in
+The split-allocation failure gates also passed. The client exited in
 the intentional `FAILED` state; the Slurm proxy returned failure and Longship
 terminated the waiting host and removed its marker. In the reverse direction,
 an intentionally failed host caused Longship to terminate the proxy, whose
-exit cleanup cancelled client job `767150`; accounting reported `CANCELLED`.
+exit cleanup cancelled the client job; accounting reported `CANCELLED`.
 No client allocation or readiness marker survived either test. Together these
 runs validate fail-together propagation in both directions rather than only
 the successful lifecycle.
 
 ### Solver-integrated LES acceptance
 
-The first full solver gate passed in interactive allocation `766739` with
-`small` client job `767479`. The host ran on `rc5183`; two OpenFOAM v2512
-ranks ran on `rc5134`. The driver copied the source lid-driven-cavity LES case
+The first full solver gate passed across an interactive host allocation and a
+`small` client allocation. Two OpenFOAM v2512 ranks ran on the client node.
+The driver copied the source lid-driven-cavity LES case
 into scratch, selected the runtime `nutFjord` model, and left the source case
 unchanged.
 
@@ -227,9 +227,8 @@ separate three-dimensional case campaign.
 
 ### One-equation LES acceptance
 
-The compact `kEqnFjord` gate subsequently passed in interactive allocation
-`768117` with `small` client job `768264`. The resident ClosureHost ran on
-`rc5183`; two OpenFOAM v2512 ranks ran on `rc5134`. Both rank sessions selected
+The compact `kEqnFjord` gate subsequently passed across an interactive host
+allocation and a `small` client allocation. Two OpenFOAM v2512 client ranks selected
 UCX with `UCX_TLS=rc,ud,sm,self`, and both native runners stopped cleanly.
 
 The fixture was first loaded through ONNX Runtime and numerically verified for
@@ -252,8 +251,8 @@ three-dimensional NACA4412 campaign must retain its own k boundary conditions
 and tune numerical controls before any physical or performance conclusions are
 drawn.
 
-The deferred NACA4412 software smoke also passed under the same interactive
-allocation, with two OpenFOAM ranks in `small` client job `768308`. Unlike the
+The deferred NACA4412 software smoke also passed under the same split-allocation
+pattern, with two OpenFOAM ranks in the `small` client job. Unlike the
 compact cavity, this case supplied its own airfoil mesh, `0/k` field and wall
 conditions, and PBiCG/DILU k solver. The copied case selected `kEqnFjord`, both
 ranks used UCX, all three closure fields were written, three time steps

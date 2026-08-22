@@ -1,14 +1,15 @@
 # Python API documentation
 
-FoamNordic does not yet ship Python bindings, a Python package, or a stable
-public Python API. The current implementation is native C++.
-
-The documents in this directory define the intended boundary for a future thin
-orchestration layer. They must not be read as runnable examples until Python
-packaging and API tests are added.
+FoamNordic's installable Python control plane compiles immutable case, closure,
+observation, placement, and scheduler declarations into a deterministic native
+plan. `Longship.launch()` prepares an isolated case and returns the
+cancellation-safe `Run`; `Run.stop()` produces one durable `Result`. Native C++
+remains authoritative for placement arithmetic, field exchange, inference,
+and solver integration.
 
 - [API design](design.md)
 - [Provisional run-control API](run-control-api.md)
+- [Wheel publishing](publishing.md)
 - [Native C++ documentation](../native/README.md)
 
 The earlier SmartSim- and Redis-based FoamNordic APIs are historical reference

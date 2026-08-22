@@ -203,12 +203,16 @@ private:
     const std::vector<std::filesystem::path>& files_;
 };
 
-void wait_until_ready(
+[[nodiscard]] bool wait_until_ready(
     const LongshipLaunch& launch,
-    const ChildState& host) {
+    const ChildState& host,
+    const LongshipStop* stop) {
     const auto deadline = std::chrono::steady_clock::now()
                           + launch.readiness_timeout;
     while (!all_ready(launch.host_ready_files)) {
+        if (stop != nullptr && stop->stop_requested()) {
+            return false;
+        }
         if (host.finished()) {
             throw std::runtime_error(
                 "ClosureHost exited before Longship readiness.");
@@ -223,9 +227,18 @@ void wait_until_ready(
         host.wait_for_change(
             std::min(remaining, std::chrono::milliseconds(20)));
     }
+    return true;
 }
 
 }  // namespace
+
+void LongshipStop::request_stop() noexcept {
+    requested_.store(true, std::memory_order_release);
+}
+
+bool LongshipStop::stop_requested() const noexcept {
+    return requested_.load(std::memory_order_acquire);
+}
 
 void LongshipCommand::validate() const {
     if (arguments.empty() || arguments.front().empty()) {
@@ -248,7 +261,9 @@ void LongshipLaunch::validate() const {
     }
 }
 
-LongshipResult sail_longship(const LongshipLaunch& launch) {
+LongshipResult sail_longship(
+    const LongshipLaunch& launch,
+    const LongshipStop* stop) {
     launch.validate();
     remove_stale_readiness(launch.host_ready_files);
     const ReadinessCleanup readiness_cleanup(launch.host_ready_files);
@@ -256,7 +271,11 @@ LongshipResult sail_longship(const LongshipLaunch& launch) {
     ChildState host(start_child(launch.host));
     host.watch();
     try {
-        wait_until_ready(launch, host);
+        if (!wait_until_ready(launch, host, stop)) {
+            host.terminate(launch.termination_grace);
+            host.join();
+            return {130, host.status(), false, true};
+        }
     } catch (...) {
         host.terminate(launch.termination_grace);
         host.join();
@@ -266,6 +285,13 @@ LongshipResult sail_longship(const LongshipLaunch& launch) {
     ChildState solver(start_child(launch.solver));
     solver.watch();
     while (!host.finished() && !solver.finished()) {
+        if (stop != nullptr && stop->stop_requested()) {
+            host.terminate(launch.termination_grace);
+            solver.terminate(launch.termination_grace);
+            host.join();
+            solver.join();
+            return {solver.status(), host.status(), false, true};
+        }
         solver.wait_for_change(std::chrono::milliseconds(100));
     }
 
@@ -292,6 +318,7 @@ LongshipResult sail_longship(const LongshipLaunch& launch) {
         solver.status(),
         host.status(),
         host_failed_first,
+        false,
     };
 }
 

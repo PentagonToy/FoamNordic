@@ -21,6 +21,7 @@
 #include "foamnordic/fjord/endpoint.hpp"
 
 #include <stdexcept>
+#include <chrono>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -83,12 +84,19 @@ foamnordic::adapter::CompiledObservationPlan compilePlan(
 
 ClosureObservation::ClosureObservation(const dictionary& dict)
     : fields_(dict.get<wordList>("fields")),
-      plan_(compilePlan(fields_, dict)),
-      publisher_(std::make_unique<foamnordic::adapter::ObservationPublisher>(
-          foamnordic::fjord::connect(
-              foamnordic::fjord::FjordAddress::parse(
-                  resolveRankAddress(dict.get<string>("address")).c_str())),
-          retention(dict))) {}
+      plan_(compilePlan(fields_, dict)) {
+    if (dict.found("path")) {
+        writer_ = std::make_unique<foamnordic::adapter::ObservationJsonlWriter>(
+            resolveRankAddress(dict.get<string>("path")).c_str(),
+            retention(dict));
+    } else {
+        publisher_ = std::make_unique<foamnordic::adapter::ObservationPublisher>(
+            foamnordic::fjord::connect(
+                foamnordic::fjord::FjordAddress::parse(
+                    resolveRankAddress(dict.get<string>("address")).c_str())),
+            retention(dict));
+    }
+}
 
 std::unique_ptr<ClosureObservation> ClosureObservation::create(
     const dictionary& closureDict) {
@@ -102,11 +110,13 @@ std::unique_ptr<ClosureObservation> ClosureObservation::create(
 void ClosureObservation::publish(
     const fvMesh& mesh,
     const Time& time,
-    std::uint64_t exchangeIndex) noexcept {
+    std::uint64_t exchangeIndex,
+    double closureWait) noexcept {
     if (!enabled_) {
         return;
     }
     try {
+        const auto started = std::chrono::steady_clock::now();
         foamnordic::adapter::ReadOnlyFieldMap views;
         views.reserve(fields_.size());
         for (const auto& field : fields_) {
@@ -123,15 +133,30 @@ void ClosureObservation::publish(
             static_cast<double>(time.value()),
             views);
         if (record) {
-            static_cast<void>(publisher_->try_publish(std::move(*record)));
+            record->closure_wait = closureWait;
+            record->evaluate = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - started).count();
+            if (writer_) {
+                static_cast<void>(writer_->try_publish(std::move(*record)));
+            } else {
+                static_cast<void>(publisher_->try_publish(std::move(*record)));
+            }
         }
-        if (!publisher_->healthy()) {
+        if (writer_ && !writer_->healthy()) {
+            throw std::runtime_error(writer_->failure());
+        }
+        if (publisher_ && !publisher_->healthy()) {
             throw std::runtime_error(publisher_->failure());
         }
     } catch (const std::exception& error) {
         enabled_ = false;
-        Info<< "[FoamNord] Observation disabled: " << error.what() << nl;
-        publisher_->stop();
+        Info<< "[FoamNordic] Observation disabled: " << error.what() << nl;
+        if (writer_) {
+            writer_->stop();
+        }
+        if (publisher_) {
+            publisher_->stop();
+        }
     }
 }
 
@@ -139,6 +164,9 @@ void ClosureObservation::shutdown() noexcept {
     enabled_ = false;
     if (publisher_) {
         publisher_->stop();
+    }
+    if (writer_) {
+        writer_->stop();
     }
 }
 

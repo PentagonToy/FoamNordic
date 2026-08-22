@@ -6,12 +6,12 @@ transport=${FOAMNORDIC_NETWORK_TRANSPORT:-tcp}
 case "$transport" in
     tcp) plane=TCP ;;
     ucx) plane=UCX ;;
-    *) echo "[FoamNord] Unknown network transport: $transport" >&2; exit 1 ;;
+    *) echo "[FoamNordic] Unknown network transport: $transport" >&2; exit 1 ;;
 esac
 
 fail()
 {
-    echo "[FoamNord] Inter-node $plane test failed: $*" >&2
+    echo "[FoamNordic] Inter-node $plane test failed: $*" >&2
     exit 1
 }
 
@@ -69,12 +69,12 @@ cleanup()
 
 trap cleanup EXIT
 
-echo "[FoamNord] $plane work directory: $work_dir"
-echo "[FoamNord] $plane server node: $server_node"
-echo "[FoamNord] $plane client node: $client_node"
-echo "[FoamNord] TCP control address: $address"
+echo "[FoamNordic] $plane work directory: $work_dir"
+echo "[FoamNordic] $plane server node: $server_node"
+echo "[FoamNordic] $plane client node: $client_node"
+echo "[FoamNordic] TCP control address: $address"
 if [[ "$transport" == ucx ]]; then
-    echo "[FoamNord] UCX interface address: $FOAMNORDIC_UCX_HOST"
+    echo "[FoamNordic] UCX interface address: $FOAMNORDIC_UCX_HOST"
 fi
 
 srun --nodes=1 --ntasks=1 --nodelist="$server_node" --exact --exclusive \
@@ -107,4 +107,4 @@ grep -q "Data plane: $plane" "$client_log" \
 
 sed -n '1,140p' "$server_log"
 sed -n '1,180p' "$client_log"
-echo "[FoamNord] Two-node Fjord $plane: PASS"
+echo "[FoamNordic] Two-node Fjord $plane: PASS"

@@ -133,7 +133,7 @@ A closure dictionary may declare a separate read-only observation stream:
 ```foam
 observation
 {
-    address     "unix:///tmp/foamnordic-observe-{rank}.sock";
+    path        "/path/to/run/observations.{rank}.jsonl";
     fields      (U p nut);
     every       100;
     offset      1;
@@ -147,16 +147,18 @@ The block is optional. When absent, the OpenFOAM hook constructs no observation
 plan, buffer, relay thread, or extra connection. When present, each rank
 reduces its current internal fields after the atomic closure commit and
 boundary correction. The solver thread performs only a non-waiting admission
-to a byte-bounded ring; a separate relay sends framed summaries to Longship.
-The observation address supports the same `{rank}` expansion as the closure
-address, but it is a distinct channel and does not share Harbor or closure SHM
-state. A slow or disconnected observer disables only observation. It cannot
-roll back, delay, or partially publish a closure result.
+to a byte-bounded ring; a separate writer flushes one JSONL record at a time.
+The path supports `{rank}` expansion, so MPI ranks never contend for one file.
+Python merges records sharing an exchange index into global min/max, weighted
+mean, L2 norm, and count summaries. A failed writer disables only observation.
+It cannot roll back, delay, or partially publish a closure result. The
+lower-level native API also retains the framed Fjord publisher for applications
+that need a live network observation stream.
 
 `every` and `offset` refer to the monotonic closure exchange index, not the
 OpenFOAM time index. Repeated PIMPLE/PISO corrections at one physical time are
-therefore independently observable. Initial observation records contain only
-`minimum`, `maximum`, `mean`, and `count`; full fields remain in OpenFOAM unless
+therefore independently observable. Observation records contain `minimum`,
+`maximum`, `mean`, `l2`, and `count`; full fields remain in OpenFOAM unless
 a future explicit sampled-view product is declared.
 
 ### First solver-integrated LES model

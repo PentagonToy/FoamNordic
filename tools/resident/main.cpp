@@ -150,13 +150,13 @@ int main(int argc, char** argv) {
             std::filesystem::path(argv[2]),
             bypass,
             options);
-        std::cout << "[FoamNord] Closure worker ready: "
+        std::cout << "[FoamNordic] Closure worker ready: "
                   << worker.address().text() << std::endl;
         ReadyMarker ready(std::move(ready_file));
         worker.run();
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "[FoamNord] Closure worker failed: " << error.what()
+        std::cerr << "[FoamNordic] Closure worker failed: " << error.what()
                   << '\n';
         return 1;
     }

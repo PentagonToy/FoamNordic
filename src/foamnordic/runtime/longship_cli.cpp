@@ -63,6 +63,9 @@ namespace {
 }
 
 [[nodiscard]] int exit_status(const LongshipResult& result) noexcept {
+    if (result.cancelled) {
+        return 130;
+    }
     const auto status = result.host_failed_first
                             ? result.host_status
                             : result.solver_status;
@@ -147,17 +150,21 @@ std::string longship_usage() {
         "Command arguments are passed directly without an intermediate shell.\n";
 }
 
-int run_longship(const LongshipCliRequest& request) {
+int run_longship(
+    const LongshipCliRequest& request,
+    const LongshipStop* stop) {
     if (request.show_help) {
         return 0;
     }
     log(LogLevel::info, "Starting ClosureHost component.");
-    const auto result = sail_longship(request.launch);
+    const auto result = sail_longship(request.launch, stop);
     if (result.success()) {
         log(LogLevel::info, "Longship completed successfully.");
         return 0;
     }
-    if (result.host_failed_first) {
+    if (result.cancelled) {
+        log(LogLevel::warning, "Longship cancelled; components terminated together.");
+    } else if (result.host_failed_first) {
         log(LogLevel::error, "ClosureHost exited before the solver completed.");
     } else {
         log(LogLevel::error, "Solver exited with a failure status.");

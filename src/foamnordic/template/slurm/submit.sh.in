@@ -1,0 +1,35 @@
+#!/bin/bash
+set -Eeuo pipefail
+job_id=""
+cancel_job() {
+    if [[ -n "$job_id" ]]; then
+        scancel "$job_id" 2>/dev/null || true
+        for _ in $(seq 1 300); do
+            squeue --noheader --job "$job_id" 2>/dev/null | grep -q . || break
+            sleep 1
+        done
+    fi
+    exit 130
+}
+trap cancel_job INT TERM
+for key in $(compgen -e); do
+    case "$key" in
+        SLURM_*|SBATCH_*|SRUN_*) unset "$key" ;;
+    esac
+done
+raw_job_id=$(sbatch --parsable @BATCH_PATH@)
+job_id=${raw_job_id%%;*}
+printf '%s\n' "$job_id" > @JOB_FILE@
+while squeue --noheader --job "$job_id" 2>/dev/null | grep -q .; do sleep 1; done
+state=""
+for _ in $(seq 1 60); do
+    state=$(sacct --noheader --parsable2 --jobs "$job_id" \
+        --starttime 1970-01-01 --format=State | head -1)
+    [[ -n "$state" ]] && break
+    sleep 1
+done
+case "$state" in
+    COMPLETED*) exit 0 ;;
+    CANCELLED*) exit 130 ;;
+    *) exit 1 ;;
+esac

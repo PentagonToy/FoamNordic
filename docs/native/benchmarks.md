@@ -17,10 +17,11 @@ Release build on an Apple Silicon development machine, 10,000 round trips:
 The separate-process result exercises the production POSIX SHM mapping and
 macOS UDS wake path rather than a memory-only ring benchmark.
 
-## 2026-08-21: Roihu cross-node TCP
+## 2026-08-21: HPC cross-node TCP (CSC Roihu example)
 
-The server ran on `rc5183` in the `interactive` partition and the client ran
-on `rc5132` in the `small` partition. Each atomic closure exchange sent and
+The server ran in an `interactive` partition and the client ran on another
+node in a `small` partition. Node names and job identifiers are redacted.
+Each atomic closure exchange sent and
 returned one 4 MiB float64 tensor. Thirty-two exchanges completed.
 
 | Data path | Round trips/s | Bidirectional payload MiB/s |
@@ -35,8 +36,8 @@ ranks on every node and use SHM locally.
 
 ### Split-allocation confirmation
 
-A later run used server allocation `764646` on `rc4283` and client job
-`764650` in the one-node `small` partition. It completed 100 round trips with
+A later run used an interactive server allocation and a one-node `small`
+client allocation. It completed 100 round trips with
 one 1 MiB tensor sent and returned per exchange.
 
 | Data path | Round trips/s | Bidirectional payload MiB/s |
@@ -48,10 +49,10 @@ the two rates are validation records rather than a direct performance
 comparison. Server, client, atomic exchange validation, and shutdown all
 passed.
 
-## 2026-08-21: Roihu cross-node UCX
+## 2026-08-21: HPC cross-node UCX (CSC Roihu example)
 
-Server allocation `766158` ran on `rc4283` in `interactive`; client job
-`766161` ran in `small`. The UCX 1.20-enabled release build first negotiated
+The server ran in `interactive` and the client ran on another node in `small`.
+The UCX 1.20-enabled release build first negotiated
 over TCP and then transferred every Rune payload through a UCP stream. It
 completed 100 round trips with one 1 MiB float64 tensor sent and returned per
 exchange.

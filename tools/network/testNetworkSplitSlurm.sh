@@ -6,12 +6,12 @@ transport=${FOAMNORDIC_NETWORK_TRANSPORT:-tcp}
 case "$transport" in
     tcp) plane=TCP ;;
     ucx) plane=UCX ;;
-    *) echo "[FoamNord] Unknown network transport: $transport" >&2; exit 1 ;;
+    *) echo "[FoamNordic] Unknown network transport: $transport" >&2; exit 1 ;;
 esac
 
 fail()
 {
-    echo "[FoamNord] Split-allocation $plane test failed: $*" >&2
+    echo "[FoamNordic] Split-allocation $plane test failed: $*" >&2
     exit 1
 }
 
@@ -73,13 +73,13 @@ cleanup()
 
 trap cleanup EXIT
 
-echo "[FoamNord] $plane work directory: $work_dir"
-echo "[FoamNord] $plane server allocation: $SLURM_JOB_ID"
-echo "[FoamNord] $plane server node: $server_node"
-echo "[FoamNord] $plane client partition: $partition"
-echo "[FoamNord] TCP control address: $address"
+echo "[FoamNordic] $plane work directory: $work_dir"
+echo "[FoamNordic] $plane server allocation: $SLURM_JOB_ID"
+echo "[FoamNordic] $plane server node: $server_node"
+echo "[FoamNordic] $plane client partition: $partition"
+echo "[FoamNordic] TCP control address: $address"
 if [[ "$transport" == ucx ]]; then
-    echo "[FoamNord] UCX interface address: $FOAMNORDIC_UCX_HOST"
+    echo "[FoamNordic] UCX interface address: $FOAMNORDIC_UCX_HOST"
 fi
 
 "$probe" server "$address" "$iterations" "$elements" "$transport" \
@@ -116,8 +116,8 @@ client_job=$(
 )
 client_log=${client_log/\%j/$client_job}
 
-echo "[FoamNord] $plane client job: $client_job"
-echo "[FoamNord] $plane client log: $client_log"
+echo "[FoamNordic] $plane client job: $client_job"
+echo "[FoamNordic] $plane client log: $client_log"
 
 client_deadline=$((SECONDS + client_wait))
 while kill -0 "$server_pid" 2>/dev/null; do
@@ -164,4 +164,4 @@ grep -q "Data plane: $plane" "$client_log" \
 completed=true
 sed -n '1,140p' "$server_log"
 sed -n '1,180p' "$client_log"
-echo "[FoamNord] Split-allocation Fjord $plane: PASS"
+echo "[FoamNordic] Split-allocation Fjord $plane: PASS"

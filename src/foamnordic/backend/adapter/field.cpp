@@ -57,6 +57,7 @@ FieldStatistics reduce_values(fjord::TensorView field) {
         static_cast<std::uint64_t>(count),
     };
     long double sum = 0.0;
+    long double square_sum = 0.0;
     for (std::size_t index = 0; index < count; ++index) {
         Value value{};
         std::memcpy(&value, field.bytes.data() + index * sizeof(Value), sizeof(Value));
@@ -64,8 +65,11 @@ FieldStatistics reduce_values(fjord::TensorView field) {
         result.minimum = std::min(result.minimum, converted);
         result.maximum = std::max(result.maximum, converted);
         sum += static_cast<long double>(converted);
+        square_sum += static_cast<long double>(converted)
+                      * static_cast<long double>(converted);
     }
     result.mean = static_cast<double>(sum / static_cast<long double>(count));
+    result.l2 = std::sqrt(static_cast<double>(square_sum));
     return result;
 }
 

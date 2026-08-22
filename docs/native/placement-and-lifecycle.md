@@ -88,6 +88,14 @@ remains alive receives `SIGTERM` and, after another bounded grace window,
 `SIGKILL`. Longship removes every configured readiness path after both process
 groups have been reaped, even when the host wrapper itself cannot run cleanup.
 
+External `SIGINT` or `SIGTERM` is converted into a cooperative Longship stop.
+The supervisor terminates both component process groups, waits through the
+declared grace period, removes readiness markers, and returns status 130.
+Python `Run.stop(force=False)` waits on this owned lifecycle. An explicit
+`force=True` instead kills the complete local process group or Slurm job and
+then reaps the terminal result, which is useful when a notebook must recover
+from an unresponsive external runtime.
+
 One resident ClosureHost accepts the declared number of solver connections on
 its node and owns one model instance. Every connection retains its global MPI
 rank and an independent Harbor, SHM channel, exchange state machine, and

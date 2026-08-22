@@ -42,9 +42,9 @@ std::string_view level_name(LogLevel level) {
 void log_to(std::ostream& stream, LogLevel level, std::string_view message, bool color) {
     std::scoped_lock lock(log_mutex);
     if (color) {
-        stream << "\033[33m[FoamNord]\033[0m";
+        stream << "\033[33m[FoamNordic]\033[0m";
     } else {
-        stream << "[FoamNord]";
+        stream << "[FoamNordic]";
     }
     stream << ' ' << level_name(level) << ": " << message << '\n';
 }

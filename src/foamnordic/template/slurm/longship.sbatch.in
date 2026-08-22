@@ -15,8 +15,8 @@ set -Eeuo pipefail
 
 @ENVIRONMENT@
 
-echo "[FoamNord] Longship job: $SLURM_JOB_ID"
-echo "[FoamNord] Starting one multi-rank ClosureHost per solver node."
+echo "[FoamNordic] Longship job: $SLURM_JOB_ID"
+echo "[FoamNordic] Starting one multi-rank ClosureHost per solver node."
 
 exec @LONGSHIP_EXECUTABLE@ \
     @HOST_READY_ARGUMENTS@ \
@@ -28,6 +28,7 @@ exec @LONGSHIP_EXECUTABLE@ \
         --ntasks=@HOST_TASKS@ \
         --ntasks-per-node=1 \
         --cpus-per-task=@HOST_CPUS_PER_TASK@ \
+        --cpu-bind=none \
         --exact \
         --exclusive \
         @HOST_COMMAND@ \
@@ -37,6 +38,7 @@ exec @LONGSHIP_EXECUTABLE@ \
         --ntasks=@SOLVER_TASKS@ \
         --ntasks-per-node=@SOLVER_TASKS_PER_NODE@ \
         --cpus-per-task=@SOLVER_CPUS_PER_TASK@ \
+        --cpu-bind=none \
         --exact \
         --exclusive \
         @SOLVER_COMMAND@

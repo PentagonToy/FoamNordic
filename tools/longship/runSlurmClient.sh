@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 fail()
 {
-    echo "[FoamNord] Slurm client failed: $*" >&2
+    echo "[FoamNordic] Slurm client failed: $*" >&2
     exit 1
 }
 
@@ -105,12 +105,12 @@ client_job=$(sbatch "${sbatch_options[@]}" --wrap="$client_command")
 if [[ -n "$job_id_file" ]]; then
     printf '%s\n' "$client_job" >"$job_id_file"
 fi
-echo "[FoamNord] Slurm client job: $client_job"
+echo "[FoamNordic] Slurm client job: $client_job"
 
 deadline=$((SECONDS + wait_seconds))
 while squeue --noheader --jobs="$client_job" | grep -q .; do
     ((SECONDS < deadline)) \
-        || { echo "[FoamNord] Slurm client exceeded ${wait_seconds}s" >&2; exit 124; }
+        || { echo "[FoamNordic] Slurm client exceeded ${wait_seconds}s" >&2; exit 124; }
     sleep 1
 done
 
@@ -125,4 +125,4 @@ done
     || fail "job $client_job ended in state ${state:-unknown}"
 
 completed=true
-echo "[FoamNord] Slurm client completed: $client_job"
+echo "[FoamNordic] Slurm client completed: $client_job"

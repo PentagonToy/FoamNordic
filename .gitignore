@@ -1,5 +1,6 @@
 .DS_Store
 build/
+wheelhouse-*/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
@@ -9,3 +10,5 @@ Testing/
 *.so
 *.dylib
 *.log
+__pycache__/
+*.py[cod]

@@ -70,7 +70,7 @@ void run(
     bool rejectExchange) {
     const auto address = foamnordic::fjord::FjordAddress::parse(addressText);
     auto listener = listen(address);
-    std::cout << "[FoamNord] Echo worker listening: "
+    std::cout << "[FoamNordic] Echo worker listening: "
               << listener.address().text() << std::endl;
 
     foamnordic::fjord::Harbor harbor(listener.accept());
@@ -91,9 +91,9 @@ void run(
                              + std::to_string(static_cast<long long>(::getpid()))
                              + '-' + std::to_string(session.session_id);
         harbor.offer_shared_memory(shmName);
-        std::cout << "[FoamNord] Data plane: SHM" << std::endl;
+        std::cout << "[FoamNordic] Data plane: SHM" << std::endl;
     } else {
-        std::cout << "[FoamNord] Data plane: "
+        std::cout << "[FoamNordic] Data plane: "
                   << (address.kind == foamnordic::fjord::FjordKind::unix_socket
                           ? "UDS" : "TCP")
                   << std::endl;
@@ -110,7 +110,7 @@ void run(
         while (true) {
             auto message = harbor.receive_message();
             if (message.kind == foamnordic::fjord::RuneKind::shutdown) {
-                std::cout << "[FoamNord] Echo worker stopped." << std::endl;
+                std::cout << "[FoamNordic] Echo worker stopped." << std::endl;
                 return;
             }
             if (message.kind == foamnordic::fjord::RuneKind::tensor) {
@@ -164,7 +164,7 @@ void run(
         if (rejectExchange) {
             harbor.fail_exchange(*exchangeIndex);
             std::cout
-                << "[FoamNord] Rejected closure call " << *exchangeIndex
+                << "[FoamNordic] Rejected closure call " << *exchangeIndex
                 << " at solver time " << *exchangeSolverTimeIndex
                 << " at physical time " << *exchangePhysicalTime
                 << std::endl;
@@ -185,7 +185,7 @@ void run(
         const auto view = transformed.view();
         harbor.publish(*exchangeIndex, std::span(&view, 1));
         std::cout
-            << "[FoamNord] Same-time closure call " << *exchangeIndex
+            << "[FoamNordic] Same-time closure call " << *exchangeIndex
             << ": solver time " << *exchangeSolverTimeIndex
             << ", physical time " << *exchangePhysicalTime << std::endl;
         ++expectedExchangeIndex;
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
         run(argv[1], argv[2], sourceName, scale, rejectExchange);
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "[FoamNord] Echo worker failed: " << error.what() << '\n';
+        std::cerr << "[FoamNordic] Echo worker failed: " << error.what() << '\n';
         return 1;
     }
 }

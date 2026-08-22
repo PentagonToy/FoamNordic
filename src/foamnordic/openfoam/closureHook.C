@@ -15,6 +15,7 @@
 #include "operations/frame.H"
 
 #include <stdexcept>
+#include <chrono>
 #include <unordered_set>
 #include <utility>
 
@@ -102,12 +103,15 @@ std::uint64_t ClosureHook::invoke(
         invocation.receive(outputFieldView(mesh, output, 0, 0.0));
     }
 
+    const auto closureStarted = std::chrono::steady_clock::now();
     const auto exchangeIndex = invocation.commit();
+    const auto closureWait = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - closureStarted).count();
     for (const auto& output : outputs_) {
         correctFieldBoundary(mesh, output);
     }
     if (observation_) {
-        observation_->publish(mesh, time, exchangeIndex);
+        observation_->publish(mesh, time, exchangeIndex, closureWait);
     }
     return exchangeIndex;
 }

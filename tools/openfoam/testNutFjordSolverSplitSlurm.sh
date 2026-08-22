@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 fail()
 {
-    echo "[FoamNord] nutFjord solver test failed: $*" >&2
+    echo "[FoamNordic] nutFjord solver test failed: $*" >&2
     exit 1
 }
 
@@ -119,11 +119,11 @@ client_log="$work_dir/client-%j.log"
 job_file="$work_dir/client.job"
 longship_log="$work_dir/longship.log"
 
-echo "[FoamNord] nutFjord solver work directory: $work_dir"
-echo "[FoamNord] ClosureHost allocation: $SLURM_JOB_ID ($server_node)"
-echo "[FoamNord] OpenFOAM ranks: $ranks"
-echo "[FoamNord] Control address: $address"
-echo "[FoamNord] UCX interface address: $ucx_host"
+echo "[FoamNordic] nutFjord solver work directory: $work_dir"
+echo "[FoamNordic] ClosureHost allocation: $SLURM_JOB_ID ($server_node)"
+echo "[FoamNordic] OpenFOAM ranks: $ranks"
+echo "[FoamNordic] Control address: $address"
+echo "[FoamNordic] UCX interface address: $ucx_host"
 
 set +e
 "$longship" \
@@ -191,4 +191,4 @@ sed -n '1,100p' "$longship_log"
 sed -n '1,100p' "$proxy_log"
 sed -n '1,180p' "$host_log"
 sed -n '1,260p' "$client_log"
-echo "[FoamNord] $ranks-rank pimpleFoam nutFjord ONNX over central UCX: PASS"
+echo "[FoamNordic] $ranks-rank pimpleFoam nutFjord ONNX over central UCX: PASS"

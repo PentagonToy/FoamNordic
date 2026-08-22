@@ -94,7 +94,7 @@ void run_server(
     std::size_t elements,
     bool use_ucx) {
     auto listener = FjordListener::network(address.location, address.port);
-    std::cout << "[FoamNord] Inter-node server listening: "
+    std::cout << "[FoamNordic] Inter-node server listening: "
               << listener.address().text() << std::endl;
 
     Harbor harbor(listener.accept());
@@ -121,7 +121,7 @@ void run_server(
                                   : address.location;
         ucx_listener = std::make_unique<foamnordic::fjord::UcxListener>(
             foamnordic::fjord::UcxListener::network(ucx_host, 0));
-        std::cout << "[FoamNord] UCX listener: "
+        std::cout << "[FoamNordic] UCX listener: "
                   << ucx_listener->address().text() << std::endl;
         harbor.offer_ucx(*ucx_listener);
     }
@@ -145,7 +145,7 @@ void run_server(
     if (harbor.receive_control() != RuneKind::shutdown) {
         throw std::runtime_error("Inter-node client did not shut down cleanly.");
     }
-    std::cout << "[FoamNord] Inter-node server: PASS" << std::endl;
+    std::cout << "[FoamNordic] Inter-node server: PASS" << std::endl;
 }
 
 void run_client(
@@ -209,15 +209,15 @@ void run_client(
     const auto transferred = static_cast<double>(
         iterations * elements * sizeof(double) * 2ULL);
 
-    std::cout << "[FoamNord] Data plane: " << (use_ucx ? "UCX" : "TCP") << '\n'
-              << "[FoamNord] Atomic exchanges: " << iterations << '\n'
-              << "[FoamNord] Payload bytes/exchange: "
+    std::cout << "[FoamNordic] Data plane: " << (use_ucx ? "UCX" : "TCP") << '\n'
+              << "[FoamNordic] Atomic exchanges: " << iterations << '\n'
+              << "[FoamNordic] Payload bytes/exchange: "
               << elements * sizeof(double) << '\n'
-              << "[FoamNord] Round trips/s: "
+              << "[FoamNordic] Round trips/s: "
               << static_cast<double>(iterations) / elapsed << '\n'
-              << "[FoamNord] Payload MiB/s: "
+              << "[FoamNordic] Payload MiB/s: "
               << transferred / elapsed / (1024.0 * 1024.0) << '\n'
-              << "[FoamNord] Inter-node client: PASS" << std::endl;
+              << "[FoamNordic] Inter-node client: PASS" << std::endl;
 }
 
 [[nodiscard]] std::uint64_t parse_positive(
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
         }
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "[FoamNord] Inter-node probe failed: "
+        std::cerr << "[FoamNordic] Inter-node probe failed: "
                   << error.what() << '\n';
         return 1;
     }

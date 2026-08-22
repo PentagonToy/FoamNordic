@@ -17,10 +17,7 @@
 
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
-
-#ifdef FOAMNORDIC_HAS_ONNXRUNTIME
-#include "foamnordic/backend/inference/onnx.hpp"
-#endif
+#include "foamnordic/backend/connectors/registry.hpp"
 
 namespace foamnordic::closure {
 namespace {
@@ -60,25 +57,8 @@ std::filesystem::path resolve_artifact(
 
 LoadedModel load_model(const std::filesystem::path& manifest_path) {
     auto artifact = read_manifest(manifest_path);
-    std::unique_ptr<PackedModelKernel> packed;
-
-    switch (artifact.format) {
-        case ModelFormat::onnx:
-#ifdef FOAMNORDIC_HAS_ONNXRUNTIME
-            packed = std::make_unique<OnnxPackedKernel>(
-                resolve_artifact(manifest_path, artifact.artifact_path));
-            break;
-#else
-            throw std::runtime_error(
-                "This FoamNordic build does not include ONNX Runtime support.");
-#endif
-        case ModelFormat::equinox:
-            throw std::runtime_error(
-                "Native Equinox loading is not implemented yet.");
-        case ModelFormat::joblib:
-            throw std::runtime_error(
-                "Native Joblib loading is not implemented yet.");
-    }
+    auto packed = foamnordic::backend::connect_model(
+        resolve_artifact(manifest_path, artifact.artifact_path), artifact);
 
     auto kernel =
         std::make_unique<OwnedArtifactKernel>(artifact, std::move(packed));

@@ -182,7 +182,7 @@ int main(int argc, char* argv[]) {
             probeSeed);
         Foam::foamNordic::correctFieldBoundary(mesh, probeOutput);
         Foam::Info
-            << "[FoamNord] Seeded " << probeOutput
+            << "[FoamNordic] Seeded " << probeOutput
             << " in memory for deterministic verification" << Foam::nl;
     }
     Foam::foamNordic::ClosureHook closure(configuration);
@@ -200,7 +200,7 @@ int main(int argc, char* argv[]) {
                 mesh, probeOutput, 0, runTime.value());
             requireIdentity(after, ownedBefore);
             Foam::Info
-                << "[FoamNord] Rejected closure left " << probeOutput
+                << "[FoamNordic] Rejected closure left " << probeOutput
                 << " unchanged: PASS" << Foam::nl;
             return 0;
         }
@@ -233,11 +233,11 @@ int main(int argc, char* argv[]) {
                 "FoamNordic closure hook issued an incorrect exchange index.");
         }
         Foam::Info
-            << "[FoamNord] Closure invocation " << exchangeIndex
+            << "[FoamNordic] Closure invocation " << exchangeIndex
             << ": exact expected result" << Foam::nl;
     }
 
     closure.shutdown();
-    Foam::Info << "[FoamNord] OpenFOAM closure hook: PASS" << Foam::nl;
+    Foam::Info << "[FoamNordic] OpenFOAM closure hook: PASS" << Foam::nl;
     return 0;
 }

@@ -143,7 +143,7 @@ clarity or performance. A later stable C ABI lets C++, Fortran
 Native diagnostic lines use this form:
 
 ```text
-[FoamNord] Info: Closure exchange ready.
+[FoamNordic] Info: Closure exchange ready.
 ```
 
 The tag is yellow only when stderr is attached to a terminal. Batch logs and

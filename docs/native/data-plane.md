@@ -253,8 +253,8 @@ decomposition, time-step sequence, and output policy.
 
 The transport matrix covers Rune codec, socket pair, named UDS, loopback TCP,
 SHM wraparound and crash recovery, two-node TCP, and two-node UCX. A
-UCX-enabled build also runs a deterministic TCP-to-UCX loopback upgrade. Roihu
-passed the fabric-backed split-allocation probe with UCX's TCP transport
+UCX-enabled build also runs a deterministic TCP-to-UCX loopback upgrade. A
+Slurm HPC site passed the fabric-backed split-allocation probe with UCX's TCP transport
 explicitly excluded. A central multi-node OpenFOAM and ClosureHost run remains
 a higher-level integration gate rather than a Fjord transport gate.
 
@@ -263,7 +263,7 @@ A reproducible two-node TCP driver is available at
 `foamnordic_fjord_network_probe` built with
 `FOAMNORDIC_NETWORK_TOOLS=ON` and an allocation containing at least two nodes.
 
-Roihu partition limits matter independently of the number of nodes shown by
+Site partition limits matter independently of the number of nodes shown by
 `sinfo`: `small` and `interactive` accept one node per job, `test` accepts one
 or two nodes but may not have two nodes simultaneously available, and
 multi-node `medium` reserves complete nodes. When a two-node allocation is
@@ -285,7 +285,7 @@ returned payload, and reports round-trip and payload rates. It intentionally
 contains no Slurm API: the scheduler only places its server and client
 processes on different nodes.
 
-The current implementation and site-validation matrix, including the Roihu
-UCX 1.20.0 environment and the distinction between an available runtime and an
+The current implementation and site-validation matrix, including an example
+CSC Roihu UCX 1.20.0 environment and the distinction between an available runtime and an
 implemented Fjord channel, is recorded in
 [HPC transport status and site notes](hpc-transport-status.md).

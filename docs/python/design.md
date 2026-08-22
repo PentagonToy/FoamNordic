@@ -49,8 +49,8 @@ native execution protocol.
 - declarations are compiled before the solver starts;
 - no Python callback is inserted into every OpenFOAM closure call;
 - attached CPU inference defaults to same-node UDS with an SHM upgrade;
-- central inference uses TCP until a real UCX channel is implemented and
-  verified across two nodes;
+- central inference may select the verified UCX data plane across nodes;
+  explicit transport requests never silently fall back to TCP;
 - model inputs may be OpenFOAM fields or native expressions such as
   `grad(U)`, `laplacian(p)`, `div(U)`, and `curl(U)`;
 - each closure invocation blocks for one complete atomic response;

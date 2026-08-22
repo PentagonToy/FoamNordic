@@ -11,12 +11,22 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace foamnordic::native {
+
+class LongshipStop {
+public:
+    void request_stop() noexcept;
+    [[nodiscard]] bool stop_requested() const noexcept;
+
+private:
+    std::atomic<bool> requested_{false};
+};
 
 struct LongshipCommand {
     std::vector<std::string> arguments;
@@ -39,12 +49,15 @@ struct LongshipResult {
     int solver_status{0};
     int host_status{0};
     bool host_failed_first{false};
+    bool cancelled{false};
 
     [[nodiscard]] bool success() const noexcept {
-        return solver_status == 0 && !host_failed_first;
+        return solver_status == 0 && !host_failed_first && !cancelled;
     }
 };
 
-[[nodiscard]] LongshipResult sail_longship(const LongshipLaunch& launch);
+[[nodiscard]] LongshipResult sail_longship(
+    const LongshipLaunch& launch,
+    const LongshipStop* stop = nullptr);
 
 }  // namespace foamnordic::native

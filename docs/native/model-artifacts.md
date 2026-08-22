@@ -20,6 +20,14 @@ string, field, feature, rank, and leaf counts; it rejects truncation, invalid
 enum values, malformed scaler flags, and trailing bytes before a worker starts.
 Model payloads remain separate from this small control artifact.
 
+`.fnom` v1 is deliberately not compressed. It is a bounded (64 MiB maximum),
+deterministic binary manifest that native C++ validates directly before a
+worker starts; the usually much larger ONNX payload remains a sibling file.
+Adding zstd to this control path would add a mandatory runtime dependency while
+compressing the wrong part of the artifact. A future single-file distribution
+bundle may use independently checksummed zstd entries after measurements, but
+that container will not silently change the `.fnom` wire format.
+
 Before evaluation, C++ gathers only the active cell indices selected by the
 bypass policy, packs fields in manifest order into one contiguous feature
 matrix, and applies the input scaler in place. It inverse-scales the packed

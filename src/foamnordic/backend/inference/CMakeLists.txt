@@ -1,4 +1,5 @@
 add_library(foamnordic_closure STATIC
+    ../connectors/registry.cpp
     affine.cpp
     artifact.cpp
     closure.cpp
@@ -33,6 +34,8 @@ if(FOAMNORDIC_ONNX_RUNTIME)
         NO_DEFAULT_PATH
     )
     target_sources(foamnordic_closure PRIVATE onnx.cpp)
+    target_sources(foamnordic_closure PRIVATE
+        ../connectors/onnx/connector.cpp)
     target_include_directories(foamnordic_closure PRIVATE
         "${FOAMNORDIC_ONNXRUNTIME_INCLUDE_DIR}"
     )

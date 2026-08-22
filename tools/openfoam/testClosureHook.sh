@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 fail()
 {
-    echo "[FoamNord] Closure hook test failed: $*" >&2
+    echo "[FoamNordic] Closure hook test failed: $*" >&2
     exit 1
 }
 
@@ -222,7 +222,7 @@ run_echo_probe()
 
 run_uds_onnx_probe()
 {
-    echo "[FoamNord] Verifying native ONNX inference over pure UDS"
+    echo "[FoamNordic] Verifying native ONNX inference over pure UDS"
     address="unix://$work_dir/closure-uds.sock"
     configure_probe U U U 1.0 0.25 false
 
@@ -250,7 +250,7 @@ run_uds_onnx_probe()
         || fail "closure worker did not retain the UDS data plane"
 
     sed -n '1,100p' "$work_dir/worker-uds.log"
-    echo "[FoamNord] Native OpenFOAM ONNX pure UDS exchange: PASS"
+    echo "[FoamNordic] Native OpenFOAM ONNX pure UDS exchange: PASS"
 }
 
 run_mpi_probe()
@@ -262,7 +262,7 @@ run_mpi_probe()
     command -v mpirun >/dev/null \
         || fail "required command is unavailable: mpirun"
 
-    echo "[FoamNord] Verifying $mpi_ranks rank-local OpenFOAM closures"
+    echo "[FoamNordic] Verifying $mpi_ranks rank-local OpenFOAM closures"
     address="unix://$work_dir/closure-{rank}.sock"
     configure_probe U U U 1.0 0.25 false
 
@@ -326,14 +326,14 @@ run_mpi_probe()
     for ((rank = 0; rank < mpi_ranks; ++rank)); do
         sed -n '1,40p' "$work_dir/rank-$rank.log"
     done
-    echo "[FoamNord] Rank-local OpenFOAM closure exchange: PASS"
+    echo "[FoamNordic] Rank-local OpenFOAM closure exchange: PASS"
 }
 
 run_longship_mpi_onnx_probe()
 {
     ((mpi_ranks > 1)) || return 0
 
-    echo "[FoamNord] Verifying one ONNX ClosureHost with $mpi_ranks OpenFOAM ranks"
+    echo "[FoamNordic] Verifying one ONNX ClosureHost with $mpi_ranks OpenFOAM ranks"
     address="unix://$work_dir/closure-shared.sock"
     configure_probe U U U 1.0 0.25 false
 
@@ -381,7 +381,7 @@ run_longship_mpi_onnx_probe()
     sed -n '1,100p' "$work_dir/longship.log"
     sed -n '1,120p' "$work_dir/longship-host.log"
     sed -n '1,120p' "$work_dir/longship-solver.log"
-    echo "[FoamNord] Shared ONNX ClosureHost Longship exchange: PASS"
+    echo "[FoamNordic] Shared ONNX ClosureHost Longship exchange: PASS"
 }
 
 run_split_ucx_onnx_probe()
@@ -451,12 +451,12 @@ run_split_ucx_onnx_probe()
     rm -f "$ready"
     rm -f "$client_job_file"
 
-    echo "[FoamNord] Central UCX host allocation: $SLURM_JOB_ID"
-    echo "[FoamNord] Central UCX host node: $server_node"
-    echo "[FoamNord] Central UCX OpenFOAM ranks: $central_ranks"
-    echo "[FoamNord] Central UCX control address: $address"
-    echo "[FoamNord] Central UCX interface address: $ucx_host"
-    echo "[FoamNord] Central UCX transports: $UCX_TLS"
+    echo "[FoamNordic] Central UCX host allocation: $SLURM_JOB_ID"
+    echo "[FoamNordic] Central UCX host node: $server_node"
+    echo "[FoamNordic] Central UCX OpenFOAM ranks: $central_ranks"
+    echo "[FoamNordic] Central UCX control address: $address"
+    echo "[FoamNordic] Central UCX interface address: $ucx_host"
+    echo "[FoamNordic] Central UCX transports: $UCX_TLS"
 
     local longship_status
     set +e
@@ -508,7 +508,7 @@ run_split_ucx_onnx_probe()
     local client_job
     client_job=$(<"$client_job_file")
     client_log=${client_log/\%j/$client_job}
-    echo "[FoamNord] Central UCX client job: $client_job"
+    echo "[FoamNordic] Central UCX client job: $client_job"
     [[ ! -e "$ready" ]] \
         || fail "central UCX Longship left its readiness marker"
     [[ $(grep -Ec "Closure worker rank [0-9]+ data plane: UCX" \
@@ -528,7 +528,7 @@ run_split_ucx_onnx_probe()
     sed -n '1,120p' "$client_proxy_log"
     sed -n '1,140p' "$host_log"
     sed -n '1,180p' "$client_log"
-    echo "[FoamNord] Central $central_ranks-rank OpenFOAM ONNX ClosureHost over UCX: PASS"
+    echo "[FoamNordic] Central $central_ranks-rank OpenFOAM ONNX ClosureHost over UCX: PASS"
 }
 
 export FOAMNORDIC_SOURCE="$repository"
@@ -541,9 +541,9 @@ export DYLD_LIBRARY_PATH="$ort_root/lib:$work_dir/lib:${DYLD_LIBRARY_PATH:-}"
 
 mkdir -p "$FOAM_USER_LIBBIN" "$FOAM_USER_APPBIN"
 
-echo "[FoamNord] OpenFOAM: $WM_PROJECT_VERSION"
-echo "[FoamNord] ONNX Runtime: $(<"$ort_root/VERSION_NUMBER")"
-echo "[FoamNord] Work directory: $work_dir"
+echo "[FoamNordic] OpenFOAM: $WM_PROJECT_VERSION"
+echo "[FoamNordic] ONNX Runtime: $(<"$ort_root/VERSION_NUMBER")"
+echo "[FoamNordic] Work directory: $work_dir"
 
 cmake_options=(
     -S "$repository" \
@@ -578,9 +578,9 @@ if [[ -n "$resume_work_dir" ]]; then
         || fail "resume work directory lacks the OpenFOAM probe"
     [[ -f "$model_dir/identity-U.fnom" && -d "$case_dir/system" ]] \
         || fail "resume work directory lacks its model or OpenFOAM case"
-    echo "[FoamNord] Resuming the central UCX gate from existing artifacts"
+    echo "[FoamNordic] Resuming the central UCX gate from existing artifacts"
     run_split_ucx_onnx_probe
-    echo "[FoamNord] Native OpenFOAM ONNX closure hook: PASS"
+    echo "[FoamNordic] Native OpenFOAM ONNX closure hook: PASS"
     exit 0
 fi
 cmake "${cmake_options[@]}"
@@ -610,19 +610,19 @@ foamDictionary \
     -entry startFrom \
     -set latestTime
 
-echo "[FoamNord] Verifying derived OpenFOAM closure input"
+echo "[FoamNordic] Verifying derived OpenFOAM closure input"
 configure_probe p "laplacian(p)" p 1.0 0.0 false
 run_echo_probe p 1.0 "$work_dir/derived.log"
 
-echo "[FoamNord] Verifying non-identity native field replacement"
+echo "[FoamNordic] Verifying non-identity native field replacement"
 configure_probe U U U 1.005 0.25 false
 run_echo_probe U 1.005 "$work_dir/scaled.log"
 
-echo "[FoamNord] Verifying atomic worker rejection"
+echo "[FoamNordic] Verifying atomic worker rejection"
 configure_probe U U U 1.0 0.25 true
 run_rejection_probe "$work_dir/rejected.log"
 
-echo "[FoamNord] Verifying native ONNX inference"
+echo "[FoamNordic] Verifying native ONNX inference"
 configure_probe U U U 1.0 0.25 false
 "$build_dir/tools/openfoam/foamnordic_openfoam_onnx_fixture" "$model_dir"
 "$build_dir/tools/resident/foamnordic_closure_worker" \
@@ -658,7 +658,7 @@ adapter_library=$(
 [[ -n "$adapter_library" ]] \
     || fail "OpenFOAM adapter library was not produced"
 
-echo "[FoamNord] SHA-256"
+echo "[FoamNordic] SHA-256"
 shasum -a 256 \
     "$adapter_library" \
     "$FOAM_USER_APPBIN/foamnordicOpenFOAMClosureHookProbe" \
@@ -666,4 +666,4 @@ shasum -a 256 \
     "$model_dir/identity-U.onnx" \
     "$model_dir/identity-U.fnom"
 
-echo "[FoamNord] Native OpenFOAM ONNX closure hook: PASS"
+echo "[FoamNordic] Native OpenFOAM ONNX closure hook: PASS"

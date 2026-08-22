@@ -12,6 +12,9 @@
 #include "foamnordic/backend/adapter/observation.hpp"
 
 #include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -183,6 +186,98 @@ std::size_t ObservationBuffer::buffered_bytes() const {
 
 std::uint64_t ObservationBuffer::dropped_records() const {
     return dropped_.load(std::memory_order_relaxed);
+}
+
+ObservationJsonlWriter::ObservationJsonlWriter(
+    std::filesystem::path path,
+    ObservationRetention retention)
+    : path_(std::move(path)), buffer_(retention) {
+    if (path_.empty()) {
+        throw std::invalid_argument(
+            "FoamNordic observation JSONL path must not be empty.");
+    }
+    worker_ = std::thread([this] { run(); });
+}
+
+ObservationJsonlWriter::~ObservationJsonlWriter() { stop(); }
+
+bool ObservationJsonlWriter::try_publish(ObservationRecord record) {
+    if (stopped_.load(std::memory_order_acquire)
+        || !healthy_.load(std::memory_order_acquire)) {
+        return false;
+    }
+    return buffer_.try_publish(std::move(record));
+}
+
+void ObservationJsonlWriter::stop() noexcept {
+    if (stopped_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    buffer_.close();
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+}
+
+bool ObservationJsonlWriter::healthy() const noexcept {
+    return healthy_.load(std::memory_order_acquire);
+}
+
+std::string ObservationJsonlWriter::failure() const {
+    std::scoped_lock lock(failure_mutex_);
+    return failure_;
+}
+
+std::uint64_t ObservationJsonlWriter::dropped_records() const {
+    return buffer_.dropped_records();
+}
+
+void ObservationJsonlWriter::run() noexcept {
+    try {
+        if (!path_.parent_path().empty()) {
+            std::filesystem::create_directories(path_.parent_path());
+        }
+        std::ofstream stream(path_, std::ios::out | std::ios::trunc);
+        if (!stream) {
+            throw std::runtime_error(
+                "Cannot open FoamNordic observation JSONL output: "
+                + path_.string());
+        }
+        stream << std::setprecision(17);
+        while (auto record = buffer_.wait_pop_oldest()) {
+            stream << "{\"exchange_index\":" << record->exchange_index
+                   << ",\"time\":" << record->physical_time
+                   << ",\"summary\":{";
+            bool first = true;
+            for (const auto& field : record->fields) {
+                if (!first) {
+                    stream << ',';
+                }
+                first = false;
+                stream << '\"' << field.field << "\":{\"minimum\":"
+                       << field.values.minimum << ",\"maximum\":"
+                       << field.values.maximum << ",\"mean\":"
+                       << field.values.mean << ",\"l2\":"
+                       << field.values.l2 << ",\"count\":"
+                       << field.values.count << '}';
+            }
+            stream << "},\"timing\":{\"closure_wait\":"
+                   << record->closure_wait << ",\"evaluate\":"
+                   << record->evaluate << "}}\n";
+            stream.flush();
+            if (!stream) {
+                throw std::runtime_error(
+                    "Cannot write FoamNordic observation JSONL output: "
+                    + path_.string());
+            }
+        }
+    } catch (const std::exception& error) {
+        {
+            std::scoped_lock lock(failure_mutex_);
+            failure_ = error.what();
+        }
+        healthy_.store(false, std::memory_order_release);
+    }
 }
 
 }  // namespace foamnordic::adapter

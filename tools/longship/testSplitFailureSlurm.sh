@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 fail()
 {
-    echo "[FoamNord] Split Longship failure test failed: $*" >&2
+    echo "[FoamNordic] Split Longship failure test failed: $*" >&2
     exit 1
 }
 
@@ -125,8 +125,8 @@ run_client_failure_gate()
     grep -q "Solver exited with a failure status" "$prefix-longship.log" \
         || fail "Longship did not attribute the client failure"
 
-    echo "[FoamNord] Client failure job: $job ($state)"
-    echo "[FoamNord] Client failure terminated ClosureHost: PASS"
+    echo "[FoamNordic] Client failure job: $job ($state)"
+    echo "[FoamNordic] Client failure terminated ClosureHost: PASS"
 }
 
 run_host_failure_gate()
@@ -180,12 +180,12 @@ run_host_failure_gate()
         "$prefix-longship.log" \
         || fail "Longship did not attribute the host failure"
 
-    echo "[FoamNord] Host failure client job: $job ($state)"
-    echo "[FoamNord] Host failure cancelled Slurm client: PASS"
+    echo "[FoamNordic] Host failure client job: $job ($state)"
+    echo "[FoamNordic] Host failure cancelled Slurm client: PASS"
 }
 
-echo "[FoamNord] Split Longship failure work directory: $work_dir"
+echo "[FoamNordic] Split Longship failure work directory: $work_dir"
 run_client_failure_gate
 run_host_failure_gate
 client_jobs=()
-echo "[FoamNord] Split-allocation Longship fail-together lifecycle: PASS"
+echo "[FoamNordic] Split-allocation Longship fail-together lifecycle: PASS"

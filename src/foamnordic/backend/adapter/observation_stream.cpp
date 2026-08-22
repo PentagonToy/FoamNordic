@@ -27,9 +27,9 @@ namespace {
 
 constexpr std::array<std::byte, 4> mark{
     std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'}};
-constexpr std::uint16_t version = 1;
-constexpr std::size_t header_size = 32;
-constexpr std::size_t field_size = 40;
+constexpr std::uint16_t version = 2;
+constexpr std::size_t header_size = 48;
+constexpr std::size_t field_size = 48;
 constexpr std::uint64_t maximum_frame = 16U * 1024U * 1024U;
 
 template <class Integer>
@@ -77,6 +77,10 @@ template <class Integer>
     write_integer<std::uint64_t>(frame, 16, record.exchange_index);
     write_integer<std::uint64_t>(
         frame, 24, std::bit_cast<std::uint64_t>(record.physical_time));
+    write_integer<std::uint64_t>(
+        frame, 32, std::bit_cast<std::uint64_t>(record.closure_wait));
+    write_integer<std::uint64_t>(
+        frame, 40, std::bit_cast<std::uint64_t>(record.evaluate));
     std::size_t offset = header_size;
     for (const auto& field : record.fields) {
         write_integer<std::uint32_t>(
@@ -88,6 +92,8 @@ template <class Integer>
         write_integer<std::uint64_t>(
             frame, offset + 24, std::bit_cast<std::uint64_t>(field.values.mean));
         write_integer<std::uint64_t>(frame, offset + 32, field.values.count);
+        write_integer<std::uint64_t>(
+            frame, offset + 40, std::bit_cast<std::uint64_t>(field.values.l2));
         offset += field_size;
         const auto name = std::as_bytes(std::span(field.field));
         std::copy(name.begin(), name.end(), frame.begin() + offset);
@@ -107,6 +113,10 @@ template <class Integer>
     record.exchange_index = read_integer<std::uint64_t>(frame, 16);
     record.physical_time = std::bit_cast<double>(
         read_integer<std::uint64_t>(frame, 24));
+    record.closure_wait = std::bit_cast<double>(
+        read_integer<std::uint64_t>(frame, 32));
+    record.evaluate = std::bit_cast<double>(
+        read_integer<std::uint64_t>(frame, 40));
     record.fields.reserve(count);
     std::size_t offset = header_size;
     for (std::uint32_t index = 0; index < count; ++index) {
@@ -119,6 +129,7 @@ template <class Integer>
             std::bit_cast<double>(read_integer<std::uint64_t>(frame, offset + 16)),
             std::bit_cast<double>(read_integer<std::uint64_t>(frame, offset + 24)),
             read_integer<std::uint64_t>(frame, offset + 32),
+            std::bit_cast<double>(read_integer<std::uint64_t>(frame, offset + 40)),
         };
         offset += field_size;
         if (name_size == 0 || name_size > frame.size() - offset) {

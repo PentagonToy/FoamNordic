@@ -50,14 +50,40 @@ void LongshipRequest::validate() const {
         throw std::invalid_argument(
             "Longship solver tasks must divide evenly across solver nodes.");
     }
-    if (solver_cpus_per_task == 0 || host_cpus_per_node == 0) {
-        throw std::invalid_argument(
-            "Longship CPU requests must be positive.");
+    if (solver_cpus_per_task == 0
+        || (use_closure_host && host_cpus_per_node == 0)) {
+        throw std::invalid_argument("Longship CPU requests must be positive.");
     }
 }
 
 LongshipPlan plan_longship(const LongshipRequest& request) {
     request.validate();
+    const auto tasks_per_node = request.solver_tasks / request.solver_nodes;
+    const auto solver_cpus_per_node = checked_multiply(
+        tasks_per_node, request.solver_cpus_per_task);
+    if (!request.use_closure_host) {
+        return {
+            request.name,
+            {
+                HostPlacement::attached,
+                DataPath::unix_socket,
+                0,
+                true,
+                true,
+                false,
+                "solver-only OpenFOAM workload",
+            },
+            request.solver_nodes,
+            request.solver_tasks,
+            tasks_per_node,
+            request.solver_cpus_per_task,
+            0,
+            0,
+            solver_cpus_per_node,
+            false,
+            false,
+        };
+    }
     auto placement_request = request.placement;
     placement_request.solver_nodes = request.solver_nodes;
     const auto placement = resolve_placement(placement_request);
@@ -71,9 +97,6 @@ LongshipPlan plan_longship(const LongshipRequest& request) {
             "Attached ClosureHost placement violated the Longship contract.");
     }
 
-    const auto tasks_per_node = request.solver_tasks / request.solver_nodes;
-    const auto solver_cpus_per_node = checked_multiply(
-        tasks_per_node, request.solver_cpus_per_task);
     const auto allocation_cpus_per_node = checked_add(
         solver_cpus_per_node, request.host_cpus_per_node);
 

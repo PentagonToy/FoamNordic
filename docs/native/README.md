@@ -5,7 +5,7 @@ These documents describe code implemented in the current repository.
 | Guide | Contents |
 | --- | --- |
 | [Data plane](data-plane.md) | Rune messages, Fjord channels, Harbor sessions, UDS, SHM, TCP, and optional UCX |
-| [HPC transport status](hpc-transport-status.md) | Implemented data planes, Roihu validation evidence, UCX environment, and a portable site checklist |
+| [HPC transport status](hpc-transport-status.md) | Implemented data planes, example site validation evidence, UCX environment, and a portable site checklist |
 | [Closure engine](closure-engine.md) | Blocking exchanges, native bypass, resident execution, and failure semantics |
 | [Model artifacts](model-artifacts.md) | Manifests, scalers, Equinox and Joblib boundaries, and ONNX Runtime |
 | [Field pipeline](field-pipeline.md) | Zero-copy field views, native transforms, observations, and ownership |

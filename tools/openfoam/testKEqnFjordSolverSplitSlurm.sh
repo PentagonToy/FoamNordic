@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 fail()
 {
-    echo "[FoamNord] kEqnFjord solver test failed: $*" >&2
+    echo "[FoamNordic] kEqnFjord solver test failed: $*" >&2
     exit 1
 }
 
@@ -60,7 +60,7 @@ if [[ ! -f "$case_dir/0/k" ]]; then
     [[ -f "$k_template" ]] \
         || fail "the source case lacks 0/k and its fallback template is unavailable"
     cp "$k_template" "$case_dir/0/k"
-    echo "[FoamNord] Seeded the compact cavity k field from: $k_template"
+    echo "[FoamNordic] Seeded the compact cavity k field from: $k_template"
 fi
 
 set_entry()
@@ -91,7 +91,7 @@ schemes="$case_dir/system/fvSchemes"
 solution="$case_dir/system/fvSolution"
 set_entry "$schemes" 'divSchemes/div(phi,k)' 'Gauss upwind'
 
-echo "[FoamNord] k equation numerics"
+echo "[FoamNordic] k equation numerics"
 foamDictionary "$schemes" -entry 'divSchemes/div(phi,k)'
 # Resolve k read-only: the compact case's regex solver also covers kFinal.
 # Writing a literal k through foamDictionary would match and mutate that regex.
@@ -144,12 +144,12 @@ client_log="$work_dir/client-%j.log"
 job_file="$work_dir/client.job"
 longship_log="$work_dir/longship.log"
 
-echo "[FoamNord] kEqnFjord solver work directory: $work_dir"
-echo "[FoamNord] ClosureHost allocation: $SLURM_JOB_ID ($server_node)"
-echo "[FoamNord] OpenFOAM ranks: $ranks"
-echo "[FoamNord] End time: $end_time"
-echo "[FoamNord] Control address: $address"
-echo "[FoamNord] UCX interface address: $ucx_host"
+echo "[FoamNordic] kEqnFjord solver work directory: $work_dir"
+echo "[FoamNordic] ClosureHost allocation: $SLURM_JOB_ID ($server_node)"
+echo "[FoamNordic] OpenFOAM ranks: $ranks"
+echo "[FoamNordic] End time: $end_time"
+echo "[FoamNordic] Control address: $address"
+echo "[FoamNordic] UCX interface address: $ucx_host"
 
 set +e
 "$longship" \
@@ -222,4 +222,4 @@ sed -n '1,100p' "$longship_log"
 sed -n '1,100p' "$proxy_log"
 sed -n '1,180p' "$host_log"
 sed -n '1,280p' "$client_log"
-echo "[FoamNord] $ranks-rank pimpleFoam kEqnFjord ONNX over central UCX: PASS"
+echo "[FoamNordic] $ranks-rank pimpleFoam kEqnFjord ONNX over central UCX: PASS"

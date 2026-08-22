@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "foamnordic/runtime/longship.hpp"
@@ -59,6 +60,21 @@ void test_multi_node_longship() {
     require(plan.host_tasks == 4, "Longship requires one host per node.");
     require(plan.solver_tasks_per_node == 16, "Ranks were distributed incorrectly.");
     require(plan.allocation_cpus_per_node == 35, "Per-node CPUs are incorrect.");
+}
+
+void test_solver_only_longship() {
+    foamnordic::native::LongshipRequest request;
+    request.solver_tasks = 8;
+    request.solver_cpus_per_task = 2;
+    request.use_closure_host = false;
+    request.host_cpus_per_node = 0;
+    const auto plan = foamnordic::native::plan_longship(request);
+
+    require(plan.host_tasks == 0, "Solver-only plan allocated a ClosureHost.");
+    require(plan.host_cpus_per_task == 0, "Solver-only plan reserved host CPUs.");
+    require(plan.allocation_cpus_per_node == 16, "Solver-only CPUs are incorrect.");
+    require(!plan.host_starts_first, "Solver-only plan has a host startup phase.");
+    require(!plan.fail_together, "Solver-only plan claims coupled components.");
 }
 
 void test_uneven_solver_layout_is_rejected() {
@@ -259,11 +275,36 @@ void test_supervisor_times_out_before_solver_start() {
     require(timed_out, "Longship accepted an unready ClosureHost.");
 }
 
+void test_supervisor_cancels_components_together() {
+    const auto ready = readiness_path("cancel");
+    foamnordic::native::LongshipStop stop;
+    std::thread cancellation([&stop] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        stop.request_stop();
+    });
+    const auto result = foamnordic::native::sail_longship(
+        {
+            shell_command("touch " + ready.string() + "; exec sleep 30"),
+            shell_command("exec sleep 30"),
+            {ready},
+            std::chrono::seconds(2),
+            std::chrono::milliseconds(100),
+        },
+        &stop);
+    cancellation.join();
+    require(result.cancelled, "Longship did not report external cancellation.");
+    require(!result.success(), "Cancelled Longship reported success.");
+    require(
+        !std::filesystem::exists(ready),
+        "Cancelled Longship left its readiness marker.");
+}
+
 }  // namespace
 
 int main() {
     test_single_node_longship();
     test_multi_node_longship();
+    test_solver_only_longship();
     test_uneven_solver_layout_is_rejected();
     test_central_host_is_not_silently_attached();
     test_longship_cli_preserves_component_arguments();
@@ -275,4 +316,5 @@ int main() {
     test_supervisor_accepts_protocol_host_shutdown_before_solver_exit();
     test_supervisor_rejects_early_clean_host_exit();
     test_supervisor_times_out_before_solver_start();
+    test_supervisor_cancels_components_together();
 }

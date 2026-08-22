@@ -31,6 +31,7 @@ class ClosureObservation final {
     wordList fields_;
     foamnordic::adapter::CompiledObservationPlan plan_;
     std::unique_ptr<foamnordic::adapter::ObservationPublisher> publisher_;
+    std::unique_ptr<foamnordic::adapter::ObservationJsonlWriter> writer_;
     bool enabled_{true};
 
     explicit ClosureObservation(const dictionary& dict);
@@ -45,7 +46,8 @@ public:
     void publish(
         const fvMesh& mesh,
         const Time& time,
-        std::uint64_t exchangeIndex) noexcept;
+        std::uint64_t exchangeIndex,
+        double closureWait) noexcept;
     void shutdown() noexcept;
 };
 

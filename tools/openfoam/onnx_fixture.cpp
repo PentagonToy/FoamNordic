@@ -245,12 +245,12 @@ void write_fixture(const std::filesystem::path& directory) {
             std::nullopt,
         });
     verify_k_eqn_fixture(k_eqn_manifest_path);
-    std::cout << "[FoamNord] ONNX fixture: " << model_path << '\n'
-              << "[FoamNord] Manifest: " << manifest_path << '\n'
-              << "[FoamNord] nutFjord fixture: " << nut_model_path << '\n'
-              << "[FoamNord] nutFjord manifest: " << nut_manifest_path << '\n'
-              << "[FoamNord] kEqnFjord fixture: " << k_eqn_model_path << '\n'
-              << "[FoamNord] kEqnFjord manifest: " << k_eqn_manifest_path << '\n';
+    std::cout << "[FoamNordic] ONNX fixture: " << model_path << '\n'
+              << "[FoamNordic] Manifest: " << manifest_path << '\n'
+              << "[FoamNordic] nutFjord fixture: " << nut_model_path << '\n'
+              << "[FoamNordic] nutFjord manifest: " << nut_manifest_path << '\n'
+              << "[FoamNordic] kEqnFjord fixture: " << k_eqn_model_path << '\n'
+              << "[FoamNordic] kEqnFjord manifest: " << k_eqn_manifest_path << '\n';
 }
 
 }  // namespace
@@ -264,7 +264,7 @@ int main(int argc, char** argv) {
         write_fixture(argv[1]);
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "[FoamNord] Fixture creation failed: " << error.what()
+        std::cerr << "[FoamNordic] Fixture creation failed: " << error.what()
                   << '\n';
         return 1;
     }

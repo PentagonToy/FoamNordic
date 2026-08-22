@@ -27,6 +27,8 @@ struct LongshipCliRequest {
 [[nodiscard]] LongshipCliRequest parse_longship_arguments(
     std::span<const std::string_view> arguments);
 [[nodiscard]] std::string longship_usage();
-[[nodiscard]] int run_longship(const LongshipCliRequest& request);
+[[nodiscard]] int run_longship(
+    const LongshipCliRequest& request,
+    const LongshipStop* stop = nullptr);
 
 }  // namespace foamnordic::native

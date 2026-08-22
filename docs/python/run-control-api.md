@@ -1,9 +1,9 @@
 # Provisional run-control API
 
-This document sketches the intended Python experience for a FoamNordic LES
-experiment. It is a design target, not an API that the current repository
-already ships. Native contracts remain authoritative until bindings and API
-tests exist.
+This document describes the Python direction for a FoamNordic LES experiment.
+The compile, isolated case preparation, launch, wait, cancel, and result
+contracts now ship; observation streaming and richer preparation options below
+remain staged design targets.
 
 ## Design character
 
@@ -36,8 +36,8 @@ from pathlib import Path
 import foamnordic as fno
 import jax.numpy as jnp
 
-project = Path("/scratch/project_2015384/Hanseul")
-model_dir = project / "Codes/FoamNordic/foamnordic_tutorials/incompressible/model"
+project = Path("/scratch/<allocation-account>/<user>")
+model_dir = project / "FoamNordic/tutorials/incompressible/model"
 model_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -51,8 +51,8 @@ def keqn(k, velocity_grad, filter_width, *, C_k=0.094, C_e=1.048):
     return eddy_viscosity, production, dissipation
 
 
-artifact = fno.export.onnx(
-    keqn,
+artifact = fno.Export.onnx(
+    exported_onnx,
     path=model_dir / "kEqnFjord.fnom",
     inputs={
         "k": fno.Tensor.scalar(dtype="float64"),
@@ -64,15 +64,21 @@ artifact = fno.export.onnx(
         "k_production": fno.Tensor.scalar(dtype="float64"),
         "k_dissipation_coeff": fno.Tensor.scalar(dtype="float64"),
     },
-    constants={"C_k": 0.094, "C_e": 1.048},
-    opset=26,
-    ir_version=13,
+    name="kEqnFjord",
+    verbose=False,
 )
 ```
 
-The exporter must validate the requested ONNX opset and IR version against the
-configured ONNX Runtime. The run-control notebook consumes only
-`kEqnFjord.fnom`; it does not import JAX or reconstruct the training model.
+The current exporter accepts ONNX bytes, an ONNX path, or an object exposing
+`SerializeToString()`. Callable JAX-to-ONNX lowering remains an exporter
+backend rather than being guessed inside the native packaging step. Every
+export function is quiet by default; `verbose=True` displays an Onsaemiro
+artifact summary.
+
+The lowering backend must validate its ONNX opset and IR version against the
+configured ONNX Runtime. The run-control notebook points to
+`kEqnFjord.fnom`; ClosureHost resolves its sibling ONNX payload without
+importing JAX or reconstructing the training model.
 
 ## Case and closure declaration
 
@@ -83,17 +89,13 @@ that workspace.
 ```python
 import foamnordic as fno
 
-case = fno.openfoam.Case(
-    source=project / "Codes/FoamNordic/openfoam_tutorials/les/NACA4412",
-    workspace=project / "Codes/FoamNordic/foamnordic_tutorials/incompressible/output/NACA4412",
-    toolchain=fno.openfoam.Toolchain(module="openfoam/2512"),
-)
-
-case.prepare(
-    reset="generated",
-    mesh="auto",
-    check_mesh=True,
-    decompose=16,
+case = fno.OpenFOAM.Case(
+    name="NACA4412",
+    case_dir=project / "FoamNordic/openfoam_tutorials/les/NACA4412",
+    run_dir=project / "FoamNordic/tutorials/incompressible/output/NACA4412",
+    of_cmd="openfoam/2512",
+    shell="bash",
+    ranks=16,
 )
 
 closure = fno.Closure(
@@ -165,48 +167,108 @@ longship = fno.Longship(
     observations=(observations,),
     placement=fno.Attached(closure_cpus_per_node=1),
     scheduler=fno.Slurm(
-        account="project_2015384",
+        account="<allocation-account>",
         partition="small",
         time="00:15:00",
         nodes=1,
-        solver_tasks=16,
-        solver_tasks_per_node=16,
-        solver_cpus_per_task=1,
-        solver_memory="16 GiB",
+        ntasks=16,
+        cpus_per_task=1,
+        mem_per_cpu="1G",
     ),
 )
 
 run = longship.launch()
 ```
 
-`longship.compile()` is also available conceptually for validation and Slurm
-script inspection without submission. Compilation writes a stable plan digest,
-the rank-to-host map, model artifact identities, resource arithmetic, and
-observation limits. `launch()` submits that compiled order and returns a small
-lifecycle handle.
+For a scheduled run, `launch()` waits until Slurm reports `RUNNING` and then
+returns the background handle with its Job ID. The default wait is unbounded;
+`launch(start_timeout=900)` returns a still-pending handle after 900 seconds
+without cancelling the queued job. `verbose=False` suppresses the two launch
+messages but keeps the same start barrier.
+
+`Slurm` deliberately follows the names printed in an `#SBATCH` header:
+`nodes`, `ntasks`, `cpus_per_task`, and `mem_per_cpu`. FoamNordic derives the
+per-node task count from `ntasks / nodes`; users do not declare the same layout
+twice. When a native ClosureHost is attached, its sidecar task is added only to
+the compiled allocation and does not change the declared OpenFOAM `ntasks`.
+Submission uses a private environment copy with inherited `SLURM_*`,
+`SBATCH_*`, and `SRUN_*` values removed. This prevents a Jupyter or parent batch
+allocation from leaking incompatible resource variables into the new job and
+does not mutate the notebook's `os.environ`.
+
+For a fair solver baseline, omit closures. The native plan then reserves no
+ClosureHost CPU and the launch path leaves the source case's turbulence or
+combustion dictionary unchanged:
+
+```python
+baseline = fno.Longship(
+    case=case,
+    scheduler=longship.scheduler,
+)
+baseline_run = baseline.launch()
+```
+
+To run on the current machine instead of submitting a new Slurm job, omit the
+scheduler entirely:
+
+```python
+local_run = fno.Longship(case=case).launch()
+```
+
+This is also the current-allocation path when the Python driver itself was
+started inside a Slurm job. Supplying `scheduler=...` always requests a new,
+independent allocation.
+
+Ordinary callers do not need to invoke `compile()`; `launch()` performs it
+internally and returns a small non-blocking lifecycle handle after the start
+barrier.
+`longship.compile()` remains an advanced inspection API for validation without
+submission. Its immutable plan contains the stable digest, rank-to-host map,
+model artifact identities, resource arithmetic, and observation limits.
 
 ## Read-only observation
 
 Observation declarations are part of the plan because node-local reductions
-and samples must be compiled before launch. Consuming the stream is optional.
-The solver continues if the notebook disconnects or plots slowly.
+and samples must be compiled before launch. Consuming the stream is optional,
+and slow plotting does not block the solver.
 
 ```python
-with run.observe() as stream:
-    for observation in stream:
-        if observation.exchange_index % 100 == 0:
-            table.add_row([
-                observation.exchange_index,
-                f"{observation.time:.4f}",
-                f"{observation.summary['nut'].minimum:.6e}",
-                f"{observation.summary['nut'].maximum:.6e}",
-                f"{observation.timing.closure_wait:.3f}",
-                f"{observation.timing.evaluate:.3f}",
-            ])
+for observation in run.observe():
+    if observation.exchange_index % 100 == 0:
+        table.add_row([
+            observation.exchange_index,
+            f"{observation.time:.4f}",
+            f"{observation.summary['nut'].minimum:.6e}",
+            f"{observation.summary['nut'].maximum:.6e}",
+            f"{observation.timing.closure_wait:.3f}",
+            f"{observation.timing.evaluate:.3f}",
+        ])
 
-result = run.wait()
-result.raise_for_status()
+result = run.stop(force=False)
+result.summary(style="compact")
 ```
+
+No context manager is required. Stopping local observation consumption does
+not stop the solver. `launch()` reports the background sailing and returns
+immediately. `stop(force=False)` waits for normal completion; without a timeout
+it waits indefinitely, while an expired timeout leaves the workload running.
+`stop(force=True)` immediately terminates the complete locally owned process
+group or issues Slurm `scancel KILL`, then returns the resulting cancelled
+state. There is no separate public `wait()` or `raise_for_status()` step.
+
+An orderly Python or Jupyter shutdown performs best-effort cleanup of owned
+workloads. `run.detach()` explicitly allows a job to outlive that kernel.
+Abrupt process death and node loss cannot guarantee cleanup.
+
+`result.summary(style="short")` and `"compact"` display Job ID, Name, Status,
+Partition, Node, and Elapsed through Onsaemiro. `"long"` and `"expanded"` also
+show exit code, work directory, all output paths, and plan digest. Final files
+under `logs/` include the scheduler identity, for example
+`Sailing_NACA4412_<jobid>.log` and `Sailing_NACA4412_<jobid>.out`; local runs
+use `local-<pid>`. Generated batch and submission scripts are grouped under
+`slurm/`. The hidden ownership manifest contains the compiled plan, while
+hidden `.foamnordic/` state retains preparation and submission diagnostics and
+the scheduler identity needed for cancellation.
 
 There is deliberately no `evaluate()`, `send()`, mutable field view, or client
 argument on an observation. Summary reductions occur beside the solver and
@@ -248,7 +310,7 @@ written OpenFOAM or VTK results after completion.
 
 | Historical concept | Provisional native API |
 | --- | --- |
-| `Environment.load()` | `openfoam.Toolchain(module=...)` compiled into launch |
+| `Environment.load()` | `OpenFOAM.Case(of_cmd=..., shell=...)` compiled into launch |
 | `Case.initialize(clean=True)` | isolated `Case.prepare(reset="generated")` |
 | `Operator.closure(...)` | exported artifact plus `Closure(...)` bindings |
 | `Bridge.couple(...)` | closure and observation declarations in the plan |

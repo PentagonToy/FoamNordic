@@ -1,11 +1,15 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <unistd.h>
 
 #include "foamnordic/backend/adapter/exchange.hpp"
 #include "foamnordic/backend/adapter/field.hpp"
@@ -63,6 +67,9 @@ void test_fused_component_transform_and_statistics() {
     require(summary.minimum == -5.0, "Native minimum is incorrect.");
     require(summary.maximum == 5.0, "Native maximum is incorrect.");
     require(std::abs(summary.mean - 0.5) < 1.0e-15, "Native mean is incorrect.");
+    require(
+        std::abs(summary.l2 - std::sqrt(89.0)) < 1.0e-15,
+        "Native L2 norm is incorrect.");
     require(summary.count == 6, "Native statistic count is incorrect.");
 }
 
@@ -177,6 +184,8 @@ void test_observation_stream_is_separate_from_closure_transport() {
                 {"U", {-2.0, 5.0, 1.5, 18}},
                 {"p", {-1.0, 2.0, 0.25, 6}},
             },
+            0.04,
+            0.006,
         }),
         "Observation publisher rejected a valid compact record.");
     const auto received = receiver.receive(std::chrono::seconds(1));
@@ -189,11 +198,46 @@ void test_observation_stream_is_separate_from_closure_transport() {
             && received->fields[0].values.minimum == -2.0
             && received->fields[0].values.maximum == 5.0
             && received->fields[0].values.mean == 1.5
-            && received->fields[0].values.count == 18,
+            && received->fields[0].values.count == 18
+            && received->closure_wait == 0.04
+            && received->evaluate == 0.006,
         "Observation stream changed native summary metadata.");
     publisher.stop();
     receiver.close();
     require(publisher.healthy(), "Healthy observation stream reported failure.");
+}
+
+void test_native_observation_jsonl_writer() {
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("foamnordic-observation-"
+                         + std::to_string(static_cast<long long>(::getpid()))
+                         + ".jsonl");
+    std::filesystem::remove(path);
+    foamnordic::adapter::ObservationJsonlWriter writer(path, {4, 4'096});
+    require(
+        writer.try_publish({
+            7,
+            0.125,
+            {{"nut", {-0.5, 2.0, 0.75, 16}}},
+            0.02,
+            0.003,
+        }),
+        "Native JSONL writer rejected a compact observation.");
+    writer.stop();
+    require(writer.healthy(), "Native JSONL writer reported failure.");
+    std::ifstream stream(path);
+    const std::string line(
+        (std::istreambuf_iterator<char>(stream)),
+        std::istreambuf_iterator<char>());
+    require(
+        line.find("\"exchange_index\":7") != std::string::npos
+            && line.find("\"nut\":{\"minimum\":-0.5")
+                   != std::string::npos
+            && line.find("\"count\":16") != std::string::npos
+            && line.find("\"l2\":") != std::string::npos
+            && line.find("\"closure_wait\":0.02") != std::string::npos,
+        "Native JSONL writer changed observation metadata.");
+    std::filesystem::remove(path);
 }
 
 void test_longship_aggregates_ordered_observation_sources() {
@@ -620,6 +664,7 @@ int main() {
     test_compiled_plan_executes_outside_python_loop();
     test_execution_and_observation_ownership_are_separate();
     test_observation_stream_is_separate_from_closure_transport();
+    test_native_observation_jsonl_writer();
     test_longship_aggregates_ordered_observation_sources();
     test_atomic_field_exchange_applies_only_committed_output();
     test_incomplete_output_never_modifies_field();

@@ -16,9 +16,11 @@
 #include <cstdint>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +45,8 @@ struct ObservationRecord {
     std::uint64_t exchange_index{0};
     double physical_time{0.0};
     std::vector<FieldObservation> fields;
+    double closure_wait{0.0};
+    double evaluate{0.0};
 
     [[nodiscard]] std::size_t byte_size() const noexcept;
 };
@@ -112,6 +116,34 @@ private:
     std::size_t bytes_{0};
     std::atomic<std::uint64_t> dropped_{0};
     bool closed_{false};
+};
+
+class ObservationJsonlWriter {
+public:
+    explicit ObservationJsonlWriter(
+        std::filesystem::path path,
+        ObservationRetention retention = {});
+    ~ObservationJsonlWriter();
+
+    ObservationJsonlWriter(const ObservationJsonlWriter&) = delete;
+    ObservationJsonlWriter& operator=(const ObservationJsonlWriter&) = delete;
+
+    [[nodiscard]] bool try_publish(ObservationRecord record);
+    void stop() noexcept;
+    [[nodiscard]] bool healthy() const noexcept;
+    [[nodiscard]] std::string failure() const;
+    [[nodiscard]] std::uint64_t dropped_records() const;
+
+private:
+    void run() noexcept;
+
+    std::filesystem::path path_;
+    ObservationBuffer buffer_;
+    std::thread worker_;
+    std::atomic<bool> healthy_{true};
+    std::atomic<bool> stopped_{false};
+    mutable std::mutex failure_mutex_;
+    std::string failure_;
 };
 
 }  // namespace foamnordic::adapter
