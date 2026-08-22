@@ -1,0 +1,9 @@
+#error "FoamNordic combustion scaffold: supply the solver's progress-variable equation"
+
+// The solver owns this equation and its relaxation, constraints, and solve.
+// @REACTION_RATE_FIELD@ must already contain the source selected by the
+// declared lag policy. Do not invoke Python or transport code from this file.
+
+@ASSEMBLE_PROGRESS_VARIABLE_EQUATION_WITH_REACTION_RATE_SOURCE@
+@RELAX_CONSTRAIN_AND_SOLVE_PROGRESS_VARIABLE_EQUATION@
+@BOUND_PROGRESS_VARIABLE_USING_THE_DECLARED_POLICY@

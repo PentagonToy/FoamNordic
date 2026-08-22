@@ -2,9 +2,9 @@
 
 __version__ = "1.0.3.dev6"
 
-from . import export, math, models, openfoam, postprocess, random, runtime
+from . import combustion, export, math, models, openfoam, postprocess, random, runtime
 from .export import Tensor
-from .core.expressions import FieldExpression, field, filter_width, grad
+from .core.expressions import FieldExpression, FieldSelection, field, fields, filter_width, grad
 from .core.plan import CompiledPlan
 from .execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
 from .execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
@@ -21,6 +21,7 @@ from .math import Math
 from .random import Random
 
 OpenFOAM = openfoam
+Combustion = combustion
 Export = export
 Models = models
 Runtime = runtime
@@ -29,8 +30,10 @@ Postprocess = postprocess
 __all__ = [
     "Attached",
     "Closure",
+    "Combustion",
     "CompiledPlan",
     "FieldExpression",
+    "FieldSelection",
     "FieldSummary",
     "Longship",
     "Math",
@@ -56,9 +59,11 @@ __all__ = [
     "__version__",
     "export",
     "field",
+    "fields",
     "filter_width",
     "grad",
     "models",
+    "combustion",
     "openfoam",
     "postprocess",
     "random",

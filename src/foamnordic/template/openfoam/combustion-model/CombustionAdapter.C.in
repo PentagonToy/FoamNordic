@@ -1,0 +1,42 @@
+#error "FoamNordic combustion scaffold: define field ownership and correction order"
+
+#include "@COMBUSTION_CLASS@.H"
+
+namespace Foam::@COMBUSTION_NAMESPACE@ {
+
+@DEFINE_CONSTRUCTOR_AND_BIND_FIELDS@
+
+template<class ThermoType>
+void @COMBUSTION_CLASS@<ThermoType>::validateContract() const
+{
+    @VALIDATE_FIELD_CLASSES_COMPONENTS_DIMENSIONS_AND_CELL_COUNTS@
+}
+
+template<class ThermoType>
+void @COMBUSTION_CLASS@<ThermoType>::updateReactionRate()
+{
+    @BIND_PROGRESS_VARIANCE_TEMPERATURE_AND_OPTIONAL_INPUTS@
+    @INVOKE_REACTION_RATE_CLOSURE_ONCE@
+    @VALIDATE_FINITE_REACTION_RATE_AND_APPLY_BOUNDS_POLICY@
+    @CORRECT_REACTION_RATE_BOUNDARIES@
+}
+
+template<class ThermoType>
+void @COMBUSTION_CLASS@<ThermoType>::updateManifold()
+{
+    @LOOK_UP_PREINTEGRATED_BETA_FDF_TABLE@
+    @SCATTER_SPECIES_AND_THERMOCHEMICAL_OUTPUTS@
+    @CORRECT_SPECIES_AND_THERMOCHEMICAL_BOUNDARIES@
+    @CORRECT_THERMODYNAMICS_ONCE@
+}
+
+template<class ThermoType>
+void @COMBUSTION_CLASS@<ThermoType>::correct()
+{
+    updateReactionRate();
+    updateManifold();
+}
+
+@DEFINE_REQUIRED_OPENFOAM_OVERRIDES@
+
+}  // namespace Foam::@COMBUSTION_NAMESPACE@

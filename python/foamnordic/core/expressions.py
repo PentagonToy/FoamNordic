@@ -20,6 +20,7 @@ _ARITIES = {
     "dev": frozenset({1}),
 }
 _FIELD_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:]*$")
+_FIELD_PATTERN = re.compile(r"^[A-Za-z_*][A-Za-z0-9_.*:]*$")
 
 
 def _field_name(value: str) -> str:
@@ -125,10 +126,43 @@ class FieldExpression:
         return value
 
 
+@dataclass(frozen=True, slots=True)
+class FieldSelection:
+    """Select a family of stored OpenFOAM fields by name pattern.
+
+    A selection is metadata, not a finite-volume expression. It is intended
+    for structured outputs such as a flamelet manifold's species family.
+    Expansion occurs against the solver's object registry before launch; a
+    wildcard that matches no fields is an error at that boundary.
+    """
+
+    pattern: str
+
+    def __post_init__(self) -> None:
+        pattern = require_nonempty(self.pattern, "field pattern")
+        if _FIELD_PATTERN.fullmatch(pattern) is None:
+            raise ValueError(
+                "field pattern must contain only OpenFOAM word characters "
+                "and '*' wildcards"
+            )
+        if "*" not in pattern:
+            raise ValueError("fields() requires at least one '*' wildcard")
+        object.__setattr__(self, "pattern", pattern)
+
+    def to_plan(self) -> dict[str, object]:
+        return {"selection": "fields", "pattern": self.pattern}
+
+
 def field(name: str) -> FieldExpression:
     """Bind a logical tensor to an OpenFOAM field."""
 
     return FieldExpression("field", name)
+
+
+def fields(pattern: str) -> FieldSelection:
+    """Select multiple stored OpenFOAM fields using one name wildcard."""
+
+    return FieldSelection(pattern)
 
 
 def _argument(value: str | FieldExpression) -> FieldExpression:

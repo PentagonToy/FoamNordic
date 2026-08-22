@@ -25,6 +25,10 @@ install(
     DESTINATION foamnordic/templates/openfoam
     COMPONENT Python)
 install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/combustion-model
+    DESTINATION foamnordic/templates/openfoam
+    COMPONENT Python)
+install(
     FILES ${PROJECT_SOURCE_DIR}/src/foamnordic/template/large_banner.txt
     DESTINATION foamnordic/templates
     COMPONENT Python)
