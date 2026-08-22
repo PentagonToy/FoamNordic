@@ -183,18 +183,25 @@ combustion model's correction site and validates its solver-owned field and
 dimensions. A generic `Transform` remains appropriate for deliberate field
 modification, while this adapter establishes the source-evaluation boundary.
 
+The boundary was then extended with `progressVariableFjord`: two resident FNOM
+programs are lowered from the public combustion declaration, `Y_*` output
+families are expanded before launch, and the native coordinator executes
+reaction rate, manifold, and one thermodynamic correction in that order. The
+model compiles and registers for both `psiReactionThermo` and
+`rhoReactionThermo` with OpenFOAM.com v2606.
+
 The remaining complete-combustion integration needs:
 
 - explicit mapping of the dimensioned source into the transported
   progress-variable equation and any energy coupling;
-- native beta-FDF table lookup and atomic species/thermochemical updates;
+- a solver-integrated beta-FDF artifact fixture and atomic field trajectory;
 - boundary, conservation, realizability, and failure-policy rules owned by
   OpenFOAM; and
 - a solver-integrated analytical/table reference case, not only an identity
   field exchange.
 
-The shared Fjord, resident, artifact, scaling, observation, lifecycle, and
-reaction-rate entry layers are now present. Solver equations, manifold lookup,
+The shared Fjord, resident, artifact, scaling, observation, lifecycle,
+reaction-rate, and manifold-dispatch layers are now present. Solver equations
 and their physical acceptance trajectory remain.
 
 ## Known local limitation

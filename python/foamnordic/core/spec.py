@@ -16,6 +16,7 @@ from .validation import require_nonempty, require_positive
 from ..random import Key, key as random_key
 
 if TYPE_CHECKING:
+    from ..combustion.progress_variable import ProgressVariable
     from ..execution.run import Run
 
 
@@ -381,6 +382,7 @@ class Longship:
     placement: Attached = dataclass_field(default_factory=Attached)
     scheduler: Slurm | None = None
     name: str | None = None
+    combustion: ProgressVariable | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -391,7 +393,17 @@ class Longship:
         object.__setattr__(self, "closures", tuple(self.closures))
         object.__setattr__(self, "transforms", tuple(self.transforms))
         object.__setattr__(self, "observations", tuple(self.observations))
-        programs = (*self.closures, *self.transforms)
+        if self.combustion is not None:
+            from ..combustion.progress_variable import ProgressVariable
+
+            if not isinstance(self.combustion, ProgressVariable):
+                raise TypeError("combustion must be a Combustion.ProgressVariable")
+            if self.closures:
+                raise ValueError(
+                    "combustion owns its reaction-rate and manifold closures; "
+                    "do not also pass closures"
+                )
+        programs = self.field_programs
         names = [program.name for program in programs]
         if len(names) != len(set(names)):
             raise ValueError("field-program names must be unique")
@@ -411,6 +423,16 @@ class Longship:
         if self.scheduler is not None and self.scheduler.ntasks != self.case.ranks:
             raise ValueError("case ranks must match scheduler ntasks")
 
+    @property
+    def closure_programs(self) -> tuple[Closure, ...]:
+        if self.combustion is None:
+            return self.closures
+        return self.combustion.programs(self.case)
+
+    @property
+    def field_programs(self) -> tuple[Closure | Transform, ...]:
+        return (*self.closure_programs, *self.transforms)
+
     def compile(self) -> CompiledPlan:
         """Validate declarations and return an immutable native-backed plan."""
 
@@ -419,8 +441,11 @@ class Longship:
             "schema_version": 2,
             "name": self.name,
             "case": self.case.to_plan(),
-            "closures": [closure.to_plan() for closure in self.closures],
+            "closures": [closure.to_plan() for closure in self.closure_programs],
             "transforms": [transform.to_plan() for transform in self.transforms],
+            "combustion": (
+                None if self.combustion is None else self.combustion.to_plan()
+            ),
             "observations": [item.to_plan() for item in self.observations],
             "placement": self.placement.to_plan(),
             "scheduler": None if self.scheduler is None else self.scheduler.to_plan(),

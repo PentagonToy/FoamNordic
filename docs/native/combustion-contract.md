@@ -1,9 +1,10 @@
 # Progress-variable combustion contract
 
 This document defines the native boundary for FoamNordic progress-variable
-combustion. The reaction-rate source adapter is implemented; the manifold and
-solver equation integration remain a guarded scaffold, not a claim that a
-complete combustion solver is currently implemented.
+combustion. The reaction-rate source adapter, two-program coordinator, and
+pre-integrated FNOM manifold dispatch are implemented. Solver equation
+integration remains a guarded scaffold, not a claim that a complete combustion
+solver is currently implemented.
 
 ## Scientific ownership
 
@@ -68,6 +69,27 @@ wholesale; compatibility and corrected-physics baselines must remain separate.
 
 The copyable guarded files live in
 `src/foamnordic/template/openfoam/combustion-model/`.
+
+## Implemented coordinator
+
+`progressVariableFjord` is registered for both `psiReactionThermo` and
+`rhoReactionThermo`. Its first `ClosureHook` writes exactly one dimensioned
+reaction-rate field. Its second hook updates the expanded manifold outputs as
+one exchange. Only after both invocations succeed does it call
+`thermo.correct()`, when enabled. The model rejects unsupported source and
+correction policies, missing semantic inputs, missing or non-scalar output
+fields, a manifold that overwrites the source, and source-dimension mismatch.
+
+The Python compiler lowers `ProgressVariable` to two ordinary resident model
+programs and gives each an independent Unix session. `Y_*`-style field
+families are expanded against the initial registry before launch. The shared
+Longship lifecycle starts and terminates the two workers together; there is no
+per-cell Python loop.
+
+The custom solver still owns steps 1, 2, 5, and 7 of the correction order. In
+particular it must assemble the declared source into the progress-variable
+equation and call `combustion->correct()` exactly once at the agreed
+outer-corrector boundary.
 
 ## Implemented source boundary
 

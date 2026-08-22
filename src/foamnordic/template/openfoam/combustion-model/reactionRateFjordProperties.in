@@ -37,6 +37,11 @@ active          true;
             @FOAMNORDIC_OUTPUT_FIELDS@
         );
 
+        outputKeys
+        (
+            @FOAMNORDIC_OUTPUT_KEYS@
+        );
+
         @FOAMNORDIC_OBSERVATION_BLOCK@
     }
 }

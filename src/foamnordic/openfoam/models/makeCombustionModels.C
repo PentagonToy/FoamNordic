@@ -14,6 +14,7 @@
 #include "makeCombustionTypes.H"
 
 #include "psiReactionThermo.H"
+#include "progressVariableFjord.H"
 #include "reactionRateFjord.H"
 #include "rhoReactionThermo.H"
 
@@ -21,5 +22,7 @@ namespace Foam {
 
 makeCombustionTypes(reactionRateFjord, psiReactionThermo);
 makeCombustionTypes(reactionRateFjord, rhoReactionThermo);
+makeCombustionTypes(progressVariableFjord, psiReactionThermo);
+makeCombustionTypes(progressVariableFjord, rhoReactionThermo);
 
 }  // namespace Foam

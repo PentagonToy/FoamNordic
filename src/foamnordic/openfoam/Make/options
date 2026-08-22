@@ -16,6 +16,7 @@ EXE_INC = \
     -Imodels/nutFjord \
     -Imodels/kEqnFjord \
     -Imodels/reactionRateFjord \
+    -Imodels/progressVariableFjord \
     -I$(FOAMNORDIC_SOURCE)/src \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
 

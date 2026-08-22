@@ -6,10 +6,18 @@ source-evaluation method. It should select solver-owned fields and invoke the
 shared `ClosureHook`; transport, inference, scaling, observation, and lifecycle
 code remain in the common FoamNordic runtime.
 
-The current adapters are LES closures:
+The current adapters include LES closures:
 
 - `nutFjord` replaces the modeled eddy-viscosity evaluation.
 - `kEqnFjord` replaces the one-equation SGS closure terms.
+
+The combustion adapters are:
+
+- `reactionRateFjord`, a narrow one-source producer for custom solver wiring.
+- `progressVariableFjord`, which invokes reaction-rate and pre-integrated
+  manifold programs in order and then corrects thermodynamics once. It still
+  relies on a custom solver to assemble and solve the transported progress
+  and variance equations.
 
 Generic field programs do not require a turbulence-model adapter.
 `foamNordicExchange` can transform or observe registered fields in laminar,

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 import unittest
 
 import foamnordic as fno
+from foamnordic._case import render_combustion_dictionary
+from foamnordic._openfoam_reader import Field
 
 
 def reaction_rate(
@@ -34,6 +37,35 @@ def manifold(
             "enthalpy": fno.field("h"),
         },
     )
+
+
+def combustion_case(root: Path) -> fno.OpenFOAM.Case:
+    source = root / "source"
+    run = root / "run"
+    source.mkdir()
+    run.mkdir()
+    case = fno.OpenFOAM.Case(case_dir=source, run_dir=run)
+    dimensions = {
+        "c_tilde": "[0 0 0 0 0 0 0]",
+        "c_var": "[0 0 0 0 0 0 0]",
+        "T_tilde": "[0 0 0 1 0 0 0]",
+        "p": "[1 -1 -2 0 0 0 0]",
+        "omega_c": "[1 -3 -1 0 0 0 0]",
+        "Y_CH4": "[0 0 0 0 0 0 0]",
+        "Y_O2": "[0 0 0 0 0 0 0]",
+        "h": "[0 2 -2 0 0 0 0]",
+    }
+    for name, value in dimensions.items():
+        case._fields[name] = Field(
+            name=name,
+            field_class="volScalarField",
+            dimensions=value,
+            internal_value=0.0,
+            boundary_names=(),
+            path=source / "0" / name,
+        )
+    object.__setattr__(case, "_fields_loaded", True)
+    return case
 
 
 class CombustionDeclarationTests(unittest.TestCase):
@@ -182,6 +214,106 @@ class CombustionDeclarationTests(unittest.TestCase):
         self.assertIn("reactionRateDimensions", template)
         self.assertIn("@REACTION_RATE_DIMENSIONS@", template)
         self.assertIn("foamNordicClosure", template)
+
+    def test_progress_variable_lowers_species_family_to_resident_programs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            case = combustion_case(Path(directory))
+            combustion = fno.Combustion.ProgressVariable(
+                reaction_rate=reaction_rate(),
+                manifold=manifold(),
+            )
+
+            reaction, table = combustion.programs(case)
+
+        self.assertEqual(reaction.name, "reactionRate")
+        self.assertEqual(table.name, "progressVariableManifold")
+        self.assertEqual(
+            tuple(table.inputs),
+            ("progress", "variance", "pressure"),
+        )
+        self.assertEqual(
+            tuple(table.outputs),
+            ("Y_CH4", "Y_O2", "enthalpy"),
+        )
+        self.assertEqual(table.outputs["Y_CH4"].field_name, "Y_CH4")
+        self.assertEqual(table.outputs["enthalpy"].field_name, "h")
+
+    def test_progress_variable_rejects_an_empty_species_family(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            case = combustion_case(Path(directory))
+            declaration = fno.Combustion.ProgressVariable(
+                reaction_rate=reaction_rate(),
+                manifold=fno.Combustion.Manifold.beta_fdf(
+                    table="flamelet.fnom",
+                    progress=fno.field("c_tilde"),
+                    variance=fno.field("c_var"),
+                    outputs={"species": fno.fields("Z_*")},
+                ),
+            )
+            with self.assertRaisesRegex(ValueError, "matched no"):
+                declaration.programs(case)
+
+    def test_combustion_dictionary_wires_two_sessions_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            case = combustion_case(Path(directory))
+            declaration = fno.Combustion.ProgressVariable(
+                reaction_rate=reaction_rate(),
+                manifold=manifold(),
+            )
+            longship = fno.Longship(case=case, combustion=declaration)
+            reaction, table = longship.closure_programs
+
+            destination, rendered = render_combustion_dictionary(
+                longship,
+                reaction,
+                table,
+                "unix:///tmp/reaction.sock",
+                "unix:///tmp/manifold.sock",
+                True,
+            )
+
+        self.assertEqual(destination, Path("constant/combustionProperties"))
+        self.assertIn("combustionModel progressVariableFjord", rendered)
+        self.assertIn("reactionRateField     omega_c", rendered)
+        self.assertIn("reactionRateDimensions [1 -3 -1 0 0 0 0]", rendered)
+        self.assertIn('address          "unix:///tmp/reaction.sock"', rendered)
+        self.assertIn('address          "unix:///tmp/manifold.sock"', rendered)
+        self.assertIn("reaction_rate", rendered)
+        self.assertIn("enthalpy", rendered)
+        self.assertLess(
+            rendered.index("reactionRateClosure"),
+            rendered.index("manifoldClosure"),
+        )
+        self.assertIn("Y_CH4", rendered)
+        self.assertIn("Y_O2", rendered)
+
+    def test_progress_variable_native_coordinator_preserves_call_order(
+        self,
+    ) -> None:
+        root = Path(__file__).resolve().parents[2]
+        model = root / "src/foamnordic/openfoam/models/progressVariableFjord"
+        source = (model / "progressVariableFjord.C").read_text(encoding="utf-8")
+        registration = (
+            root / "src/foamnordic/openfoam/models/makeCombustionModels.C"
+        ).read_text(encoding="utf-8")
+
+        reaction = source.index("reactionRate_->invoke")
+        manifold_call = source.index("manifold_->invoke")
+        thermo = source.index("this->thermo().correct()")
+        self.assertLess(reaction, manifold_call)
+        self.assertLess(manifold_call, thermo)
+        self.assertIn('sourceTreatment", "lagged"', source)
+        self.assertIn('correctionStage", "outerCorrector"', source)
+        self.assertIn(
+            "makeCombustionTypes(progressVariableFjord, psiReactionThermo)",
+            registration,
+        )
+        self.assertIn(
+            "makeCombustionTypes(progressVariableFjord, rhoReactionThermo)",
+            registration,
+        )
 
 
 if __name__ == "__main__":

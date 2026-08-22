@@ -54,11 +54,11 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
     request.solver_nodes = solver_nodes
     request.solver_tasks = solver_tasks
     request.solver_cpus_per_task = solver_cpus_per_task
-    program_count = len(longship.closures) + len(longship.transforms)
+    program_count = len(longship.closure_programs) + len(longship.transforms)
     request.host_cpus_per_node = (
         longship.placement.closure_cpus_per_node * max(1, program_count)
     )
-    request.use_closure_host = bool(longship.closures or longship.transforms)
+    request.use_closure_host = bool(longship.field_programs)
     request.placement = placement
 
     plan = _native.plan_longship(request)
@@ -72,7 +72,7 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
         _native.DataPath.UCX: "ucx",
         _native.DataPath.TCP: "tcp",
     }
-    has_program = bool(longship.closures or longship.transforms)
+    has_program = bool(longship.field_programs)
     return {
         "allocation_nodes": plan.allocation_nodes,
         "allocation_cpus_per_node": plan.allocation_cpus_per_node,

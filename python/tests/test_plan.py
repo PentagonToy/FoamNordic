@@ -676,6 +676,35 @@ class PlanTests(unittest.TestCase):
             self.assertIn("omega_c", rendered)
             self.assertIn('table "betaFdf.tbl"', rendered)
 
+    def test_custom_template_requires_output_keys_for_renamed_ports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            template = Path(directory) / "closure.in"
+            template.write_text(
+                "outputs (@FOAMNORDIC_OUTPUT_FIELDS@);\n",
+                encoding="utf-8",
+            )
+            case = fno.openfoam.Case(
+                case_dir="source",
+                run_dir="workspace",
+                integration=fno.openfoam.DictionaryTemplate(
+                    source=template,
+                    destination="constant/modelProperties",
+                ),
+            )
+            closure = fno.Closure(
+                name="mapped",
+                artifact="mapped.fnom",
+                inputs={"velocity": fno.field("U")},
+                outputs={"prediction": fno.field("nut")},
+            )
+            with self.assertRaisesRegex(ValueError, "OUTPUT_KEYS"):
+                render_dictionary(
+                    fno.Longship(case=case, closures=(closure,)),
+                    closure,
+                    "unix:///tmp/mapped.sock",
+                    True,
+                )
+
     def test_case_and_scheduler_rank_mismatch_is_rejected(self) -> None:
         run = example_longship()
         with self.assertRaisesRegex(ValueError, "ranks"):

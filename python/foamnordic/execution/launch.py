@@ -29,7 +29,7 @@ _INHERITED_SLURM_PREFIXES = ("SLURM_", "SBATCH_", "SRUN_")
 
 
 def _programs(longship: Longship):
-    return (*longship.closures, *longship.transforms)
+    return longship.field_programs
 
 
 def _submission_environment() -> dict[str, str]:

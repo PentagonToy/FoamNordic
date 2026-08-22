@@ -35,18 +35,24 @@ struct ClosureInput final {
     std::string expression;
 };
 
+struct ClosureOutput final {
+    std::string key;
+    word field;
+};
+
 class ClosureHook final {
     std::vector<ClosureInput> inputs_;
-    wordList outputs_;
+    std::vector<ClosureOutput> outputs_;
     ClosureSession session_;
     std::unique_ptr<ClosureObservation> observation_;
 
     [[nodiscard]] static std::vector<ClosureInput> readInputs(
         const dictionary& dict);
-    [[nodiscard]] static wordList readOutputs(const dictionary& dict);
+    [[nodiscard]] static std::vector<ClosureOutput> readOutputs(
+        const dictionary& dict);
     [[nodiscard]] static foamnordic::adapter::ExchangeContract contract(
         const std::vector<ClosureInput>& inputs,
-        const wordList& outputs);
+        const std::vector<ClosureOutput>& outputs);
 
 public:
     using InputBinder = std::function<void(operations::OperationFrame&)>;
