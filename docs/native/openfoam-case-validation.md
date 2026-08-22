@@ -124,6 +124,78 @@ The gate is reproducible with
 It creates only isolated copies and writes a machine-readable
 `analytical-les-parity.json` report.
 
+## Laminar combustion field parity
+
+A 2026-08-22 combustion gate used the OpenFOAM.com v2606
+`counterFlowFlame2DLTS_GRI_TDAC` case on Apple Silicon. This is a 4,000-cell
+laminar `reactingFoam` case with 53 species, 325 reactions, the TDAC chemistry
+method, DAC reduction, and ISAT tabulation. The copied case ran for three LTS
+steps. No source case was modified.
+
+The first FoamNordic run exercised the pure OpenFOAM path. A second run sent
+`T` and `CH4` through one identity `Transform` at `time_step_start`, returned
+both fields atomically, and observed their minimum, maximum, and mean at every
+exchange. This tests a compressible reacting solver, multicomponent field
+discovery, two-field resident execution, SHM transport, native observation,
+and postprocessing without claiming an equation-level reaction-rate closure.
+
+Acceptance was `relative L2 <= 1e-9` and
+`maxAbs <= 1e-12 + 1e-9*referenceMaxAbs`.
+
+| Field | Max absolute difference | Relative L2 | Result |
+| --- | ---: | ---: | --- |
+| `U` | 5.965e-11 | 8.514e-11 | PASS |
+| `p` | 1.892e-10 | 4.094e-16 | PASS |
+| `T` | 1.137e-12 | 2.927e-17 | PASS |
+| `CH4` | 3.469e-17 | 1.057e-17 | PASS |
+| `O2` | 9.926e-24 | 1.193e-23 | PASS |
+| `CO2` | 0 | 0 | PASS |
+| `H2O` | 0 | 0 | PASS |
+| `Qdot` | 0 | 0 | PASS |
+
+The generated chemistry heat-release field `Qdot` agrees exactly, while the
+largest relative L2 difference is `8.514e-11` in velocity. This establishes
+that the current generic field-program path can operate inside a real
+finite-rate reacting case without materially perturbing its three-step
+trajectory.
+
+| Measurement | Stock | FoamNordic identity |
+| --- | ---: | ---: |
+| End-to-end wall time | 2.03 s | 5.06 s |
+| OpenFOAM `ExecutionTime` | 0.11 s | 0.11 s |
+
+The first exchange waited 15.6 ms for the resident; subsequent closure waits
+were 0.17--0.21 ms and Python function evaluation took 11.7--13.7 us. The
+approximately three-second wall difference is fixed worker and lifecycle
+startup on a solver that itself runs for only 0.11 seconds. It is not a
+representative long-run overhead ratio.
+
+The gate is reproducible with
+[`tools/openfoam/combustionFieldParity.py`](../../tools/openfoam/combustionFieldParity.py).
+It prepares an isolated mesh, writes all runs beneath the selected output
+directory, and emits `combustion-field-parity.json`.
+
+### Remaining equation-level boundary
+
+This successful gate does not yet make `reactionRateFjord` a native combustion
+model. A generic `Transform` may deliberately modify temperature or species at
+a supported solver stage, but a learned reaction rate must enter the species
+and energy equations at the combustion or chemistry source-evaluation site.
+That next adapter needs:
+
+- a precise input contract, initially `c_tilde`, `c_var`, and `T_tilde` plus
+  beta-FDF table metadata;
+- a dimensioned `omega_c` output and an explicit mapping into the transported
+  progress-variable and energy source terms;
+- boundary, conservation, realizability, and failure-policy rules owned by
+  OpenFOAM; and
+- a solver-integrated analytical/table reference case, not only an identity
+  field exchange.
+
+The shared Fjord, resident, artifact, scaling, observation, and lifecycle
+layers already cover this adapter. Only the thin equation-level OpenFOAM entry
+point and its physical acceptance contract remain.
+
 ## Known local limitation
 
 The NACA4412 two-rank run failed during `MPI_Init` in the macOS OpenFOAM app.
