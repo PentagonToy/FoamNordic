@@ -18,6 +18,7 @@ from foamnordic._case import (
     _scheme_commands,
     _scheme_requirements,
     _socket_path,
+    prepare_case,
     render_dictionary,
     render_transform_dictionary,
     validate_case,
@@ -69,6 +70,71 @@ def example_longship() -> fno.Longship:
 
 
 class PlanTests(unittest.TestCase):
+    def _parallel_case(self, root: Path, ranks: int = 2) -> fno.Longship:
+        source = root / "source"
+        for relative in (
+            "0/U",
+            "0/p",
+            "constant/turbulenceProperties",
+            "system/controlDict",
+            "system/fvSchemes",
+            "system/fvSolution",
+        ):
+            path = source / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+        (source / "system/decomposeParDict").write_text(
+            "numberOfSubdomains 8;\n"
+            "method hierarchical;\n"
+            "hierarchicalCoeffs { n (2 2 2); order xyz; }\n",
+            encoding="utf-8",
+        )
+        return fno.Longship(
+            name="parallel-case",
+            case=fno.OpenFOAM.Case(
+                case_dir=source,
+                run_dir=root / "output",
+                ranks=ranks,
+            ),
+        )
+
+    def test_parallel_preparation_preserves_case_decomposition_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            longship = self._parallel_case(root)
+
+            def decompose(*_args, **_kwargs):
+                copied = next((root / "output/runs").glob("*/case"))
+                (copied / "processor0").mkdir()
+                (copied / "processor1").mkdir()
+                return Mock(returncode=0)
+
+            with patch("foamnordic._case.subprocess.run", side_effect=decompose) as run:
+                _, copied, _ = prepare_case(longship, longship.compile())
+
+            dictionary = (copied / "system/decomposeParDict").read_text()
+            self.assertIn("method hierarchical", dictionary)
+            self.assertIn("hierarchicalCoeffs", dictionary)
+            command = " ".join(run.call_args.args[0])
+            self.assertIn("numberOfSubdomains -set 2", command)
+            self.assertIn("decomposePar", command)
+
+    def test_parallel_preparation_rejects_wrong_processor_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            longship = self._parallel_case(root)
+
+            def incomplete(*_args, **_kwargs):
+                copied = next((root / "output/runs").glob("*/case"))
+                (copied / "processor0").mkdir()
+                return Mock(returncode=0)
+
+            with (
+                patch("foamnordic._case.subprocess.run", side_effect=incomplete),
+                self.assertRaisesRegex(RuntimeError, "does not match Case.ranks"),
+            ):
+                prepare_case(longship, longship.compile())
+
     def test_runtime_socket_path_stays_short_for_long_scratch_workspaces(self) -> None:
         work = Path("/scratch") / ("very-long-project-segment/" * 12) / "run"
         first = _socket_path(work, 0)

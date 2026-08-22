@@ -60,11 +60,14 @@ criteria.
 ## Known local limitation
 
 The NACA4412 two-rank run failed during `MPI_Init` in the macOS OpenFOAM app.
-The identical failure was reproduced with direct `mpirun -np 2 pimpleFoam`
-commands, including alternate Open MPI PML and BTL selections, so it is not a
-FoamNordic launch or data-plane failure. Serial macOS remains the local
-compatibility gate. Multi-rank OpenFOAM, including the native UCX closure path,
-is validated separately on Linux HPC systems.
+The decomposition itself was complete: `numberOfSubdomains` was two and both
+`processor0` and `processor1` were populated. The same `PML add procs failed`
+error was then reproduced with a stock, uncoupled two-rank `pitzDaily` run, so
+it is not a FoamNordic launch, model-adapter, or data-plane failure. The error
+also matches [Open MPI issue #13129](https://github.com/open-mpi/ompi/issues/13129)
+on newer macOS releases. Serial macOS remains the local compatibility gate.
+Multi-rank OpenFOAM, including the native UCX closure path, is validated
+separately on Linux HPC systems.
 
 The `FPVFoam-v1912` corpus was intentionally excluded from this sweep. It is a
 custom, release-specific combustion solver and will be treated as a dedicated

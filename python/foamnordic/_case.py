@@ -135,6 +135,21 @@ def _transform_template() -> str:
     raise RuntimeError("FoamNordic transform template is unavailable")
 
 
+def _decomposition_template() -> str:
+    packaged = files("foamnordic").joinpath(
+        "templates/openfoam/decomposeParDict.in"
+    )
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src/foamnordic/template/openfoam/decomposeParDict.in"
+    )
+    if source.is_file():
+        return source.read_text(encoding="utf-8")
+    raise RuntimeError("FoamNordic decomposition template is unavailable")
+
+
 def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
     packaged = files("foamnordic").joinpath(
         "templates/openfoam/derivedSchemes.json"
@@ -579,10 +594,18 @@ def prepare_case(
         )
     if longship.case.ranks > 1:
         decomposition = case_dir / "system/decomposeParDict"
-        decomposition.write_text(
-            "FoamFile { format ascii; class dictionary; object decomposeParDict; }\n"
-            f"numberOfSubdomains {longship.case.ranks};\nmethod scotch;\n",
-            encoding="utf-8",
+        if not decomposition.is_file():
+            decomposition.write_text(
+                _decomposition_template()
+                .replace("@NUMBER_OF_SUBDOMAINS@", str(longship.case.ranks))
+                .replace("@DECOMPOSITION_METHOD@", "scotch")
+                .replace("@METHOD_COEFFICIENTS@", ""),
+                encoding="utf-8",
+            )
+        decomposition_path = quote_command((decomposition,))
+        commands.append(
+            f"foamDictionary {decomposition_path} "
+            f"-entry numberOfSubdomains -set {longship.case.ranks}"
         )
         commands.append(f"decomposePar -case {quote_command((case_dir,))} -force")
     with _internal_path(work_dir, "prepare.log").open("wb") as stream:
@@ -592,4 +615,16 @@ def prepare_case(
             stdout=stream,
             stderr=subprocess.STDOUT,
         )
+    if longship.case.ranks > 1:
+        expected = {f"processor{rank}" for rank in range(longship.case.ranks)}
+        actual = {
+            path.name
+            for path in case_dir.iterdir()
+            if path.is_dir() and re.fullmatch(r"processor\d+", path.name)
+        }
+        if actual != expected:
+            raise RuntimeError(
+                "OpenFOAM decomposition does not match Case.ranks: "
+                f"expected {sorted(expected)}, found {sorted(actual)}"
+            )
     return work_dir, case_dir, tuple(prepared)

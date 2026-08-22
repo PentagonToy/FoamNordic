@@ -15,8 +15,13 @@ install(
     FILES
         ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/observation.in
         ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/derivedSchemes.json
+        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/decomposeParDict.in
         ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/fjordExchange.in
         ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/turbulenceProperties.fjord.in
+    DESTINATION foamnordic/templates/openfoam
+    COMPONENT Python)
+install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/model-adapter
     DESTINATION foamnordic/templates/openfoam
     COMPONENT Python)
 install(

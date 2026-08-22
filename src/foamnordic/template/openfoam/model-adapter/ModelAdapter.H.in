@@ -1,0 +1,37 @@
+#error "FoamNordic model-adapter scaffold: replace all placeholders before building"
+
+#ifndef @INCLUDE_GUARD@
+#define @INCLUDE_GUARD@
+
+#include "@BASE_MODEL_HEADER@"
+#include "closureHook.H"
+
+#include <memory>
+
+namespace Foam::@MODEL_NAMESPACE@ {
+
+template<class BasicModel>
+class @MODEL_CLASS@ final : public @BASE_MODEL_TYPE@<BasicModel> {
+    std::unique_ptr<foamNordic::ClosureHook> closure_;
+
+    @MODEL_CLASS@(const @MODEL_CLASS@&) = delete;
+    void operator=(const @MODEL_CLASS@&) = delete;
+
+    @DECLARE_NATIVE_ENTRY_POINT@
+
+public:
+    TypeName("@RUNTIME_MODEL_NAME@");
+
+    @DECLARE_CONSTRUCTOR@
+    ~@MODEL_CLASS@() override = default;
+
+    @DECLARE_REQUIRED_OPENFOAM_OVERRIDES@
+};
+
+}  // namespace Foam::@MODEL_NAMESPACE@
+
+#ifdef NoRepository
+#include "@MODEL_CLASS@.C"
+#endif
+
+#endif
