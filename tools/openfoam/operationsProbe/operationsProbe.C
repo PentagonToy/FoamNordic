@@ -99,12 +99,22 @@ int main(int argc, char* argv[]) {
             Foam::IOobject::MUST_READ,
             Foam::IOobject::NO_WRITE),
         mesh);
+    Foam::surfaceScalarField flux(
+        Foam::IOobject(
+            "phi",
+            runTime.timeName(),
+            mesh,
+            Foam::IOobject::NO_READ,
+            Foam::IOobject::NO_WRITE),
+        Foam::fvc::flux(velocity));
 
     Foam::foamNordic::operations::OperationFrame frame(mesh);
     const std::vector<std::pair<std::string, std::string>> expressions{
         {"grad_U", "grad(U)"},
+        {"div_phi_U", "div(phi,U)"},
         {"curl_U", "curl(U)"},
         {"laplacian_p", "laplacian(p)"},
+        {"laplacian_nu_U", "laplacian(nu,U)"},
         {"mag_grad_p", "mag(grad(p))"},
         {"deviatoric_strain", "dev(symm(grad(U)))"},
         {"strain_contraction", "ddot(grad(U),dev(symm(grad(U))))"},

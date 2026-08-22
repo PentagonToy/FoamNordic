@@ -168,8 +168,12 @@ std::uint8_t encode_scaler_kind(ScalerKind kind) {
             return 1;
         case ScalerKind::minmax:
             return 2;
+        case ScalerKind::maxabs:
+            return 4;
         case ScalerKind::robust:
             return 3;
+        case ScalerKind::function:
+            return 5;
     }
     throw std::invalid_argument("Manifest scaler kind is invalid.");
 }
@@ -182,6 +186,10 @@ ScalerKind decode_scaler_kind(std::uint8_t value) {
             return ScalerKind::minmax;
         case 3:
             return ScalerKind::robust;
+        case 4:
+            return ScalerKind::maxabs;
+        case 5:
+            return ScalerKind::function;
         default:
             throw std::invalid_argument("Manifest scaler kind is invalid.");
     }

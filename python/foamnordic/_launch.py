@@ -6,12 +6,18 @@ import os
 from pathlib import Path
 import shlex
 import shutil
+import sys
 from typing import TYPE_CHECKING
 
 from ._case import prepare_case, validate_case
 from ._run import Run, _internal_path, _launch_local, _launch_process, _sailing_paths
 from ._shell import quote_command, toolchain_shell
 from ._slurm import force_cancel, write_batch, write_submission_wrapper
+
+try:
+    from . import _native
+except ImportError:
+    _native = None
 
 if TYPE_CHECKING:
     from ._spec import Longship
@@ -93,12 +99,40 @@ def _solver_command(
     )
 
 
+def _artifact_metadata(path: Path) -> dict[str, object]:
+    if _native is None:
+        raise RuntimeError("model launch requires a FoamNordic binary wheel")
+    return dict(_native.read_model_manifest(str(path.expanduser().resolve())))
+
+
 def _host_command(longship: Longship, ready: Path) -> tuple[str, ...]:
     closure = longship.closures[0]
+    artifact = closure.artifact.expanduser().resolve()
+    metadata = _artifact_metadata(artifact)
+    model_format = str(metadata["format"])
+    manifest_inputs = tuple(str(item[0]) for item in metadata["inputs"])
+    manifest_outputs = tuple(str(item[0]) for item in metadata["outputs"])
+    if manifest_inputs != tuple(closure.inputs):
+        raise ValueError(
+            "closure input order does not match its FNOM manifest: "
+            f"{tuple(closure.inputs)!r} != {manifest_inputs!r}"
+        )
+    if manifest_outputs != tuple(closure.outputs):
+        raise ValueError(
+            "closure output order does not match its FNOM manifest: "
+            f"{tuple(closure.outputs)!r} != {manifest_outputs!r}"
+        )
+    executable: list[object]
+    if model_format == "onnx":
+        executable = [_worker()]
+    elif model_format in {"joblib", "equinox"}:
+        executable = [sys.executable, "-m", "foamnordic._resident"]
+    else:
+        raise ValueError(f"unsupported closure artifact format: {model_format}")
     values: list[object] = [
-        _worker(),
+        *executable,
         f"unix://{ready.parent / 'closure.sock'}",
-        closure.artifact.expanduser().resolve(),
+        artifact,
         "--connections",
         str(longship.case.ranks),
         "--ready-file",

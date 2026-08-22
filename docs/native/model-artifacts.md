@@ -36,7 +36,9 @@ all three artifact formats share exactly the same preprocessing hot path.
 
 ## Native scaler representation
 
-StandardScaler, MinMaxScaler, and RobustScaler are normalized once to:
+Fitted scikit-learn `StandardScaler`, `MinMaxScaler`, `MaxAbsScaler`,
+`RobustScaler`, and affine `FunctionTransformer` instances are normalized once
+by the nanobind export factory:
 
 ```text
 transformed = value * gain + bias
@@ -49,11 +51,20 @@ The mapping from fitted scikit-learn attributes is:
 |---|---:|---:|
 | StandardScaler | `1 / scale_` | `-mean_ / scale_` |
 | MinMaxScaler | `scale_` | `min_` |
+| MaxAbsScaler | `1 / scale_` | `0` |
 | RobustScaler | `1 / scale_` | `-center_ / scale_` |
+| FunctionTransformer | inferred feature-wise multiplier | inferred translation |
 
 MinMax clipping is represented explicitly and applied only in the forward
-transform. C++ performs input scaling and output inverse scaling on float32 or
-float64 buffers. The same code is used for Equinox, Joblib, and ONNX.
+transform. The C++ `Scaler` interface owns `transform` and
+`inverse_transform`; its serialized `AffineScaler` implementation performs
+input scaling and output inverse scaling on float32 or float64 buffers. The
+same code is used for Equinox, Joblib, and ONNX.
+
+`FunctionTransformer` is accepted only when numeric probes demonstrate an
+invertible, shape-preserving, feature-wise affine mapping. Nonlinear and
+feature-mixing functions fail during export instead of silently changing
+runtime semantics.
 
 The bundle rejects zero or non-finite gains, mismatched feature counts, integer
 input tensors, and incomplete clipping ranges before a simulation starts.
@@ -70,6 +81,12 @@ at bundle creation or managed worker startup. Python pickles and arbitrary
 PyTree traversal never occur in the OpenFOAM exchange loop. A future compiled
 JAX executable can consume the same manifest without changing the bundle.
 
+The current `.eqx` sibling payload contains a cloudpickled reconstructable
+PyTree and a `batched` call policy. It is loaded once and wrapped with
+`jax.jit`; the default policy applies `jax.vmap` over active cells. This is
+less portable than ONNX and must only be used with trusted payloads and a
+compatible Python/JAX/Equinox environment.
+
 ## Joblib boundary
 
 Joblib remains a Python artifact format; C++ does not attempt to reproduce
@@ -79,6 +96,14 @@ scaling, request ordering, output inverse scaling, bypass merge, and shutdown.
 
 This isolates Python overhead to model evaluation and prevents the earlier
 design from moving full OpenFOAM fields through Python for every operation.
+The sibling `.joblib` payload is uncompressed, allowing
+`joblib.load(..., mmap_mode="r")` to map large NumPy-backed estimators instead
+of first expanding an archive into memory. Joblib payloads are pickle-based
+and must be trusted.
+
+`pip install foamnordic` installs the Joblib/scikit-learn and JAX/Equinox
+runtimes together. Backend selection is a model-artifact decision rather than
+an installation profile.
 
 ## ONNX boundary
 

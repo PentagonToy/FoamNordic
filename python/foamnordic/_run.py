@@ -82,6 +82,32 @@ class RunStatus(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class ResultArtifacts:
+    """Stable locations owned by one generated run directory."""
+
+    root: Path
+    case: Path
+    logs: Path
+    observations: Path
+    slurm: Path
+
+    @property
+    def existing(self) -> tuple[Path, ...]:
+        """Return artifact locations that exist for this particular run."""
+
+        return tuple(
+            path
+            for path in (
+                self.case,
+                self.logs,
+                self.observations,
+                self.slurm,
+            )
+            if path.exists()
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Result:
     """Durable terminal state and log locations for one Longship run."""
 
@@ -103,6 +129,38 @@ class Result:
         """Return whether both coupled components completed successfully."""
 
         return self.status is RunStatus.SUCCEEDED
+
+    @property
+    def case(self) -> Path:
+        """Return the isolated OpenFOAM case written by this run."""
+
+        return self.work_dir / "case"
+
+    @property
+    def logs(self) -> Path:
+        """Return the directory containing Sailing and Harbor logs."""
+
+        return self.work_dir / "logs"
+
+    @property
+    def artifacts(self) -> ResultArtifacts:
+        """Return stable paths without copying durable solver output."""
+
+        return ResultArtifacts(
+            root=self.work_dir,
+            case=self.case,
+            logs=self.logs,
+            observations=self.work_dir / "observations",
+            slurm=self.work_dir / "slurm",
+        )
+
+    @property
+    def postprocess(self):
+        """Open this result through the durable postprocessing API."""
+
+        from .postprocess import Case
+
+        return Case(self)
 
     def summary(
         self,

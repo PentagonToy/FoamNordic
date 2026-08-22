@@ -1,17 +1,10 @@
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
-#include <nanobind/stl/vector.h>
 
-#include <cstdint>
-#include <stdexcept>
-#include <utility>
-#include <vector>
-
-#include "foamnordic/backend/inference/artifact.hpp"
-#include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/runtime/longship.hpp"
 #include "foamnordic/runtime/placement.hpp"
+#include "artifact_bindings.hpp"
+#include "resident_bindings.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -118,48 +111,6 @@ NB_MODULE(_native, module) {
         &foamnordic::native::plan_longship,
         "request"_a,
         "Validate resources and return the native Longship allocation plan.");
-    module.def(
-        "write_onnx_manifest",
-        [](const std::string& manifest_path,
-           const std::string& artifact_path,
-           const std::string& name,
-           const std::vector<std::pair<std::string, std::uint64_t>>& inputs,
-           const std::vector<std::pair<std::string, std::uint64_t>>& outputs,
-           const std::string& dtype) {
-            const auto element = dtype == "float32"
-                                     ? foamnordic::fjord::Element::float32
-                                 : dtype == "float64"
-                                     ? foamnordic::fjord::Element::float64
-                                     : throw std::invalid_argument(
-                                           "dtype must be float32 or float64");
-            const auto fields = [element](
-                                    const std::vector<std::pair<
-                                        std::string,
-                                        std::uint64_t>>& specifications) {
-                std::vector<foamnordic::closure::FieldContract> result;
-                result.reserve(specifications.size());
-                for (const auto& [field_name, components] : specifications) {
-                    result.push_back({field_name, element, components});
-                }
-                return result;
-            };
-            foamnordic::closure::write_manifest(
-                manifest_path,
-                {
-                    1,
-                    foamnordic::closure::ModelFormat::onnx,
-                    artifact_path,
-                    {name, fields(inputs), fields(outputs)},
-                    {},
-                    std::nullopt,
-                    std::nullopt,
-                });
-        },
-        "manifest_path"_a,
-        "artifact_path"_a,
-        "name"_a,
-        "inputs"_a,
-        "outputs"_a,
-        "dtype"_a = "float64",
-        "Write the stable native manifest for an existing ONNX payload.");
+    bind_artifacts(module);
+    bind_resident(module);
 }

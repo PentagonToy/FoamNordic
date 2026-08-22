@@ -3,7 +3,9 @@
 Templates are grouped by the component that consumes them:
 
 - `openfoam/` contains dictionaries and dictionary fragments copied into an
-  isolated case.
+  isolated case. `derivedSchemes.json` contains conservative fallback schemes
+  for ML input expressions; they are added only when neither an exact scheme
+  nor a usable section default exists in the copied case.
 - `slurm/` contains scheduler scripts. Solver output belongs in
   `logs/Sailing_<name>_<jobid>.out`; FoamNordic lifecycle output belongs in
   `logs/Sailing_<name>_<jobid>.log`.

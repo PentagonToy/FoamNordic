@@ -5,13 +5,19 @@ import inspect
 import io
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
 import foamnordic as fno
-from foamnordic._case import render_dictionary
+from foamnordic._case import (
+    _scheme_commands,
+    _scheme_requirements,
+    render_dictionary,
+)
 from foamnordic._native_plan import available as native_available
+from foamnordic._launch import _host_command
 
 
 def example_longship() -> fno.Longship:
@@ -174,6 +180,80 @@ class PlanTests(unittest.TestCase):
         )
         inputs["later"] = fno.field("U")
         self.assertNotIn("later", closure.inputs)
+
+    def test_nested_openfoam_operations_render_into_closure_dictionary(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="kEqnFjord",
+            artifact="model.fnom",
+            inputs={
+                "convection": fno.Math.div("phi", "U"),
+                "diffusion": fno.Math.laplacian("nu", "U"),
+                "strain": fno.Math.dev(fno.Math.symm(fno.Math.grad("U"))),
+            },
+            outputs={"nut": fno.field("nut")},
+        )
+        _, rendered = render_dictionary(
+            fno.Longship(case=example.case, closures=(closure,)),
+            closure,
+            "unix:///tmp/closure.sock",
+            True,
+        )
+        self.assertIn('"div(phi,U)"', rendered)
+        self.assertIn('"laplacian(nu,U)"', rendered)
+        self.assertIn('"dev(symm(grad(U)))"', rendered)
+
+    def test_python_artifact_selects_managed_resident_automatically(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="joblibClosure",
+            artifact="model.fnom",
+            inputs={"features": fno.field("U")},
+            outputs={"prediction": fno.field("nut")},
+        )
+        longship = fno.Longship(case=example.case, closures=(closure,))
+        metadata = {
+            "format": "joblib",
+            "inputs": [("features", 3, "float64")],
+            "outputs": [("prediction", 1, "float64")],
+        }
+        with patch("foamnordic._launch._artifact_metadata", return_value=metadata):
+            command = _host_command(longship, Path("/tmp/ready"))
+        rendered = " ".join(command)
+        self.assertIn(sys.executable, rendered)
+        self.assertIn("foamnordic._resident", rendered)
+        self.assertIn(f"--connections {longship.case.ranks}", rendered)
+
+    def test_ml_expression_schemes_are_planned_without_overriding_defaults(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="nutFjord",
+            artifact="model.fnom",
+            inputs={
+                "convection": fno.Math.div("phi", "U"),
+                "diffusion": fno.Math.laplacian("nu", "U"),
+                "vorticity": fno.Math.curl("U"),
+            },
+            outputs={"nut": fno.field("nut")},
+        )
+        longship = fno.Longship(case=example.case, closures=(closure,))
+        self.assertEqual(
+            _scheme_requirements(longship),
+            (
+                ("divSchemes", "div(phi,U)", "Gauss linear"),
+                (
+                    "laplacianSchemes",
+                    "laplacian(nu,U)",
+                    "Gauss linear corrected",
+                ),
+                ("gradSchemes", "curl(U)", "Gauss linear"),
+            ),
+        )
+        commands = "\n".join(_scheme_commands(longship, Path("/runs/case")))
+        self.assertIn("divSchemes/div(phi,U)", commands)
+        self.assertIn("divSchemes/default", commands)
+        self.assertIn("foamnordic_default", commands)
+        self.assertNotIn("-entry divSchemes/default -set", commands)
 
     def test_ntasks_must_divide_evenly_across_nodes(self) -> None:
         with self.assertRaisesRegex(ValueError, "divide evenly"):

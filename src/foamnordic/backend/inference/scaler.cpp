@@ -104,11 +104,27 @@ AffineScaler AffineScaler::minmax(
     };
 }
 
+AffineScaler AffineScaler::maxabs(
+    std::vector<double> maximum_absolute) {
+    auto gain = reciprocal(maximum_absolute);
+    return {
+        ScalerKind::maxabs,
+        std::move(gain),
+        std::vector<double>(maximum_absolute.size(), 0.0),
+    };
+}
+
 AffineScaler AffineScaler::robust(
     std::vector<double> center,
     std::vector<double> scale) {
     auto gain = reciprocal(scale);
     return {ScalerKind::robust, gain, scaled_bias(center, gain)};
+}
+
+AffineScaler AffineScaler::function(
+    std::vector<double> gain,
+    std::vector<double> bias) {
+    return {ScalerKind::function, std::move(gain), std::move(bias)};
 }
 
 void AffineScaler::validate() const {
@@ -166,5 +182,21 @@ const std::vector<double>& AffineScaler::gain() const noexcept { return gain_; }
 const std::vector<double>& AffineScaler::bias() const noexcept { return bias_; }
 std::optional<double> AffineScaler::clip_lower() const noexcept { return clip_lower_; }
 std::optional<double> AffineScaler::clip_upper() const noexcept { return clip_upper_; }
+
+const char* name(ScalerKind kind) noexcept {
+    switch (kind) {
+        case ScalerKind::standard:
+            return "standard";
+        case ScalerKind::minmax:
+            return "minmax";
+        case ScalerKind::maxabs:
+            return "maxabs";
+        case ScalerKind::robust:
+            return "robust";
+        case ScalerKind::function:
+            return "function";
+    }
+    return "unknown";
+}
 
 }  // namespace foamnordic::closure

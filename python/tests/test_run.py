@@ -64,6 +64,11 @@ class RunTests(unittest.TestCase):
             self.assertEqual(run.status, RunStatus.SUCCEEDED)
             self.assertEqual(result.plan_digest, "sha256:test")
             self.assertFalse(ready.exists())
+            self.assertEqual(result.case, result.work_dir / "case")
+            self.assertEqual(result.logs, result.work_dir / "logs")
+            self.assertEqual(result.artifacts.root, result.work_dir)
+            self.assertEqual(result.artifacts.observations, result.work_dir / "observations")
+            self.assertEqual(result.artifacts.slurm, result.work_dir / "slurm")
 
     def test_solver_failure_is_a_failed_result(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

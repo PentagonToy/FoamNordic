@@ -1,19 +1,21 @@
 """Declarative control plane for native FoamNordic workloads."""
 
-__version__ = "1.0.3.dev3"
+__version__ = "1.0.3.dev4"
 
-from . import export, models, openfoam, runtime
+from . import export, math, models, openfoam, postprocess, runtime
 from .export import Tensor
 from ._expressions import FieldExpression, field, filter_width, grad
 from ._plan import CompiledPlan
 from ._observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
-from ._run import Result, Run, RunStatus, RunSummary
+from ._run import Result, ResultArtifacts, Run, RunStatus, RunSummary
 from ._spec import Attached, Closure, Longship, Observe, Retention, Slurm
+from .math import Math
 
 OpenFOAM = openfoam
 Export = export
 Models = models
 Runtime = runtime
+Postprocess = postprocess
 
 __all__ = [
     "Attached",
@@ -22,6 +24,7 @@ __all__ = [
     "FieldExpression",
     "FieldSummary",
     "Longship",
+    "Math",
     "Models",
     "OpenFOAM",
     "Observe",
@@ -30,10 +33,12 @@ __all__ = [
     "ObservationTiming",
     "Retention",
     "Result",
+    "ResultArtifacts",
     "Run",
     "RunStatus",
     "RunSummary",
     "Runtime",
+    "Postprocess",
     "Slurm",
     "Tensor",
     "Export",
@@ -44,6 +49,7 @@ __all__ = [
     "grad",
     "models",
     "openfoam",
+    "postprocess",
     "runtime",
 ]
 

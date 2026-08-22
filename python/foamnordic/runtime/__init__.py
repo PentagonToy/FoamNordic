@@ -1,7 +1,7 @@
 """Workload declarations, lifecycle handles, observations, and results."""
 
 from .._observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
-from .._run import Result, Run, RunStatus, RunSummary
+from .._run import Result, ResultArtifacts, Run, RunStatus, RunSummary
 from .._spec import Attached, Closure, Longship, Observe, Retention, Slurm
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "ObservationTiming",
     "Retention",
     "Result",
+    "ResultArtifacts",
     "Run",
     "RunStatus",
     "RunSummary",

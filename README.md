@@ -11,7 +11,7 @@ over SHM, UDS, UCX, or TCP, while Longship owns placement, launch, lifecycle,
 logs, observations, and results.
 
 FoamNordic is active research software. The current package version is
-`1.0.3.dev3`.
+`1.0.3.dev4`.
 
 ## Install
 
@@ -28,6 +28,9 @@ foamnordic --help
 foamnordic dir
 foamnordic build
 ```
+
+The same installation includes ONNX packaging, Joblib/scikit-learn models,
+and JAX/Equinox resident models. No backend-specific install command is needed.
 
 Binary wheels include the native Python control runtime, so ordinary users do
 not rebuild the C++ core after `pip install`. The selected OpenFOAM integration
@@ -99,6 +102,9 @@ run.summary()
 # Later, when a terminal result is needed:
 result = run.stop(force=False, timeout=900)
 result.summary(style="compact")
+
+post = result.postprocess
+statistics = post.statistics(["U", "p"], time_idx=-1, verbose=True)
 ```
 
 `0/` is used when present. If a source case contains only `0.orig/`, FoamNordic
@@ -110,8 +116,29 @@ directory. The source case is never modified. OpenFOAM directives such as
 provide a complete command such as `source /opt/OpenFOAM/bashrc` for another
 installation, or use `None` when OpenFOAM is already available on `PATH`.
 
+On Apple Silicon with OpenFOAM.app, its command is used as a wrapper. Local MPI
+therefore needs no separate launcher configuration:
+
+```python
+case = fno.OpenFOAM.Case(
+    name="lidDrivenCavity",
+    case_dir=case_dir,
+    run_dir=output_dir,
+    of_cmd="openfoam",
+    shell="zsh",
+    application="pimpleFoam",
+    ranks=6,
+)
+run = fno.Longship(case=case).launch()
+```
+
+With no `scheduler`, rank one runs directly and multiple ranks use the MPI
+launcher supplied by the declared OpenFOAM environment.
+
 See the [run-control API](docs/python/run-control-api.md) for closure,
 observation, Slurm, and pure-OpenFOAM examples.
+Stored fields and baseline/ML comparisons are covered by the
+[postprocess API](docs/python/postprocess-api.md).
 
 ## Native C++ build
 
@@ -154,6 +181,7 @@ native prerequisites.
 
 - [Documentation index](docs/README.md)
 - [Python package guide](python/README.md)
+- [Backend-neutral mathematics](docs/python/math-api.md)
 - [PyPI README](others/README.pypi.md)
 
 ### Architecture
@@ -182,6 +210,7 @@ native prerequisites.
 - [Python documentation index](docs/python/README.md)
 - [Python design](docs/python/design.md)
 - [Run-control API](docs/python/run-control-api.md)
+- [Postprocess API](docs/python/postprocess-api.md)
 
 ## License
 

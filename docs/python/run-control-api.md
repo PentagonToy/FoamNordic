@@ -69,11 +69,41 @@ artifact = fno.Export.onnx(
 )
 ```
 
-The current exporter accepts ONNX bytes, an ONNX path, or an object exposing
-`SerializeToString()`. Callable JAX-to-ONNX lowering remains an exporter
-backend rather than being guessed inside the native packaging step. Every
-export function is quiet by default; `verbose=True` displays an Onsaemiro
-artifact summary.
+The ONNX exporter accepts bytes, a path, or an object exposing
+`SerializeToString()`. Joblib and Equinox have matching FNOM exporters:
+
+```python
+joblib_artifact = fno.export.joblib(
+    voting_regressor,
+    path=model_dir / "reactionRate.fnom",
+    inputs={"features": fno.Tensor.vector(components=3)},
+    outputs={"omega": fno.Tensor.scalar()},
+    x_scaler=fitted_input_scaler,
+    y_scaler=fitted_output_scaler,
+)
+
+equinox_artifact = fno.export.equinox(
+    eqx_model,
+    path=model_dir / "reactionRateEqx.fnom",
+    inputs={"features": fno.Tensor.vector(components=3, dtype="float32")},
+    outputs={"omega": fno.Tensor.scalar(dtype="float32")},
+    x_scaler=fitted_input_scaler,
+    y_scaler=fitted_output_scaler,
+)
+```
+
+`Longship.launch()` reads the FNOM format and selects the fully native ONNX
+worker or managed Joblib/Equinox resident automatically. All formats retain
+the same Fjord transport and native packing boundary. Callable JAX-to-ONNX
+lowering remains an exporter concern. Every export function is quiet by
+default; `verbose=True` displays an Onsaemiro artifact summary.
+
+`x_scaler` and `y_scaler` accept fitted scikit-learn `StandardScaler`,
+`MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or affine
+`FunctionTransformer` instances. Export converts
+their learned arrays into the native FNOM affine contract. The Python scaler
+object is not serialized into the model and is never called during an
+OpenFOAM exchange.
 
 The lowering backend must validate its ONNX opset and IR version against the
 configured ONNX Runtime. The run-control notebook points to
@@ -301,10 +331,11 @@ fig.tight_layout()
 ```
 
 Full-resolution fields, checkpoints, and VTK products remain filesystem
-artifacts. `result.case`, `result.logs`, and `result.artifacts` should expose
-their durable paths without copying them into the notebook. Live snapshots are
-for bounded monitoring; publication-quality post-processing may read the
-written OpenFOAM or VTK results after completion.
+artifacts. `result.case`, `result.logs`, and `result.artifacts` expose their
+durable paths without copying them into the notebook. `result.postprocess`
+opens the completed OpenFOAM case for field access and numerical comparison;
+see the [Postprocess API](postprocess-api.md). Live snapshots remain for
+bounded monitoring rather than publication-quality result analysis.
 
 ## Mapping from the historical notebook
 

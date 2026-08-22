@@ -1,8 +1,7 @@
 """Model contracts and exporters.
 
-ONNX is the first native backend. Joblib and Equinox adapters will live in this
-namespace so they can share contracts without adding their dependencies to the
-core runtime.
+ONNX uses the fully native connector. Joblib and Equinox use managed resident
+workers while sharing the same FNOM tensor contract and native exchange path.
 """
 
 from .. import export

@@ -24,6 +24,7 @@ class _Toolchain:
 
     command: str | None = None
     shell: str = "bash"
+    wrapper: bool = False
 
     def __post_init__(self) -> None:
         if self.command is not None:
@@ -44,8 +45,24 @@ class _Toolchain:
         module_name = require_nonempty(name, "module name")
         return cls(command=f"module load {shlex.quote(module_name)}", shell=shell)
 
-    def to_plan(self) -> dict[str, str | None]:
-        return {"command": self.command, "shell": self.shell}
+    @classmethod
+    def openfoam_wrapper(
+        cls, command: str = "openfoam", *, shell: str = "zsh"
+    ) -> "_Toolchain":
+        """Run commands through the OpenFOAM.app ``openfoam`` wrapper."""
+
+        return cls(
+            command=require_nonempty(command, "OpenFOAM wrapper command"),
+            shell=shell,
+            wrapper=True,
+        )
+
+    def to_plan(self) -> dict[str, str | bool | None]:
+        return {
+            "command": self.command,
+            "shell": self.shell,
+            "wrapper": self.wrapper,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,9 +106,9 @@ class Case:
     """OpenFOAM case, output location, and shell environment declaration.
 
     A compact ``of_cmd`` value such as ``openfoam/2512`` names an environment
-    module. A full shell statement such as ``source /opt/OpenFOAM/bashrc`` is
-    executed verbatim. ``None`` uses OpenFOAM commands already available on
-    ``PATH``.
+    module. ``openfoam`` uses the OpenFOAM.app command wrapper on macOS. A full
+    shell statement such as ``source /opt/OpenFOAM/bashrc`` is executed
+    verbatim. ``None`` uses OpenFOAM commands already available on ``PATH``.
     """
 
     name: str | None = None
@@ -134,12 +151,15 @@ class Case:
         command = self.of_cmd
         if command is not None:
             command = require_nonempty(command, "of_cmd")
-        toolchain = (
-            _Toolchain.module(command, shell=self.shell)
-            if command is not None
-            and not any(character.isspace() for character in command)
-            else _Toolchain(command=command, shell=self.shell)
-        )
+        words = () if command is None else tuple(shlex.split(command))
+        if words and Path(words[0]).name == "openfoam":
+            toolchain = _Toolchain.openfoam_wrapper(command, shell=self.shell)
+        elif command is not None and "/" in command and not any(
+            character.isspace() for character in command
+        ):
+            toolchain = _Toolchain.module(command, shell=self.shell)
+        else:
+            toolchain = _Toolchain(command=command, shell=self.shell)
         object.__setattr__(self, "of_cmd", command)
         object.__setattr__(self, "shell", toolchain.shell)
         object.__setattr__(self, "_toolchain", toolchain)

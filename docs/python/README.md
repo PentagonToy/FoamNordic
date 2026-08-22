@@ -9,6 +9,7 @@ and solver integration.
 
 - [API design](design.md)
 - [Provisional run-control API](run-control-api.md)
+- [Postprocess API](postprocess-api.md)
 - [Wheel publishing](publishing.md)
 - [Native C++ documentation](../native/README.md)
 

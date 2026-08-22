@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.resources import files
+import json
 from pathlib import Path
 import re
 import shutil
@@ -16,6 +17,7 @@ from ._run import _internal_path
 from ._shell import quote_command, toolchain_shell
 
 if TYPE_CHECKING:
+    from ._expressions import FieldExpression
     from ._spec import Closure, Longship
 
 
@@ -91,6 +93,73 @@ def _observation_template() -> str:
     raise RuntimeError("FoamNordic observation template is unavailable")
 
 
+def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
+    packaged = files("foamnordic").joinpath(
+        "templates/openfoam/derivedSchemes.json"
+    )
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src/foamnordic/template/openfoam/derivedSchemes.json"
+    )
+    path = packaged if packaged.is_file() else source
+    if not path.is_file():
+        raise RuntimeError("FoamNordic derived-scheme template is unavailable")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("derived-scheme template must contain a mapping")
+    return value
+
+
+def _walk_expression(value: FieldExpression):
+    yield value
+    for argument in value.arguments:
+        yield from _walk_expression(argument)
+
+
+def _scheme_requirements(longship: Longship) -> tuple[tuple[str, str, str], ...]:
+    """Return missing-scheme candidates without inspecting a concrete case."""
+
+    defaults = _derived_scheme_defaults()
+    requirements: dict[tuple[str, str], str] = {}
+    for closure in longship.closures:
+        for expression in closure.inputs.values():
+            for node in _walk_expression(expression):
+                configuration = defaults.get(node.operation)
+                if configuration is None:
+                    continue
+                section = configuration["section"]
+                requirements[(section, node.canonical)] = configuration["scheme"]
+    return tuple(
+        (section, expression, scheme)
+        for (section, expression), scheme in requirements.items()
+    )
+
+
+def _scheme_commands(longship: Longship, case_dir: Path) -> list[str]:
+    """Add only schemes not already covered by an exact or usable default."""
+
+    schemes = case_dir / "system/fvSchemes"
+    path = quote_command((schemes,))
+    commands = []
+    for section, expression, scheme in _scheme_requirements(longship):
+        exact = quote_command((f"{section}/{expression}",))
+        default = quote_command((f"{section}/default",))
+        selected = quote_command((scheme,))
+        message = quote_command(
+            (f"[FoamNordic] Added ML feature scheme: {expression} -> {scheme}",)
+        )
+        commands.append(
+            f"if ! foamDictionary {path} -entry {exact} >/dev/null 2>&1; then "
+            f"foamnordic_default=$(foamDictionary {path} -entry {default} "
+            f"-value 2>/dev/null || true); "
+            f"if [[ -z \"$foamnordic_default\" "
+            f"|| \"$foamnordic_default\" == none ]]; then "
+            f"foamDictionary {path} -entry {exact} -set {selected}; "
+            f"printf '%s\\n' {message}; fi; fi"
+        )
+    return commands
+
+
 def _observation_block(longship: Longship, path: Path) -> str:
     if not longship.observations:
         return ""
@@ -115,13 +184,10 @@ def _observation_block(longship: Longship, path: Path) -> str:
 
 
 def _expression(value: object) -> str:
-    operation = getattr(value, "operation")
-    field_name = getattr(value, "field_name")
-    if operation == "field":
-        return str(field_name)
-    if operation == "grad":
-        return f'"grad({field_name})"'
-    return "delta"
+    expression = str(getattr(value, "canonical"))
+    if getattr(value, "derived"):
+        return f'"{expression}"'
+    return expression
 
 
 def render_dictionary(
@@ -219,6 +285,7 @@ def prepare_case(
     commands = [
         f"foamDictionary {control_path} -entry application -set {application}",
     ]
+    commands.extend(_scheme_commands(longship, case_dir))
     if longship.closures:
         libraries = quote_command(('("libfoamnordicOpenFOAM.so")',))
         commands.append(

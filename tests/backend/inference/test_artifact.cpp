@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <random>
 #include <span>
 #include <stdexcept>
@@ -99,6 +100,23 @@ void test_robust_scaler_float32() {
     require(
         values == std::vector<float>{1.0F, -1.0F},
         "RobustScaler float32 transform failed.");
+}
+
+void test_maxabs_scaler_through_common_interface() {
+    std::unique_ptr<foamnordic::closure::Scaler> scaler =
+        std::make_unique<foamnordic::closure::AffineScaler>(
+            foamnordic::closure::AffineScaler::maxabs({2.0, 10.0}));
+    std::vector<double> values{-2.0, 5.0, 1.0, -10.0};
+    scaler->transform(matrix_view(values, 2, 2));
+    require_close(
+        values,
+        {-1.0, 0.5, 0.5, -1.0},
+        "MaxAbsScaler transform failed.");
+    scaler->inverse_transform(matrix_view(values, 2, 2));
+    require_close(
+        values,
+        {-2.0, 5.0, 1.0, -10.0},
+        "MaxAbsScaler inverse failed.");
 }
 
 foamnordic::closure::ClosureContract contract() {
@@ -346,6 +364,7 @@ int main() {
     test_standard_scaler();
     test_minmax_scaler_with_clipping();
     test_robust_scaler_float32();
+    test_maxabs_scaler_through_common_interface();
     test_three_artifact_formats();
     test_scaler_feature_mismatch_is_rejected();
     test_artifact_kernel_packs_scales_and_unpacks();

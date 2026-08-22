@@ -61,7 +61,12 @@ class LaunchTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("original\n", encoding="utf-8")
             artifact = root / "nutFjord.fnom"
-            artifact.write_text("fixture\n", encoding="utf-8")
+            fno.export.onnx(
+                b"fixture",
+                path=artifact,
+                inputs={"velocity_grad": fno.Tensor.tensor()},
+                outputs={"eddy_viscosity": fno.Tensor.scalar()},
+            )
             library = root / "lib"
             library.mkdir()
             (library / "libfoamnordicOpenFOAM.so").touch()

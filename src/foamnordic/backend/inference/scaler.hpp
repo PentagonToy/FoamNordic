@@ -21,10 +21,23 @@ namespace foamnordic::closure {
 enum class ScalerKind {
     standard,
     minmax,
+    maxabs,
     robust,
+    function,
 };
 
-class AffineScaler {
+class Scaler {
+public:
+    virtual ~Scaler() = default;
+
+    virtual void transform(fjord::MutableTensorView values) const = 0;
+    virtual void inverse_transform(fjord::MutableTensorView values) const = 0;
+
+    [[nodiscard]] virtual ScalerKind kind() const noexcept = 0;
+    [[nodiscard]] virtual std::size_t features() const noexcept = 0;
+};
+
+class AffineScaler final : public Scaler {
 public:
     AffineScaler(
         ScalerKind kind,
@@ -41,15 +54,20 @@ public:
         std::vector<double> minimum,
         std::optional<double> feature_lower = std::nullopt,
         std::optional<double> feature_upper = std::nullopt);
+    [[nodiscard]] static AffineScaler maxabs(
+        std::vector<double> maximum_absolute);
     [[nodiscard]] static AffineScaler robust(
         std::vector<double> center,
         std::vector<double> scale);
+    [[nodiscard]] static AffineScaler function(
+        std::vector<double> gain,
+        std::vector<double> bias);
 
-    void transform(fjord::MutableTensorView values) const;
-    void inverse_transform(fjord::MutableTensorView values) const;
+    void transform(fjord::MutableTensorView values) const override;
+    void inverse_transform(fjord::MutableTensorView values) const override;
 
-    [[nodiscard]] ScalerKind kind() const noexcept;
-    [[nodiscard]] std::size_t features() const noexcept;
+    [[nodiscard]] ScalerKind kind() const noexcept override;
+    [[nodiscard]] std::size_t features() const noexcept override;
     [[nodiscard]] const std::vector<double>& gain() const noexcept;
     [[nodiscard]] const std::vector<double>& bias() const noexcept;
     [[nodiscard]] std::optional<double> clip_lower() const noexcept;
@@ -65,5 +83,7 @@ private:
     std::optional<double> clip_lower_;
     std::optional<double> clip_upper_;
 };
+
+[[nodiscard]] const char* name(ScalerKind kind) noexcept;
 
 }  // namespace foamnordic::closure

@@ -38,7 +38,7 @@ python -m pip install --upgrade pip
 python -m pip install \
     --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
-    foamnordic==1.0.3.dev3
+    foamnordic==1.0.3.dev4
 foamnordic --version
 foamnordic dir
 foamnordic build
@@ -51,6 +51,6 @@ files to PyPI:
 python -m twine upload wheelhouse/*.whl
 ```
 
-Use the exact `1.0.3.dev3` pin while validating the development release.
+Use the exact `1.0.3.dev4` pin while validating the development release.
 Publish `1.0.4` after that gate passes to establish the rebuilt project as a
 stable default installation.

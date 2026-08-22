@@ -12,5 +12,11 @@ def quote_command(values: Sequence[object]) -> str:
 
 def toolchain_shell(toolchain: object, command: str) -> tuple[str, ...]:
     prefix = getattr(toolchain, "command")
+    if getattr(toolchain, "wrapper", False):
+        return (
+            str(getattr(toolchain, "shell")),
+            "-lc",
+            "exec " + quote_command((*shlex.split(prefix), "-c", command)),
+        )
     script = f"{prefix}; {command}" if prefix else command
     return (str(getattr(toolchain, "shell")), "-lc", script)

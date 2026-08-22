@@ -87,11 +87,18 @@ foamnordic dir
 foamnordic build
 ```
 
+Joblib/scikit-learn and JAX/Equinox resident runtimes are included in the same
+installation; model backends do not require separate extras.
+
 Outside a source tree, `foamnordic build` verifies that runtime and exits
 without compiling. Inside a FoamNordic source tree, the same command builds and
 installs the C++ development SDK with compact step, timing, and failure-log
 output. OpenFOAM-specific compilation uses the case's `of_cmd` and `shell`
 declaration because its ABI belongs to the selected OpenFOAM environment.
+
+`fno.Math` supplies backend-neutral scalar, array, and physical tensor
+operations for NumPy and JAX closure functions. See the
+[Math API](../docs/python/math-api.md).
 
 The binary wheel also owns the native Longship supervisor used by `Run`.
 For Slurm, `launch()` waits for `RUNNING`, reports the Job ID, and then returns
@@ -134,8 +141,49 @@ foamnordic clobber --workspace /path/to/output --dry-run
 for compact Job ID, Name, Status, Partition, Node, and Elapsed tables.
 `run.observe()` is directly iterable and does not require `with`.
 
+Completed solver fields remain on disk and are opened independently from live
+observations:
+
+```python
+post = result.postprocess
+velocity = post.field("U", time_idx=-1)
+metrics = fno.Postprocess.compare(
+    baseline_result,
+    result,
+    fields=["U", "p"],
+    physical_time=1.0,
+    verbose=True,
+)
+```
+
+`time_idx` and `physical_time` are mutually exclusive. Statistics and
+comparison return plain numerical dictionaries; `verbose=True` adds compact
+Onsaemiro tables. See the
+[Postprocess API](../docs/python/postprocess-api.md).
+
 `fno.Export.onnx(...)` accepts a path without loading the entire ONNX payload
 into Python memory, which is important for large ensembles. FNOM v1 remains a
-small uncompressed native manifest beside that payload. Joblib and Equinox are
-separate execution backends rather than mandatory dependencies of every
-FoamNordic installation.
+small uncompressed native manifest beside that payload.
+`fno.Export.joblib(...)` keeps an uncompressed sibling payload so large
+NumPy-backed estimators can be memory-mapped at worker startup.
+`fno.Export.equinox(...)` records the PyTree leaves in FNOM and reconstructs
+and JIT-compiles the trusted model once. Joblib and Equinox are selected by
+the artifact rather than by separate installation profiles.
+
+All exporters accept fitted scikit-learn preprocessing without embedding the
+Python scaler in the runtime model:
+
+```python
+artifact = fno.Export.joblib(
+    model,
+    path="reactionRate.fnom",
+    inputs={"features": fno.Tensor.vector(components=3)},
+    outputs={"omega": fno.Tensor.scalar()},
+    x_scaler=fitted_x_scaler,
+    y_scaler=fitted_y_scaler,
+)
+```
+
+`StandardScaler`, `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, and affine
+`FunctionTransformer` are converted to FNOM coefficients once; C++ applies
+them for every backend. Both scaler arguments default to `None`.
