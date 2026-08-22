@@ -10,9 +10,9 @@ import sys
 
 import foamnordic as fno
 from foamnordic.execution.launch import _openfoam_library, _submission_environment
-from foamnordic.core.managed import generated_kind
+from foamnordic.core.managed import generated_kind, mark_generated
 from foamnordic.core.native_plan import available as native_available
-from foamnordic.execution.run import _longship_executable
+from foamnordic.execution.run import _launch_process, _longship_executable
 from foamnordic.execution.host_group import main as run_host_group
 
 
@@ -57,6 +57,43 @@ class HostGroupTests(unittest.TestCase):
             self.assertEqual(run_host_group(str(configuration)), 0)
             self.assertFalse(aggregate.exists())
             self.assertTrue(all(not Path(path).exists() for path in ready_files))
+
+
+class RunArtifactTests(unittest.TestCase):
+    def test_slurm_identity_and_timing_are_finalized_after_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work = root / "case-temporary"
+            mark_generated(work, kind="run")
+            logs = work / "logs"
+            logs.mkdir(parents=True)
+            sailing = logs / "Sailing_case.log"
+            harbor = logs / "Harbor_case.log"
+            solver = logs / "Sailing_case.out"
+            job_file = work / ".foamnordic/job.id"
+            job_file.parent.mkdir()
+            job_file.write_text("783987\n", encoding="utf-8")
+            command = (
+                "/bin/sh",
+                "-c",
+                f"printf 'ExecutionTime = 1.25 s  ClockTime = 2 s\\n' > {solver}",
+            )
+            run = _launch_process(
+                command,
+                work_dir=work,
+                process_log=sailing,
+                longship_log=sailing,
+                host_log=harbor,
+                solver_log=solver,
+                name="case_name",
+                job_file=job_file,
+            )
+            result = run.stop(timeout=3)
+
+            self.assertEqual(result.work_dir.name, "case-name-slurm-783987")
+            self.assertEqual(result.job_id, "783987")
+            self.assertIn("[FoamNordic] Timing:", result.longship_log.read_text())
+            self.assertIn("OpenFOAM=00:00:02", result.longship_log.read_text())
 
 
 @unittest.skipUnless(runtime_available(), "binary wheel runtime is not installed")
@@ -142,6 +179,7 @@ class LaunchTests(unittest.TestCase):
             self._write_executable(
                 worker,
                 "#!/bin/sh\n"
+                "test -z \"${FOAMNORDIC_SOLVER_ONLY:-}\" || exit 77\n"
                 "ready=''\n"
                 "while [ $# -gt 0 ]; do\n"
                 "  if [ \"$1\" = --ready-file ]; then ready=$2; shift 2; else shift; fi\n"
@@ -151,13 +189,20 @@ class LaunchTests(unittest.TestCase):
                 "while :; do sleep 1; done\n",
             )
             self._write_executable(tools / "foamDictionary", "#!/bin/sh\nexit 0\n")
-            self._write_executable(tools / "pimpleFoam", "#!/bin/sh\nexit 0\n")
+            self._write_executable(
+                tools / "pimpleFoam",
+                "#!/bin/sh\n"
+                "test \"${FOAMNORDIC_SOLVER_ONLY:-}\" = 1 || exit 78\n",
+            )
             longship = fno.Longship(
                 name="launch-test",
                 case=fno.openfoam.Case(
                     case_dir=source,
                     run_dir=workspace,
-                    of_cmd=f"export PATH={tools}:$PATH",
+                    of_cmd=(
+                        "export FOAMNORDIC_SOLVER_ONLY=1; "
+                        f"export PATH={tools}:$PATH"
+                    ),
                 ),
                 closures=(
                     fno.Closure(
@@ -194,7 +239,11 @@ class LaunchTests(unittest.TestCase):
             self.assertEqual(manifest["metadata"]["plan_digest"], result.plan_digest)
             self.assertEqual(manifest["metadata"]["plan"]["name"], "launch-test")
             self.assertFalse((result.work_dir / "plan.json").exists())
-            identity = f"local-{run.pid}"
+            self.assertRegex(
+                result.work_dir.name,
+                r"^launch-test-local-\d{8}T\d{6}-[0-9a-f]{6}$",
+            )
+            identity = result.work_dir.name.removeprefix("launch-test-")
             self.assertEqual(
                 result.solver_log.name, f"Sailing_launch-test_{identity}.out"
             )
@@ -210,6 +259,7 @@ class LaunchTests(unittest.TestCase):
                 "[FoamNordic] Harbor: launch-test",
                 result.host_log.read_text(),
             )
+            self.assertIn("[FoamNordic] Timing:", result.longship_log.read_text())
             self.assertEqual(result.longship_log.parent.name, "logs")
             self.assertEqual(
                 {path.name for path in result.work_dir.iterdir() if not path.name.startswith(".")},
@@ -250,9 +300,8 @@ class LaunchTests(unittest.TestCase):
                 "baseline\n",
             )
             self.assertEqual(result.summary(display=False).name, "baseline")
-            self.assertEqual(
-                result.solver_log.name, f"Sailing_baseline_local-{run.pid}.out"
-            )
+            identity = result.work_dir.name.removeprefix("baseline-")
+            self.assertEqual(result.solver_log.name, f"Sailing_baseline_{identity}.out")
             self.assertIn("succeeded", result.longship_log.read_text())
             self.assertIn("███████╗", result.host_log.read_text())
 

@@ -9,9 +9,9 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import subprocess
-import tempfile
 from typing import TYPE_CHECKING
 
 from .core.managed import mark_generated
@@ -461,7 +461,19 @@ def prepare_case(
     workspace = longship.case.run_dir.expanduser().resolve()
     runs = workspace / "runs"
     runs.mkdir(parents=True, exist_ok=True)
-    work_dir = Path(tempfile.mkdtemp(prefix=f"{longship.name}-", dir=runs))
+    run_name = (
+        re.sub(r"[^A-Za-z0-9-]+", "-", longship.name).strip("-")
+        or "FoamNordic"
+    )
+    for _ in range(100):
+        work_dir = runs / f"{run_name}-preparing-{secrets.token_hex(4)}"
+        try:
+            work_dir.mkdir(mode=0o700)
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise RuntimeError("Cannot allocate a unique FoamNordic run directory")
     mark_generated(
         work_dir,
         kind="run",

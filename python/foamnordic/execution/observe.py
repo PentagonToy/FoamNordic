@@ -105,6 +105,26 @@ class ObservationStream:
         terminal_seen = False
         while not self._closed:
             emitted = False
+            # A completed run is renamed from its private preparation path to
+            # its durable local/Slurm identity. Follow that atomic rename so
+            # an observation iterator opened before completion can drain the
+            # final records afterwards.
+            current = self._run._work_dir / "observations" / self.path.name
+            if current != self.path:
+                previous_parent = self.path.parent
+                self.path = current
+                offsets = {
+                    current.parent / path.name: offset
+                    for path, offset in offsets.items()
+                    if path.parent == previous_parent
+                }
+                pending = {
+                    exchange_index: {
+                        current.parent / path.name: record
+                        for path, record in group.items()
+                    }
+                    for exchange_index, group in pending.items()
+                }
             paths = sorted(self.path.parent.glob(f"{self.path.stem}*.jsonl"))
             for path in paths:
                 try:

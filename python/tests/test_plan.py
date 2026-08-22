@@ -398,7 +398,11 @@ class PlanTests(unittest.TestCase):
         self.assertIn(sys.executable, rendered)
         self.assertIn("foamnordic.execution.resident", rendered)
         self.assertIn(f"--connections {longship.case.ranks}", rendered)
-        self.assertIn('--key \'{"entropy":[42,0],"path":[],"scope":"global"}\'', rendered)
+        key_index = command.index("--key")
+        self.assertEqual(
+            command[key_index + 1],
+            '{"entropy":[42,0],"path":[],"scope":"global"}',
+        )
 
     def test_transform_selects_the_same_managed_resident(self) -> None:
         example = example_longship()
@@ -426,7 +430,11 @@ class PlanTests(unittest.TestCase):
             )
         rendered = " ".join(command)
         self.assertIn("foamnordic.execution.resident", rendered)
-        self.assertIn('--key \'{"entropy":[42,0],"path":[],"scope":"global"}\'', rendered)
+        key_index = command.index("--key")
+        self.assertEqual(
+            command[key_index + 1],
+            '{"entropy":[42,0],"path":[],"scope":"global"}',
+        )
 
     def test_ml_expression_schemes_are_planned_without_overriding_defaults(self) -> None:
         example = example_longship()

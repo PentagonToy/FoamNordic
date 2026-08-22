@@ -181,10 +181,12 @@ def _host_command(
         values.extend(("--key", program.key.to_json(), "--program", program.name))
     if longship.placement.data_path == "uds":
         values.append("--no-shm")
-    return toolchain_shell(
-        longship.case._toolchain,
-        "exec " + quote_command(values),
-    )
+    # ClosureHost is a FoamNordic backend process, not an OpenFOAM
+    # application.  In particular, wrapping it with OpenFOAM.app on macOS
+    # leaves an unnecessary outer process alive after the worker exits.  The
+    # solver alone owns the case toolchain; backend executables carry their
+    # own runtime paths or use the active Python environment.
+    return tuple(str(value) for value in values)
 
 
 def _host_group_command(

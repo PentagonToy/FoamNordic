@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import atexit
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+import hashlib
 from importlib.resources import files
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import subprocess
 import threading
 from time import monotonic, sleep
 from typing import Callable, Mapping, Sequence, TextIO
+
+from ..core.managed import generated_kind, relocate_generated
 
 
 _ACTIVE_RUNS: set[Run] = set()
@@ -282,6 +287,51 @@ def _format_elapsed(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
+def _slurm_elapsed_seconds(value: str) -> float | None:
+    """Parse Slurm's ``[days-]hours:minutes:seconds`` representation."""
+
+    match = re.fullmatch(
+        r"(?:(?P<days>\d+)-)?(?P<hours>\d+):(?P<minutes>\d+):(?P<seconds>\d+)",
+        value.strip(),
+    )
+    if match is None:
+        return None
+    return (
+        int(match.group("days") or 0) * 86400
+        + int(match.group("hours")) * 3600
+        + int(match.group("minutes")) * 60
+        + int(match.group("seconds"))
+    )
+
+
+def _openfoam_clock_seconds(path: Path) -> float | None:
+    """Read the final OpenFOAM ClockTime without loading a large log."""
+
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            stream.seek(max(0, size - 256 * 1024))
+            text = stream.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    matches = re.findall(
+        r"ExecutionTime\s*=\s*[0-9.eE+-]+\s*s\s+ClockTime\s*=\s*"
+        r"([0-9.eE+-]+)\s*s",
+        text,
+    )
+    if not matches:
+        return None
+    try:
+        return float(matches[-1])
+    except ValueError:
+        return None
+
+
+def _timestamp(value: datetime) -> str:
+    return value.isoformat(timespec="seconds")
+
+
 class Run:
     """A non-blocking native Longship process with one terminal stop operation."""
 
@@ -302,6 +352,7 @@ class Run:
         force_cancel: Callable[[], None] | None = None,
         cleanup_paths: Sequence[Path] = (),
         observation_sources: int = 1,
+        started_at: datetime | None = None,
     ) -> None:
         self._process = process
         self._started = started
@@ -317,6 +368,14 @@ class Run:
         self._force_cancel = force_cancel
         self._cleanup_paths = tuple(Path(path) for path in cleanup_paths)
         self._observation_sources = observation_sources
+        self._started_at = started_at or datetime.now().astimezone()
+        identity_source = (
+            f"{self._started_at.isoformat()}:{process.pid}:{work_dir}"
+        ).encode("utf-8")
+        identity_hash = hashlib.sha256(identity_source).hexdigest()[:6]
+        self._local_identity = (
+            f"local-{self._started_at:%Y%m%dT%H%M%S}-{identity_hash}"
+        )
         self._cancel_requested = False
         self._detached = False
         self._result: Result | None = None
@@ -513,23 +572,55 @@ class Run:
             if exit_code == 0
             else RunStatus.FAILED
         )
+        job_id = self._read_job_id()
+        finished_at = datetime.now().astimezone()
+        timing_started_at = self._started_at
+        total_seconds = monotonic() - self._started
+        if job_id is not None:
+            details = _query_slurm(job_id)
+            scheduled = _slurm_elapsed_seconds(details.get("elapsed", ""))
+            if scheduled is not None:
+                total_seconds = scheduled
+            actual_start = details.get("start", "")
+            if actual_start:
+                try:
+                    timing_started_at = datetime.fromisoformat(actual_start)
+                    if timing_started_at.tzinfo is None:
+                        timing_started_at = timing_started_at.replace(
+                            tzinfo=self._started_at.tzinfo
+                        )
+                except ValueError:
+                    pass
+        openfoam_seconds = _openfoam_clock_seconds(self._solver_log)
+        timing = (
+            f"[FoamNordic] Timing: {_timestamp(timing_started_at)} -> "
+            f"{_timestamp(finished_at)} | total={_format_elapsed(total_seconds)}"
+        )
+        if openfoam_seconds is not None:
+            orchestration_seconds = max(0.0, total_seconds - openfoam_seconds)
+            timing += (
+                f" | OpenFOAM={_format_elapsed(openfoam_seconds)}"
+                f" | orchestration={_format_elapsed(orchestration_seconds)}"
+            )
         with self._longship_log.open("a", encoding="utf-8") as stream:
             print(
                 f"[FoamNordic] Sailing completed: {status.value} ({exit_code})",
                 file=stream,
             )
-        self._finalize_log_names()
+            print(timing, file=stream)
+        self._finalize_log_names(job_id)
+        self._finalize_work_directory(job_id)
         self._result = Result(
             status=status,
             exit_code=exit_code,
-            elapsed_seconds=monotonic() - self._started,
+            elapsed_seconds=total_seconds,
             work_dir=self._work_dir,
             longship_log=self._longship_log,
             host_log=self._host_log,
             solver_log=self._solver_log,
             plan_digest=self._plan_digest,
             name=self._name,
-            job_id=self._read_job_id(),
+            job_id=job_id,
             partition=self._partition,
             node=socket.gethostname(),
         )
@@ -560,8 +651,8 @@ class Run:
         except OSError:
             pass
 
-    def _finalize_log_names(self) -> None:
-        identity = self._read_job_id() or f"local-{self.pid}"
+    def _finalize_log_names(self, job_id: str | None = None) -> None:
+        identity = job_id or self._local_identity
         suffix = _safe_name(identity)
         renamed: list[Path] = []
         for path in (self._longship_log, self._host_log, self._solver_log):
@@ -570,6 +661,47 @@ class Run:
                 path.replace(destination)
             renamed.append(destination)
         self._longship_log, self._host_log, self._solver_log = renamed
+
+    def _finalize_work_directory(self, job_id: str | None = None) -> None:
+        # Low-level lifecycle primitives may be given an arbitrary directory.
+        # Only a prepared, ownership-marked run is safe to rename here.
+        if generated_kind(self._work_dir) != "run":
+            return
+        identity = f"slurm-{job_id}" if job_id is not None else self._local_identity
+        name = _safe_name(self._name).replace("_", "-")
+        destination = self._work_dir.parent / f"{name}-{identity}"
+        if destination == self._work_dir:
+            return
+        if destination.exists():
+            raise FileExistsError(
+                f"FoamNordic final run directory already exists: {destination}"
+            )
+        previous = self._work_dir
+        previous.replace(destination)
+        relocate_generated(destination, previous=previous)
+
+        def relocated(path: Path | None) -> Path | None:
+            if path is None:
+                return None
+            try:
+                relative = path.relative_to(previous)
+            except ValueError:
+                return path
+            return destination / relative
+
+        def relocated_required(path: Path) -> Path:
+            value = relocated(path)
+            assert value is not None
+            return value
+
+        self._work_dir = destination
+        self._longship_log = relocated_required(self._longship_log)
+        self._host_log = relocated_required(self._host_log)
+        self._solver_log = relocated_required(self._solver_log)
+        self._job_file = relocated(self._job_file)
+        self._cleanup_paths = tuple(
+            relocated(path) or path for path in self._cleanup_paths
+        )
 
 
 def _query_slurm(job_id: str) -> dict[str, str]:
@@ -731,6 +863,7 @@ def _launch_process(
 ) -> Run:
     """Start a lifecycle-owning process and bind it to the public Run handle."""
 
+    started_at = datetime.now().astimezone()
     _initialize_sailing_log(longship_log, name)
     _initialize_harbor_log(host_log, name)
     mode = "ab" if process_log == longship_log else "wb"
@@ -761,4 +894,5 @@ def _launch_process(
         force_cancel=force_cancel,
         cleanup_paths=cleanup_paths,
         observation_sources=observation_sources,
+        started_at=started_at,
     )

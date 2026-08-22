@@ -143,8 +143,12 @@ with the standard large banner. Detailed ClosureHost output remains available
 in `Harbor_<name>_<jobid>.log`, which begins with the same banner. These three
 files live under `logs/`, generated
 scheduler scripts live under `slurm/`, and native observation shards use an
-`observations/` directory only when requested. Local identities use
-`local-<pid>`. The hidden ownership manifest also carries the immutable
+`observations/` directory only when requested. After completion, the complete
+run directory is named `<name>-slurm-<jobid>` for batch work or
+`<name>-local-<timestamp>-<short-hash>` locally. The same identity is appended
+to the three log names. Sailing logs finish with a compact start, finish,
+total, OpenFOAM, and orchestration timing line. The hidden ownership manifest
+also carries the immutable
 compiled plan and digest. Preparation, submission, and job-identity state stay
 under hidden `.foamnordic/` diagnostics so they remain available after a
 failure without cluttering the public run layout.

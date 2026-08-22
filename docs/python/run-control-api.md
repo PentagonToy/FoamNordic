@@ -344,9 +344,11 @@ Abrupt process death and node loss cannot guarantee cleanup.
 `result.summary(style="short")` and `"compact"` display Job ID, Name, Status,
 Partition, Node, and Elapsed through Onsaemiro. `"long"` and `"expanded"` also
 show exit code, work directory, all output paths, and plan digest. Final files
-under `logs/` include the scheduler identity, for example
-`Sailing_NACA4412_<jobid>.log` and `Sailing_NACA4412_<jobid>.out`; local runs
-use `local-<pid>`. Generated batch and submission scripts are grouped under
+under `logs/` include the scheduler identity. Completed run directories use
+`<name>-slurm-<jobid>` or `<name>-local-<timestamp>-<short-hash>`, and the same
+identity is appended to Sailing and Harbor filenames. The Sailing log ends
+with a compact start/finish and OpenFOAM-versus-orchestration timing summary.
+Generated batch and submission scripts are grouped under
 `slurm/`. The hidden ownership manifest contains the compiled plan, while
 hidden `.foamnordic/` state retains preparation and submission diagnostics and
 the scheduler identity needed for cancellation.
