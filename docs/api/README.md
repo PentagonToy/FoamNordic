@@ -9,6 +9,7 @@ and solver integration.
 
 - [API design](design.md)
 - [Run-control API](run-control-api.md)
+- [FNOM artifact API](model-artifact-api.md)
 - [Postprocess API](postprocess-api.md)
 - [Combustion API](combustion-api.md)
 - [Reproducible random keys](random-api.md)

@@ -1,5 +1,9 @@
 # Model artifacts and native preprocessing
 
+The canonical binary layout and compatibility contract are specified in
+[FNOM artifact format](fnom-format.md). This document describes how supported
+backend payloads execute behind that common boundary.
+
 FoamNordic supports three user-facing model artifact families:
 
 - **Equinox** for JAX/Equinox parameter trees;
@@ -101,15 +105,17 @@ scaling, request ordering, output inverse scaling, bypass merge, and shutdown.
 This isolates Python overhead to model evaluation and prevents the earlier
 design from moving full OpenFOAM fields through Python for every operation.
 The embedded `.joblib` stream is uncompressed and loaded once when the managed
-worker starts. On Linux and macOS, an aligned `FNOBND2` payload is opened
-through the process descriptor namespace and its arrays use `mmap_mode="r"`
-directly against the single `.fnom` file. FoamNordic verifies that reopening
-the descriptor preserves the payload offset before enabling this path. Kernels,
-filesystems, or legacy bundles that do not provide that behavior automatically
-fall back to streaming the payload into private temporary storage and mapping
-that file. Both paths avoid retaining a complete embedded byte stream plus a
-decoded copy. Staging, when required, is a one-time startup operation outside
-the exchange loop and follows the cluster's normal `TMPDIR` policy.
+worker starts. On Linux and macOS, the Joblib unpickler begins at the aligned
+`FNOBND2` payload position while NumPy receives the real `.fnom` filename and
+absolute array offsets. Its arrays therefore use `mmap_mode="r"` directly
+against the single bundle without relying on platform-specific descriptor
+paths. FoamNordic checks the supported Joblib loader interface at runtime.
+Different Joblib interfaces, mmap failures, and legacy unaligned bundles
+automatically fall back to streaming the payload into private temporary
+storage and mapping that file. Both paths avoid retaining a complete embedded
+byte stream plus a decoded copy. Staging, when required, is a one-time startup
+operation outside the exchange loop and follows the cluster's normal `TMPDIR`
+policy.
 Joblib payloads are pickle-based and must be trusted. Legacy split artifacts
 retain their direct `mmap_mode="r"` startup path.
 

@@ -166,6 +166,29 @@ Python tensor-arithmetic path, not in SHM payload integrity, model correction
 ordering, or OpenFOAM equation assembly. The diagnostic source and installed
 runtime were restored after the measurement.
 
+## 2026-08-29: Linux direct mmap of embedded Joblib payloads
+
+A startup microbenchmark on CSC Roihu login nodes used Python 3.12, NumPy
+2.5.2, Joblib 1.5.3, and a 32 MiB uncompressed array embedded in one
+`FNOBND2` file. The payload began at byte 192, a 64-byte boundary. Its Joblib
+array began 272 bytes into the payload and was mapped at absolute FNOM byte
+464. The mapped address was 16-byte aligned, the backing filename was the
+`.fnom` bundle itself, and prediction and end-to-end payload checks passed.
+
+| Loader | Startup | RSS increase | Temporary payload file | Array backing |
+|---|---:|---:|---|---|
+| Streamed staging fallback | 10.684 ms | 16 KiB | yes | staged Joblib file |
+| Direct absolute-offset mmap | 0.470 ms | 16 KiB | no | original FNOM bundle |
+
+The observed startup ratio was approximately 22.7 in favor of direct mapping.
+The two measurements ran on different Roihu login nodes, so the ratio is a
+development indication rather than a controlled performance claim. More
+importantly, the direct run verified the intended storage semantics on Linux:
+`numpy.memmap` referenced the original FNOM file, no payload copy was created,
+and the resident model remained correct. The production loader detects its
+supported Joblib interface and retains the staged mmap path as a compatibility
+fallback.
+
 ## Release performance gate
 
 The microbenchmarks detect transport regressions. The scientific release gate

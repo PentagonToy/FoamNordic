@@ -98,6 +98,31 @@ class ExportTests(unittest.TestCase):
             self.assertFalse((root / "reaction-rate.onnx").exists())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_models_load_exposes_read_only_fnom_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = fno.export.onnx(
+                b"onnx-payload",
+                path=Path(directory) / "reaction-rate.fnom",
+                name="reaction-rate",
+                inputs={"c": fno.Tensor.scalar()},
+                outputs={"omega_c": fno.Tensor.scalar()},
+            )
+            artifact = fno.Models.load(path)
+
+        self.assertEqual(artifact.name, "reaction-rate")
+        self.assertEqual(artifact.container_version, 2)
+        self.assertEqual(artifact.schema_version, 1)
+        self.assertEqual(artifact.backend, "onnx")
+        self.assertEqual(artifact.inputs[0].name, "c")
+        self.assertEqual(artifact.outputs[0].name, "omega_c")
+        self.assertEqual(artifact.payload_size, len(b"onnx-payload"))
+        self.assertIn("FnomArtifact", dir(fno.Models))
+
+    def test_models_load_requires_fnom_extension(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"\.fnom extension"):
+            fno.Models.load("model.onnx")
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_path_backed_payload_is_embedded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -267,12 +292,22 @@ class ExportTests(unittest.TestCase):
             self.assertIsInstance(embedded, _EmbeddedPayload)
             mapped, storage, mode = _load_joblib(embedded, joblib)
             self.assertIsInstance(mapped.padding, np.memmap)
-            self.assertIn(mode, {"direct", "staged"})
+            self.assertEqual(mode, "direct")
             self.assertEqual(embedded.offset % 64, 0)
-            if mode == "direct":
-                self.assertIsNone(storage)
-            else:
-                self.assertIsNotNone(storage)
+            self.assertIsNone(storage)
+            self.assertTrue(Path(mapped.padding.filename).samefile(large_manifest))
+            self.assertGreaterEqual(mapped.padding.offset, embedded.offset)
+
+            with patch(
+                "foamnordic.execution.resident.inspect.signature",
+                return_value=inspect.Signature(),
+            ):
+                staged, staged_storage, staged_mode = _load_joblib(
+                    embedded, joblib
+                )
+            self.assertEqual(staged_mode, "staged")
+            self.assertIsNotNone(staged_storage)
+            self.assertIsInstance(staged.padding, np.memmap)
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_equinox_model_exports_tree_metadata_and_evaluates(self) -> None:

@@ -4,6 +4,11 @@
 
 # FoamNordic
 
+FNOM (FoamNordic Model) is FoamNordic's self-contained, backend-neutral
+execution artifact. It binds a backend payload to the tensor contract,
+preprocessing metadata, runtime requirements, and compatibility rules needed
+by coupled simulations.
+
 FoamNordic is a native C++ and Python framework for running ordinary OpenFOAM
 cases and machine-learning closure cases through the same reproducible
 pipeline. Closure exchange stays outside Python: Fjord carries atomic fields

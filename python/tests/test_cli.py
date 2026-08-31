@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import redirect_stdout
 from io import StringIO
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -73,14 +74,48 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stopped.exception.code, 0)
         self.assertEqual(output.getvalue().strip(), "foamnordic 1.0.4")
 
-    def test_top_level_help_lists_dir_build_and_clobber(self) -> None:
+    def test_top_level_help_lists_runtime_and_fnom_commands(self) -> None:
         output = StringIO()
         with self.assertRaises(SystemExit) as stopped, redirect_stdout(output):
             main(["--help"])
         self.assertEqual(stopped.exception.code, 0)
         self.assertIn("dir", output.getvalue())
         self.assertIn("build", output.getvalue())
+        self.assertIn("inspect", output.getvalue())
+        self.assertIn("validate", output.getvalue())
         self.assertIn("clobber", output.getvalue())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_fnom_inspect_and_validate_are_discoverable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = fno.export.onnx(
+                b"onnx-payload",
+                path=Path(directory) / "model.fnom",
+                name="test-model",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+            )
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main(["inspect", str(path), "--json"]), 0)
+            record = json.loads(output.getvalue())
+            self.assertEqual(record["name"], "test-model")
+            self.assertEqual(record["container_version"], 2)
+            self.assertEqual(record["backend"], "onnx")
+
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main(["validate", str(path)]), 0)
+            self.assertIn("Valid FNOM", output.getvalue())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_fnom_validate_rejects_corrupt_container(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "broken.fnom"
+            path.write_bytes(b"FNOBND2\0")
+            with patch("sys.stderr", new_callable=StringIO) as errors:
+                self.assertEqual(main(["validate", str(path)]), 1)
+            self.assertIn("foamnordic: error", errors.getvalue())
 
     def test_dir_reports_active_installation_paths(self) -> None:
         output = StringIO()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import hashlib
+import json
 import os
 from pathlib import Path
 import shlex
@@ -555,6 +556,102 @@ def _clobber(args: argparse.Namespace, stream: TextIO) -> int:
     return 0
 
 
+def _artifact_record(artifact) -> dict[str, object]:
+    def ports(values) -> list[dict[str, object]]:
+        return [
+            {
+                "name": value.name,
+                "components": value.components,
+                "dtype": value.dtype,
+            }
+            for value in values
+        ]
+
+    return {
+        "path": str(artifact.path),
+        "name": artifact.name,
+        "container_version": artifact.container_version,
+        "schema_version": artifact.schema_version,
+        "backend": artifact.backend,
+        "runtime": artifact.runtime,
+        "bundled": artifact.bundled,
+        "size": artifact.size,
+        "payload_offset": artifact.payload_offset,
+        "payload_size": artifact.payload_size,
+        "inputs": ports(artifact.inputs),
+        "outputs": ports(artifact.outputs),
+        "input_scaler": artifact.input_scaler,
+        "output_scaler": artifact.output_scaler,
+    }
+
+
+def _inspect_fnom(args: argparse.Namespace, stream: TextIO) -> int:
+    from .models import load
+
+    artifact = load(args.artifact)
+    record = _artifact_record(artifact)
+    if args.json:
+        print(json.dumps(record, indent=2), file=stream)
+        return 0
+
+    terminal = _Terminal(stream)
+    terminal.section(f"FNOM artifact: {artifact.name}")
+    inputs = ", ".join(
+        f"{item.name}[{item.components}] {item.dtype}" for item in artifact.inputs
+    )
+    outputs = ", ".join(
+        f"{item.name}[{item.components}] {item.dtype}" for item in artifact.outputs
+    )
+    scalers = (
+        f"input={artifact.input_scaler or 'none'}, "
+        f"output={artifact.output_scaler or 'none'}"
+    )
+    payload = (
+        f"embedded, {artifact.payload_size} B"
+        if artifact.bundled
+        else "external legacy payload"
+    )
+    values = (
+        ("File", artifact.path),
+        (
+            "Container",
+            f"FNOBND{artifact.container_version}"
+            if artifact.bundled
+            else "manifest-only",
+        ),
+        ("Manifest", f"schema {artifact.schema_version}"),
+        ("Backend", artifact.backend),
+        ("Runtime", artifact.runtime or "default"),
+        ("Inputs", inputs),
+        ("Outputs", outputs),
+        ("Scalers", scalers),
+        ("Payload", payload),
+        ("File size", f"{artifact.size} B"),
+    )
+    width = max(len(name) for name, _ in values)
+    for name, value in values:
+        print(f"{name:<{width}}  {value}", file=stream)
+    return 0
+
+
+def _validate_fnom(args: argparse.Namespace, stream: TextIO) -> int:
+    from .models import load
+
+    artifact = load(args.artifact)
+    container = (
+        f"FNOBND{artifact.container_version}"
+        if artifact.bundled
+        else "manifest-only"
+    )
+    print(
+        f"Valid FNOM: {artifact.path} "
+        f"({container}, schema {artifact.schema_version}, "
+        f"{artifact.backend})",
+        file=stream,
+    )
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     from . import __version__
 
@@ -587,6 +684,29 @@ def _parser() -> argparse.ArgumentParser:
         help="skip the native ONNX ClosureHost",
     )
     build.add_argument("--dry-run", action="store_true", help="show commands only")
+    inspect_artifact = subcommands.add_parser(
+        "inspect",
+        help="show the execution contract of an FNOM artifact",
+        description=(
+            "Read and validate an FNOM container and display its model backend, "
+            "tensor contract, scalers, runtime, and payload layout."
+        ),
+    )
+    inspect_artifact.add_argument("artifact", type=Path, metavar="MODEL.fnom")
+    inspect_artifact.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable metadata",
+    )
+    validate_artifact = subcommands.add_parser(
+        "validate",
+        help="validate an FNOM container and execution contract",
+        description=(
+            "Validate FNOM structure, bounds, versions, tensor contracts, scalers, "
+            "and embedded payload layout without executing the model payload."
+        ),
+    )
+    validate_artifact.add_argument("artifact", type=Path, metavar="MODEL.fnom")
     clobber = subcommands.add_parser(
         "clobber",
         help="remove only marker-owned build and run assets",
@@ -627,6 +747,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             return _build(args, sys.stdout)
         except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"foamnordic: error: {error}", file=sys.stderr)
+            return 1
+    if args.command == "inspect":
+        try:
+            return _inspect_fnom(args, sys.stdout)
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"foamnordic: error: {error}", file=sys.stderr)
+            return 1
+    if args.command == "validate":
+        try:
+            return _validate_fnom(args, sys.stdout)
+        except (OSError, RuntimeError, ValueError) as error:
             print(f"foamnordic: error: {error}", file=sys.stderr)
             return 1
     if args.command == "clobber":

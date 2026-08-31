@@ -167,28 +167,33 @@ def _activate_joblib_runtime(runtime: str) -> None:
     patch_sklearn(verbose=False)
 
 
-def _fd_payload_path(stream, offset: int) -> str | None:
-    """Return a descriptor path only when reopening preserves its offset."""
+def _direct_embedded_joblib(path: _EmbeddedPayload, joblib):
+    """Load one aligned payload while mapping arrays from its FNOM file."""
 
-    candidates = (
-        (f"/proc/self/fd/{stream.fileno()}", f"/dev/fd/{stream.fileno()}")
-        if sys.platform.startswith("linux")
-        else (f"/dev/fd/{stream.fileno()}", f"/proc/self/fd/{stream.fileno()}")
-    )
-    for candidate in candidates:
-        try:
-            stream.seek(offset)
-            descriptor = os.open(candidate, os.O_RDONLY)
-            try:
-                reopened_offset = os.lseek(descriptor, 0, os.SEEK_CUR)
-            finally:
-                os.close(descriptor)
-            stream.seek(offset)
-        except OSError:
-            continue
-        if reopened_offset == offset:
-            return candidate
-    return None
+    numpy_pickle = getattr(joblib, "numpy_pickle", None)
+    unpickle = getattr(numpy_pickle, "_unpickle", None)
+    if not callable(unpickle):
+        return None
+    try:
+        parameters = inspect.signature(unpickle).parameters
+    except (TypeError, ValueError):
+        return None
+    if not {"fobj", "ensure_native_byte_order", "filename", "mmap_mode"}.issubset(
+        parameters
+    ):
+        return None
+
+    try:
+        with path.path.open("rb") as stream:
+            stream.seek(path.offset)
+            return unpickle(
+                stream,
+                ensure_native_byte_order=False,
+                filename=os.fspath(path.path),
+                mmap_mode="r",
+            )
+    except (OSError, TypeError, ValueError):
+        return None
 
 
 def _staged_joblib(path: _EmbeddedPayload, joblib):
@@ -213,20 +218,13 @@ def _load_joblib(path, joblib):
                 return joblib.load(path), None, "file"
         return joblib.load(path), None, "buffered"
 
-    # FNOBND2 places the standalone Joblib stream at a 64-byte boundary.  Keep
-    # the bundle descriptor open while Joblib follows its descriptor path so
-    # NumPy can map array pages directly from the single FNOM file.
+    # FNOBND2 places the standalone Joblib stream at a 64-byte boundary.  The
+    # unpickler starts at that absolute file position, so its NumPy array
+    # offsets map directly into the single FNOM file on both Linux and macOS.
     if path.offset % 64 == 0:
-        with path.path.open("rb") as stream:
-            descriptor_path = _fd_payload_path(stream, path.offset)
-            if descriptor_path is not None:
-                stream.seek(path.offset)
-                try:
-                    return joblib.load(descriptor_path, mmap_mode="r"), None, "direct"
-                except Exception:
-                    # Descriptor reopening differs across kernels and filesystems.
-                    # The streamed fallback preserves correctness and mmap use.
-                    pass
+        model = _direct_embedded_joblib(path, joblib)
+        if model is not None:
+            return model, None, "direct"
     return _staged_joblib(path, joblib)
 
 
