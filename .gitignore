@@ -11,6 +11,11 @@ Testing/
 *.dylib
 *.log
 tutorials/openfoam_tutorials/**/constant/polyMesh/
+tutorials/openfoam_tutorials/**/processor*/
+tutorials/openfoam_tutorials/**/postProcessing/
+tutorials/openfoam_tutorials/**/[1-9]*/
+tutorials/foamnordic_tutorials/**/model/
+tutorials/foamnordic_tutorials/**/output/
 __pycache__/
 .pytest_cache/
 *.py[cod]
