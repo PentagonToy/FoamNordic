@@ -24,8 +24,41 @@ The public layer includes:
 - element-wise operations: `abs`, `sqrt`, `square`, `exp`, `expm1`, `log`,
   `log1p`, `sin`, `cos`, `tan`, `tanh`, `minimum`, `maximum`, `clip`, `where`;
 - reductions and layouts: `sum`, `mean`, `min`, `max`, `reshape`, `transpose`,
-  `stack`, `concatenate`, `einsum`;
+  `stack`, `concatenate`, `einsum`, `matmul`;
 - physical tensor operations: `mag`, `symm`, `dev`, `dot`, `ddot`.
+
+Numerical safeguards belong to the model function rather than the shared math
+namespace. Prefer the analytical limit over an arbitrary absolute epsilon when
+that limit is known. For example, the WALE denominator and numerator both
+vanish in uniform flow, where the physical limit is exactly `nut = 0`:
+
+```python
+def wale(velocity_grad, delta, C_w=0.325):
+    gradient_squared = fno.Math.matmul(velocity_grad, velocity_grad)
+    traceless_squared = fno.Math.dev(fno.Math.symm(gradient_squared))
+    strain = fno.Math.symm(velocity_grad)
+
+    sd2 = fno.Math.maximum(
+        fno.Math.ddot(traceless_squared, traceless_squared),
+        0.0,
+    )
+    s2 = fno.Math.maximum(fno.Math.ddot(strain, strain), 0.0)
+    numerator = sd2**1.5
+    denominator = s2**2.5 + sd2**1.25
+
+    safe_denominator = fno.Math.where(
+        denominator > 0.0,
+        denominator,
+        1.0,
+    )
+    nut = (C_w * delta) ** 2 * numerator / safe_denominator
+
+    return fno.Math.where(denominator > 0.0, nut, 0.0)
+```
+
+This remains invariant across float precision, field scale, and MPI
+decomposition. A model-specific `atol` or `rtol` should be exposed explicitly
+only when its equations do not provide a defined zero-limit policy.
 
 For compatibility, existing declaration methods under `fno.Math` remain
 available. New code should use `fno.Field.grad("U")` for a native

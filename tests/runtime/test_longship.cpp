@@ -200,6 +200,24 @@ void test_supervisor_removes_readiness_after_forced_host_stop() {
         "Longship left its readiness marker after host termination.");
 }
 
+void test_supervisor_signals_resident_host_before_grace_expires() {
+    const auto ready = readiness_path("prompt-host-stop");
+    const auto started = std::chrono::steady_clock::now();
+    const auto result = foamnordic::native::sail_longship({
+        shell_command("touch " + ready.string() + "; while :; do sleep 1; done"),
+        shell_command("exit 0"),
+        {ready},
+        std::chrono::seconds(1),
+        std::chrono::seconds(1),
+    });
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    require(result.success(), "Prompt host shutdown changed solver success.");
+    require(
+        elapsed < std::chrono::milliseconds(500),
+        "Longship delayed SIGTERM until the host grace period expired.");
+}
+
 void test_supervisor_propagates_solver_failure() {
     const auto ready = readiness_path("solver-failure");
     const auto result = foamnordic::native::sail_longship({
@@ -311,6 +329,7 @@ int main() {
     test_longship_cli_rejects_incomplete_launch();
     test_supervisor_completes_with_solver();
     test_supervisor_removes_readiness_after_forced_host_stop();
+    test_supervisor_signals_resident_host_before_grace_expires();
     test_supervisor_propagates_solver_failure();
     test_supervisor_propagates_host_failure();
     test_supervisor_accepts_protocol_host_shutdown_before_solver_exit();

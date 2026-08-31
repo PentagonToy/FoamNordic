@@ -9,8 +9,8 @@ machine-learning closure workloads. It keeps atomic field exchange, packing,
 scaling, and lifecycle in the native runtime while exposing a compact
 declarative API for cases, placement, launch, observations, and results.
 
-FoamNordic is active research software. This development line is
-`1.0.3.dev6`.
+FoamNordic is active research software. The current stable release is
+`1.0.4`.
 
 ## Install
 

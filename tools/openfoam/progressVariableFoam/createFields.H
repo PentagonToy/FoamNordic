@@ -43,10 +43,37 @@ const Foam::scalar progressSchmidt =
     transportProperties.getOrDefault<Foam::scalar>("progressSchmidt", 1.0);
 const Foam::scalar varianceSchmidt =
     transportProperties.getOrDefault<Foam::scalar>("varianceSchmidt", 1.0);
-if (progressSchmidt <= 0 || varianceSchmidt <= 0) {
+const Foam::scalar varianceDissipationCoefficient =
+    transportProperties.getOrDefault<Foam::scalar>(
+        "varianceDissipationCoefficient", 2.0);
+if (
+    progressSchmidt <= 0
+ || varianceSchmidt <= 0
+ || varianceDissipationCoefficient < 0) {
     FatalIOErrorInFunction(transportProperties)
-        << "progressSchmidt and varianceSchmidt must be positive"
+        << "progressSchmidt and varianceSchmidt must be positive and "
+        << "varianceDissipationCoefficient must be non-negative"
         << Foam::exit(Foam::FatalIOError);
+}
+
+// The portable reference solver uses the same cube-root-volume filter width
+// as its supported LES cases. Production solvers may replace this field with
+// their turbulence model's native delta while retaining the equation contract.
+Foam::volScalarField filterWidth(
+    Foam::IOobject(
+        "progressVariableDelta",
+        runTime.timeName(),
+        mesh,
+        Foam::IOobject::NO_READ,
+        Foam::IOobject::NO_WRITE),
+    mesh,
+    Foam::dimensionedScalar("delta", Foam::dimLength, Foam::Zero));
+forAll(filterWidth, celli) {
+    filterWidth[celli] = Foam::cbrt(mesh.V()[celli]);
+}
+forAll(filterWidth.boundaryField(), patchi) {
+    filterWidth.boundaryFieldRef()[patchi] =
+        filterWidth.boundaryField()[patchi].patchInternalField();
 }
 
 Foam::IOdictionary combustionDictionary(

@@ -76,6 +76,7 @@ def validate_case(longship: Longship) -> None:
         )
     if len(longship.observations) > 1:
         raise NotImplementedError("launch currently supports one observation schedule")
+    _validate_observation_fields(longship)
     if not programs:
         if longship.observations:
             raise NotImplementedError(
@@ -98,6 +99,40 @@ def validate_case(longship: Longship) -> None:
         raise NotImplementedError(
             "attached launch currently supports auto, shm, and uds; central UCX "
             "remains an explicit HPC validation topology"
+        )
+
+
+def _validate_observation_fields(longship: Longship) -> None:
+    """Reject unavailable observation fields before launching the workload."""
+
+    if not longship.observations:
+        return
+
+    supported_classes = {
+        "volScalarField",
+        "volVectorField",
+        "volSphericalTensorField",
+        "volSymmTensorField",
+        "volTensorField",
+    }
+    available = {
+        name
+        for name, metadata in longship.case.fields.items()
+        if metadata.field_class in supported_classes
+    }
+    for closure in longship.closure_programs:
+        contract = adapter_contract(closure.name)
+        if contract is not None:
+            available.update(contract.outputs)
+
+    requested = set(longship.observations[0].summaries)
+    missing = sorted(requested - available)
+    if missing:
+        missing_text = ", ".join(missing)
+        available_text = ", ".join(sorted(available)) or "none"
+        raise ValueError(
+            f"Observe requested unavailable OpenFOAM field(s): {missing_text}. "
+            f"Available observable fields: {available_text}"
         )
 
 

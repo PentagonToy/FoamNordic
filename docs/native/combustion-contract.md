@@ -113,12 +113,17 @@ The reference solver uses `psiReactionThermo` and a transient PIMPLE loop. It
 solves configurable progress and variance fields, invokes
 `combustion->correct()` after those solves, and then continues pressure-density
 coupling. Progress diffusion uses `muEff/progressSchmidt`; variance is a
-portable passive-moment equation using `muEff/varianceSchmidt`, bounded by
-`0 <= variance <= progress*(1-progress)`. The field binding and Schmidt numbers
-live in `constant/progressVariableTransportProperties`.
+transported LES moment using `muEff/varianceSchmidt`, bounded by
+`0 <= variance <= progress*(1-progress)`. Its SGS production is
+`2*(mu_t/Sc_t)*|grad(progress)|^2` and its modeled dissipation is
+`Cchi*(mu_t/Sc_t)*variance/delta^2`, matching the transported-variance form
+used by the flameletFoam reference after the molecular-gradient contribution
+cancels. The portable solver uses `delta=cubeRootVol`; the field binding,
+Schmidt numbers, and `Cchi` live in
+`constant/progressVariableTransportProperties`.
 
-This scope is intentional. The solver does not copy fork-specific variance
-production/destruction methods, does not support local-time stepping, and does
+This scope is intentional. The solver does not copy a fork-specific turbulence
+class or scalar-dissipation field, does not support local-time stepping, and does
 not solve stock species or energy equations. Manifold outputs own the selected
 species transaction. A production FPV thermodynamics adapter is still needed
 before manifold enthalpy and temperature can replace a solver family's native

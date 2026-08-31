@@ -87,6 +87,20 @@ class MathTests(unittest.TestCase):
         np.testing.assert_allclose(fno.Math.sqrt(positive), np.array([0.0, 2.0]))
         self.assertEqual(production.shape, (2,))
 
+    def test_numpy_matmul(self) -> None:
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("NumPy is optional")
+
+        left = np.arange(18, dtype=np.float32).reshape(2, 3, 3)
+        right = np.swapaxes(left, -1, -2)
+
+        np.testing.assert_allclose(
+            fno.Math.matmul(left, right),
+            np.matmul(left, right),
+        )
+
     def test_jax_namespace_survives_jit(self) -> None:
         try:
             import jax
@@ -101,6 +115,15 @@ class MathTests(unittest.TestCase):
 
         result = closure(jnp.asarray([-1.0, 4.0]))
         np.testing.assert_allclose(np.asarray(result), np.array([0.0, 2.0]))
+
+        @jax.jit
+        def tensor_closure(left, right):
+            return fno.Math.matmul(left, right)
+
+        left = jnp.eye(3, dtype=jnp.float32)[None, ...]
+        result = tensor_closure(left, left)
+        expected = np.eye(3, dtype=np.float32)[None, ...]
+        np.testing.assert_allclose(np.asarray(result), expected)
 
     def test_public_directory_contains_math(self) -> None:
         self.assertIn("Math", dir(fno))

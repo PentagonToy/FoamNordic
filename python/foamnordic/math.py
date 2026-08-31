@@ -228,6 +228,15 @@ class Math:
         return namespace.einsum(subscripts, *operands)
 
     @staticmethod
+    def matmul(left, right):
+        """Multiply arrays over their final two dimensions."""
+
+        namespace = _namespace(left, right)
+        if namespace is None:
+            raise TypeError("Math.matmul requires NumPy or JAX arrays")
+        return namespace.matmul(left, right)
+
+    @staticmethod
     def mag(value):
         """Return per-cell scalar, vector, or tensor magnitude."""
 

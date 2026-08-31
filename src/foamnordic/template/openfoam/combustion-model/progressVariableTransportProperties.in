@@ -14,3 +14,9 @@ varianceField     @VARIANCE_FIELD@;
 // replace these diffusion terms while retaining the same source contract.
 progressSchmidt   1.0;
 varianceSchmidt   1.0;
+
+// Transported LES variance model:
+//   production  = 2*(mu_t/Sc_t)*|grad(c)|^2
+//   dissipation = Cchi*(mu_t/Sc_t)*c_var/delta^2
+// The reference solver uses delta=cubeRootVol.
+varianceDissipationCoefficient 2.0;

@@ -126,6 +126,13 @@ class SlurmMetadataTests(unittest.TestCase):
             with (
                 patch.dict(os.environ, {}, clear=False),
                 patch(
+                    "foamnordic.execution.run.__file__",
+                    str(
+                        Path(directory)
+                        / "installed/foamnordic/execution/run.py"
+                    ),
+                ),
+                patch(
                     "foamnordic.execution.run.find_spec",
                     return_value=Mock(origin=str(native)),
                 ),

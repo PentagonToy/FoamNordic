@@ -28,7 +28,7 @@ repository.
 python -m twine upload --repository testpypi wheelhouse/*.whl
 ```
 
-Verify the development release in a fresh environment. The extra index is
+Verify the release in a fresh environment. The extra index is
 needed because runtime dependencies normally come from PyPI, not TestPyPI:
 
 ```console
@@ -38,7 +38,7 @@ python -m pip install --upgrade pip
 python -m pip install \
     --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
-    foamnordic==1.0.3.dev6
+    foamnordic==1.0.4
 foamnordic --version
 foamnordic dir
 module load openfoam/2512  # use the target site's command
@@ -56,6 +56,5 @@ files to PyPI:
 python -m twine upload wheelhouse/*.whl
 ```
 
-Use the exact `1.0.3.dev6` pin while validating the development release.
-Publish `1.0.4` after that gate passes to establish the rebuilt project as a
-stable default installation.
+Use the exact `1.0.4` pin while validating the stable release, then publish
+the same six immutable wheel files to PyPI after the TestPyPI gate passes.

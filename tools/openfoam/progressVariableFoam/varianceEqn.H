@@ -1,8 +1,20 @@
+Foam::tmp<Foam::volScalarField> varianceSgsDiffusivity(
+    turbulence->mut() / varianceSchmidt);
+
 Foam::fvScalarMatrix varianceEqn(
     Foam::fvm::ddt(rho, variance)
   + Foam::fvm::div(phi, variance)
   - Foam::fvm::laplacian(turbulence->muEff() / varianceSchmidt, variance)
+  + Foam::fvm::Sp(
+        varianceDissipationCoefficient
+      * varianceSgsDiffusivity()
+      / Foam::sqr(filterWidth),
+        variance)
  ==
+    2.0
+  * varianceSgsDiffusivity()
+  * Foam::magSqr(Foam::fvc::grad(progress))
+  +
     fvOptions(rho, variance));
 
 varianceEqn.relax();

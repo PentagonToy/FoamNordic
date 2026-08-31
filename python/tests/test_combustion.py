@@ -337,6 +337,7 @@ class CombustionDeclarationTests(unittest.TestCase):
         self.assertIn("varianceField     c_var", rendered)
         self.assertIn("progressSchmidt   1.0", rendered)
         self.assertIn("varianceSchmidt   1.0", rendered)
+        self.assertIn("varianceDissipationCoefficient 2.0", rendered)
 
     def test_progress_variable_native_coordinator_preserves_call_order(
         self,

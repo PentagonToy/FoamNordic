@@ -306,10 +306,11 @@ LongshipResult sail_longship(
             solver.terminate(launch.termination_grace);
         }
     } else {
-        host.wait_for_change(launch.termination_grace);
-        if (!host.finished()) {
-            host.terminate(launch.termination_grace);
-        }
+        // ClosureHost is a resident service and is not expected to exit merely
+        // because the solver has completed. Ask it to stop immediately; the
+        // grace period bounds shutdown after SIGTERM instead of delaying the
+        // signal itself.
+        host.terminate(launch.termination_grace);
     }
     host.join();
     solver.join();

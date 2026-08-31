@@ -249,6 +249,96 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn("retention", parameters)
         self.assertNotIn("Retention", dir(fno))
 
+    def test_observe_rejects_missing_field_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "case"
+            for relative in (
+                "0/U",
+                "0/p",
+                "system/controlDict",
+                "system/fvSchemes",
+                "system/fvSolution",
+                "constant/transportProperties",
+            ):
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            write_mesh(source)
+            case = fno.OpenFOAM.Case(case_dir=source, run_dir=root / "runs")
+            transform = fno.Transform(
+                name="perturbVelocity",
+                operator=fno.Operator.function(lambda velocity: velocity),
+                inputs={"velocity": fno.Field("U")},
+                outputs={"velocity": fno.Field("U")},
+            )
+            longship = fno.Longship(
+                case=case,
+                transforms=(transform,),
+                observations=(
+                    fno.Observe(
+                        summaries={"U": ("l2",), "p": ("mean",), "nut": ("max",)},
+                        interval=10,
+                    ),
+                ),
+            )
+            fields = {
+                "U": Mock(field_class="volVectorField"),
+                "p": Mock(field_class="volScalarField"),
+            }
+
+            with (
+                patch("foamnordic.openfoam.read_case_fields", return_value=(fields, ())),
+                self.assertRaisesRegex(
+                    ValueError,
+                    r"unavailable OpenFOAM field\(s\): nut.*Available.*U, p",
+                ),
+            ):
+                validate_case(longship)
+
+    def test_observe_accepts_registered_adapter_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "case"
+            for relative in (
+                "0/U",
+                "0/p",
+                "system/controlDict",
+                "system/fvSchemes",
+                "system/fvSolution",
+                "constant/turbulenceProperties",
+            ):
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            write_mesh(source)
+            case = fno.OpenFOAM.Case(case_dir=source, run_dir=root / "runs")
+            closure = fno.Closure(
+                name="nutFjord",
+                operator=fno.Operator.function(lambda velocity_grad, delta: delta),
+                inputs={
+                    "velocity_grad": fno.Field.grad("U"),
+                    "delta": fno.Field.delta(),
+                },
+                outputs={"nut": fno.Field("nut")},
+            )
+            longship = fno.Longship(
+                case=case,
+                closures=(closure,),
+                observations=(
+                    fno.Observe(summaries={"nut": ("min", "max")}, interval=10),
+                ),
+            )
+            fields = {
+                "U": Mock(field_class="volVectorField"),
+                "p": Mock(field_class="volScalarField"),
+            }
+
+            with patch(
+                "foamnordic.openfoam.read_case_fields", return_value=(fields, ())
+            ):
+                validate_case(longship)
+
     def test_longship_name_inherits_from_case(self) -> None:
         case = fno.openfoam.Case(
             name="NACA4412",

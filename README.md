@@ -10,8 +10,8 @@ pipeline. Closure exchange stays outside Python: Fjord carries atomic fields
 over SHM, UDS, UCX, or TCP, while Longship owns placement, launch, lifecycle,
 logs, observations, and results.
 
-FoamNordic is active research software. The current package version is
-`1.0.3.dev6`.
+FoamNordic is active research software. The current stable package version is
+`1.0.4`.
 
 ## Install
 
