@@ -1,7 +1,7 @@
 # Fjord communication core
 
-Fjord is FoamNordic's clean-room native data path. It does not depend on a
-database, message broker, SmartSim, SmartRedis, or RedisAI.
+Fjord is FoamNordic's native data path. It has no external database or message
+broker dependency.
 
 The names describe three deliberately small responsibilities:
 

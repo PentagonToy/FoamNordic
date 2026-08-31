@@ -32,11 +32,11 @@ Rune defines the message and atomic completion boundary. Harbor owns the peer
 session. Fjord supplies the selected byte channel. Neither Harbor nor Fjord
 queries Slurm or decides where a model should run.
 
-## No general-purpose database in the hot path
+## Native closure runtime
 
-The old database role is split into smaller native responsibilities:
+FoamNordic assigns each runtime responsibility to one native component:
 
-| Former responsibility | FoamNordic owner |
+| Responsibility | FoamNordic owner |
 |---|---|
 | tensor transfer | Fjord and Rune |
 | session and handshake | Harbor |
@@ -46,8 +46,8 @@ The old database role is split into smaller native responsibilities:
 | durable results | explicit output artifacts |
 
 ClosureHost retains only bounded session state needed for active exchanges. It
-is not a Redis replacement, a user-visible database, or a durable result store.
-This removes network serialization and key polling from attached inference.
+is not a user-visible database or a durable result store. Attached inference
+therefore avoids durable-store serialization and polling in its hot path.
 
 ## Orchestrator observations
 

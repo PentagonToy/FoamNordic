@@ -45,8 +45,10 @@ foamnordic build
 ```
 
 The same command works after PyPI, GitHub, or editable installation. It builds
-the integration library and reference progress-variable solver with the active
-OpenFOAM compiler rather than reusing ABI-unsafe generic binaries.
+the integration library, reference progress-variable solver, and native ONNX
+ClosureHost with the active OpenFOAM compiler rather than reusing ABI-unsafe
+generic binaries. The supported platform archive for ONNX Runtime 1.28.0 is
+verified and cached automatically.
 
 ### Install from this repository
 
@@ -75,6 +77,15 @@ only to select a different checkout explicitly.
 The result is installed below
 `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`, so different
 OpenFOAM versions and compiler ABIs can coexist.
+Each build also writes `runtime.yaml` beside that runtime. The profile records
+the detected operating system, architecture, OpenFOAM ABI, and local MPI
+policy. On macOS, FoamNordic isolates the external MPI launcher from
+OpenFOAM.app's dynamic-library environment and restores OpenFOAM libraries only
+for solver ranks. `FOAMNORDIC_MPIRUN=/path/to/mpirun` remains an explicit
+override; Linux scheduler launches continue to use `srun` unchanged.
+On an offline system, set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX
+Runtime 1.28.0 installation before building. Pure OpenFOAM/Joblib workflows can
+explicitly omit the native ONNX host with `foamnordic build --without-onnx`.
 
 GitHub can also be installed without keeping a checkout:
 

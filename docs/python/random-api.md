@@ -27,5 +27,5 @@ a decomposed field; rank scope is suitable for independent rank-local work.
 this automatically. NumPy and JAX do not promise bit-identical samples, but
 each backend is reproducible for the same FoamNordic key and execution context.
 
-The legacy `seed=` declarations and `rng`/`seed` function injections remain
-temporarily available for source compatibility. New code should use `key=`.
+The compatibility `seed=` declaration and `rng`/`seed` function injections
+remain temporarily available. New code should use `key=`.

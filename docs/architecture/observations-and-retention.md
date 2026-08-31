@@ -36,7 +36,7 @@ Retention is not one global integer.
 
 Rune/SHM retains only the bounded slots required for an active atomic
 exchange. A slot is recycled as soon as its consumer advances the sequence.
-The default does not preserve ten historical full fields.
+The default does not preserve ten full-resolution field snapshots.
 
 ### Observation retention
 

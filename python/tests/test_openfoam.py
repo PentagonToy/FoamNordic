@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import foamnordic as fno
 
@@ -156,7 +157,36 @@ class OpenFOAMReaderTests(unittest.TestCase):
         )
         self.assertEqual(command[:2], ("zsh", "-lc"))
         self.assertIn("openfoam -c", command[2])
-        self.assertIn("mpirun -np 6 pimpleFoam", command[2])
+        self.assertIn("-np 6 pimpleFoam", command[2])
+
+    def test_explicit_mpi_launcher_isolated_from_openfoam_environment(self) -> None:
+        from foamnordic.execution.launch import _solver_command
+
+        with tempfile.TemporaryDirectory() as temporary:
+            launcher = Path(temporary) / "mpirun"
+            launcher.touch(mode=0o755)
+            case = fno.OpenFOAM.Case(
+                name="cavity",
+                case_dir="case",
+                run_dir="runs",
+                of_cmd="openfoam -prefix=/Volumes/OpenFOAM-v2606",
+                shell="zsh",
+                application="pimpleFoam",
+                ranks=6,
+            )
+            with mock.patch.dict(
+                os.environ, {"FOAMNORDIC_MPIRUN": str(launcher)}
+            ):
+                command = _solver_command(
+                    fno.Longship(case=case),
+                    Path("prepared-case"),
+                    local_mpi=True,
+                )
+
+        self.assertIn(str(launcher), command[2])
+        self.assertIn("unset DYLD_LIBRARY_PATH OPAL_PREFIX MPI_ARCH_PATH", command[2])
+        self.assertIn('-x DYLD_LIBRARY_PATH=', command[2])
+        self.assertIn("-np 6 pimpleFoam", command[2])
         self.assertIn("-parallel", command[2])
 
 

@@ -137,13 +137,18 @@ remain outside the graph. Keeping preprocessing in FoamNordic avoids generating
 different ONNX graphs for every supported scikit-learn scaler.
 
 FoamNordic targets ONNX Runtime **1.28.0** and C API level 28 exactly for the
-first native implementation. The adapter uses only the stable session and
+first native implementation. `foamnordic build` verifies and caches the
+official archive for Linux x86_64, Linux aarch64, or Apple Silicon, then
+installs the required library beside the ABI-specific ClosureHost. Offline
+systems can select an unpacked distribution with
+`FOAMNORDIC_ONNX_RUNTIME_ROOT`; `--without-onnx` explicitly omits this path.
+The adapter uses only the stable session and
 tensor API, not the experimental Model Package API. It requires one packed
 rank-two input and one packed rank-two output, accepts float32 or float64, and
 defaults both ORT thread pools to one thread with sequential execution to avoid
-oversubscribing OpenFOAM or Slurm allocations. ONNX support is optional and is
-enabled only with `FOAMNORDIC_ONNX_RUNTIME=ON` and an external
-`FOAMNORDIC_ONNX_RUNTIME_ROOT`; ONNX Runtime is not vendored.
+oversubscribing OpenFOAM or Slurm allocations. ONNX Runtime is not embedded in
+the Python wheel because the native host must match the selected platform and
+OpenFOAM runtime.
 
 `load_model(manifest_path)` resolves a relative artifact path beside the
 manifest and owns both the packed ONNX kernel and the field-aware wrapper.

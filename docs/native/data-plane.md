@@ -138,8 +138,7 @@ handshake but waits on futex words in the shared region after the upgrade.
 
 ### Atomic exchange publication
 
-FoamNordic preserves the useful semantic guarantee historically provided by
-an atomic Lua commit without retaining Redis or Lua. A producer prepares all
+FoamNordic publishes every field exchange atomically. A producer prepares all
 Rune tensor frames for one monotonically increasing exchange and then appends
 one `complete` record containing the exchange index and exact tensor count.
 Release publication in the SPSC ring preserves this order. The native closure

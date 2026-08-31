@@ -9,10 +9,9 @@ The unified allocation that carries OpenFOAM and its ClosureHosts is called a
 Fjord carries bytes, Harbor owns a peer session, Rune defines messages, and
 Longship keeps the solver and model processes in one schedulable job.
 
-Placement, lifecycle, and data-path selection are separate contracts. This is
-intentional: an earlier design used `share_nodes=True` both as a scheduler
-request and as an implicit transport switch. That made a placement detail
-control Redis, shared memory, UCX, and Python worker behavior at once.
+Placement, lifecycle, and data-path selection are separate contracts. A
+scheduler request must not implicitly select a transport or alter Python
+worker behavior.
 
 ## Default: automatic
 

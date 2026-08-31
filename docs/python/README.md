@@ -8,12 +8,9 @@ remains authoritative for placement arithmetic, field exchange, inference,
 and solver integration.
 
 - [API design](design.md)
-- [Provisional run-control API](run-control-api.md)
+- [Run-control API](run-control-api.md)
 - [Postprocess API](postprocess-api.md)
-- [Provisional combustion API](combustion-api.md)
+- [Combustion API](combustion-api.md)
 - [Reproducible random keys](random-api.md)
 - [Wheel publishing](publishing.md)
 - [Native C++ documentation](../native/README.md)
-
-The earlier SmartSim- and Redis-based FoamNordic APIs are historical reference
-material, not compatibility requirements for this repository.

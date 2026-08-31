@@ -67,8 +67,9 @@ Python per-cell loop in the native hot path.
 A concrete solver integration must retain a pure OpenFOAM or table-only mode.
 Acceptance proceeds through pointwise table fixtures, a frozen-field adapter
 comparison, a short coupled trajectory, and only then a representative MPI
-case. Legacy implementations are scientific oracles, not source trees to copy
-wholesale; compatibility and corrected-physics baselines must remain separate.
+case. Reference implementations are scientific oracles, not source trees to
+copy wholesale; compatibility and corrected-physics baselines must remain
+separate.
 
 The copyable guarded files live in
 `src/foamnordic/template/openfoam/combustion-model/`.

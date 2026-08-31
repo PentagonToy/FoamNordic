@@ -13,7 +13,7 @@ Time   : 14:57:35
 Host   : roihu-cpu-login1
 PID    : 1260653
 I/O    : uncollated
-Case   : /scratch/project_2015384/Hanseul/Codes/FoamNordic/openfoam_tutorials/les/pitzDaily
+Case   : /scratch/<allocation-account>/<user>/Codes/FoamNordic/openfoam_tutorials/les/pitzDaily
 nProcs : 1
 memory pool : not available
 fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)

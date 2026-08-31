@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import foamnordic as fno
 from foamnordic._cli import _source_root, main
+from foamnordic.build.onnxruntime import NativeOnnxRuntime
 from foamnordic.core.managed import MARKER, mark_generated
 from foamnordic.core.native_plan import available as native_available
 from foamnordic.execution.runtime_paths import openfoam_abi_for_toolchain
@@ -99,6 +100,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stopped.exception.code, 0)
         self.assertIn("--source", output.getvalue())
         self.assertIn("--dry-run", output.getvalue())
+        self.assertIn("--without-onnx", output.getvalue())
 
     def test_source_build_dry_run_is_visual_and_non_mutating(self) -> None:
         repository = Path(__file__).resolve().parents[2]
@@ -106,6 +108,12 @@ class CliTests(unittest.TestCase):
             root = Path(directory)
             build_dir = root / "build"
             prefix = root / "install"
+            onnxruntime = NativeOnnxRuntime(
+                root / "onnxruntime",
+                root / "onnxruntime/include",
+                root / "onnxruntime/lib/libonnxruntime.so",
+                "test",
+            )
             output = StringIO()
             with (
                 patch.dict(
@@ -124,6 +132,10 @@ class CliTests(unittest.TestCase):
                     "foamnordic.execution.runtime_paths.shutil.which",
                     return_value="/usr/bin/wmake",
                 ),
+                patch(
+                    "foamnordic._cli.resolve_onnxruntime",
+                    return_value=onnxruntime,
+                ),
                 redirect_stdout(output),
             ):
                 status = main(
@@ -141,8 +153,10 @@ class CliTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(status, 0)
-            self.assertIn("[Step 1/5]", output.getvalue())
+            self.assertIn("[Step 1/6]", output.getvalue())
             self.assertIn("Configure native SDK", output.getvalue())
+            self.assertIn("foamnordic_closure_worker", output.getvalue())
+            self.assertIn("Install ONNX ClosureHost", output.getvalue())
             self.assertIn("Build OpenFOAM integration", output.getvalue())
             self.assertIn("Build progress-variable solver", output.getvalue())
             self.assertFalse(build_dir.exists())
@@ -188,6 +202,7 @@ class CliTests(unittest.TestCase):
                         str(build_dir),
                         "--prefix",
                         str(prefix),
+                        "--without-onnx",
                         "--dry-run",
                     ]
                 )

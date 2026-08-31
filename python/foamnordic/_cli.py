@@ -15,7 +15,10 @@ import threading
 from time import monotonic
 from typing import Iterator, Sequence, TextIO
 
+from .build.onnxruntime import VERSION as ONNXRUNTIME_VERSION
+from .build.onnxruntime import resolve as resolve_onnxruntime
 from .core.managed import generated_kind, mark_generated
+from .execution.mpi import write_runtime_profile
 from .execution.runtime_paths import active_runtime_candidates, profile
 
 
@@ -164,6 +167,12 @@ def _directories(stream: TextIO) -> int:
             else Path.home()
             / ".local/share/foamnordic/runtime/<platform>/<openfoam-abi>",
         ),
+        (
+            "Runtime profile",
+            selected.runtime_dir / "runtime.yaml"
+            if selected is not None
+            else "not generated",
+        ),
     )
     width = max(len(label) for label, _ in rows)
     for label, value in rows:
@@ -250,6 +259,9 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
 
     selected = profile(build_dir=args.build_dir, runtime_dir=args.prefix)
     assert selected is not None
+    onnxruntime = (
+        None if args.without_onnx else resolve_onnxruntime(download=not args.dry_run)
+    )
     build_dir = selected.build_dir
     prefix = selected.runtime_dir
     log_path = build_dir / "foamnordic-build.log"
@@ -305,20 +317,33 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         # own dependencies, then restore the OpenFOAM environment for wmake.
         cmake_environment.pop("DYLD_LIBRARY_PATH", None)
         cmake_environment.pop("DYLD_FALLBACK_LIBRARY_PATH", None)
-    commands = (
+    configure = [
+        cmake,
+        "-S",
+        str(source),
+        "-B",
+        str(build_dir),
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DFOAMNORDIC_TESTS=OFF",
+        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
+        f"-DCMAKE_INSTALL_PREFIX={prefix}",
+        f"-DFOAMNORDIC_ONNX_RUNTIME={'ON' if onnxruntime else 'OFF'}",
+        f"-DFOAMNORDIC_RESIDENT_TOOLS={'ON' if onnxruntime else 'OFF'}",
+    ]
+    runtime_targets = ["foamnordic_adapter"]
+    if onnxruntime is not None:
+        configure.extend(
+            (
+                f"-DFOAMNORDIC_ONNX_RUNTIME_ROOT={onnxruntime.root}",
+                f"-DFOAMNORDIC_ONNXRUNTIME_INCLUDE_DIR={onnxruntime.include}",
+                f"-DFOAMNORDIC_ONNXRUNTIME_LIBRARY={onnxruntime.library}",
+            )
+        )
+        runtime_targets.append("foamnordic_closure_worker")
+    commands: list[tuple[str, list[str]]] = [
         (
             "Configure native SDK",
-            [
-                cmake,
-                "-S",
-                str(source),
-                "-B",
-                str(build_dir),
-                "-DCMAKE_BUILD_TYPE=Release",
-                "-DFOAMNORDIC_TESTS=OFF",
-                "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
-                f"-DCMAKE_INSTALL_PREFIX={prefix}",
-            ],
+            configure,
         ),
         (
             "Build native runtime",
@@ -327,7 +352,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 "--build",
                 str(build_dir),
                 "--target",
-                "foamnordic_adapter",
+                *runtime_targets,
                 "--parallel",
                 str(args.jobs),
             ],
@@ -342,14 +367,19 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 "Development",
             ],
         ),
-        (
-            "Build OpenFOAM integration",
-            [wmake, "libso"],
-        ),
-        (
-            "Build progress-variable solver",
-            [wmake],
-        ),
+    ]
+    if onnxruntime is not None:
+        commands.append(
+            (
+                "Install ONNX ClosureHost",
+                [cmake, "--install", str(build_dir), "--component", "Runtime"],
+            )
+        )
+    commands.extend(
+        [
+            ("Build OpenFOAM integration", [wmake, "libso"]),
+            ("Build progress-variable solver", [wmake]),
+        ]
     )
 
     if args.dry_run:
@@ -451,6 +481,19 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             )
         print(f"Build log:  {log_path}", file=stream)
         print(f"Reference solver: {solver}", file=stream)
+        if onnxruntime is not None:
+            worker = prefix / "bin/foamnordic_closure_worker"
+            if not worker.is_file():
+                raise RuntimeError(
+                    "native build completed without installing ClosureHost"
+                )
+            print(
+                f"ONNX Runtime: {ONNXRUNTIME_VERSION} ({onnxruntime.source})",
+                file=stream,
+            )
+            print(f"ClosureHost: {worker}", file=stream)
+        runtime_profile = write_runtime_profile(selected)
+        print(f"Runtime profile: {runtime_profile}", file=stream)
     return 0
 
 
@@ -538,6 +581,11 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--build-dir", type=Path, help="CMake build directory")
     build.add_argument("--prefix", type=Path, help="native runtime install prefix")
     build.add_argument("--jobs", type=int, default=_default_jobs(), help="parallel jobs")
+    build.add_argument(
+        "--without-onnx",
+        action="store_true",
+        help="skip the native ONNX ClosureHost",
+    )
     build.add_argument("--dry-run", action="store_true", help="show commands only")
     clobber = subcommands.add_parser(
         "clobber",

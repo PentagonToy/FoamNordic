@@ -82,7 +82,7 @@ def key(seed: int = 42, *, scope: Scope = "global") -> Key:
 
 
 def _jax_module(value: object):
-    """Return JAX when ``value`` is a typed or legacy JAX PRNG key."""
+    """Return JAX when ``value`` is a typed or older JAX PRNG key."""
 
     if isinstance(value, Key):
         return None

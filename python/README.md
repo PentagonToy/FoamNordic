@@ -93,13 +93,23 @@ Joblib/scikit-learn and JAX/Equinox resident runtimes are included in the same
 installation; model backends do not require separate extras.
 
 `foamnordic build` uses the kit bundled by PyPI and GitHub installations, or
-the live sources of an editable checkout. It installs the C++ SDK plus
-OpenFOAM integration and `foamnordicProgressVariableFoam` reference solver below
+the live sources of an editable checkout. It installs the C++ SDK, OpenFOAM
+integration, native ONNX ClosureHost, and `foamnordicProgressVariableFoam`
+reference solver below
 `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Its cache uses
 the same ABI partition below `~/.cache/foamnordic/build/`. This prevents a
 macOS build, a Linux build, or two OpenFOAM compiler ABIs from overwriting one
 another. macOS adapters also receive a content-addressed install name, so an
 older `FOAM_USER_LIBBIN` copy cannot silently shadow the selected runtime.
+The runtime directory also contains `runtime.yaml`, which records the platform,
+OpenFOAM ABI, and local MPI policy. OpenFOAM.app runs isolate an external MPI
+launcher automatically to prevent Homebrew MPI from inheriting OpenFOAM's
+launcher libraries. `FOAMNORDIC_MPIRUN=/path/to/mpirun` is available as an
+explicit override; Slurm workloads retain their normal `srun` path.
+ONNX Runtime 1.28.0 is verified and cached automatically on the supported
+targets. Offline installations may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an
+unpacked 1.28.0 distribution. Use `foamnordic build --without-onnx` only when
+the runtime will not execute ONNX artifacts.
 A source checkout can be used without a wheel:
 
 ```console

@@ -11,6 +11,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from .._case import PreparedProgram, prepare_case, validate_case
+from .mpi import discover_mpi_policy
 from .run import Run, _internal_path, _launch_local, _launch_process, _sailing_paths
 from .shell import quote_command, toolchain_shell
 from .slurm import force_cancel, write_batch, write_submission_wrapper
@@ -126,11 +127,37 @@ def _solver_command(
     solver: list[object] = [longship.case.application, "-case", case_dir]
     if longship.case.ranks > 1:
         solver.append("-parallel")
+    solver_command = quote_command(solver)
     if local_mpi and longship.case.ranks > 1:
-        solver = ["mpirun", "-np", str(longship.case.ranks), *solver]
+        runtime_dir = next(
+            iter(toolchain_runtime_candidates(longship.case._toolchain)),
+            None,
+        )
+        policy = discover_mpi_policy(
+            wrapper=longship.case._toolchain.wrapper,
+            runtime_dir=runtime_dir,
+        )
+        if policy.launcher is not None and policy.isolate:
+            environment += (
+                'export FOAMNORDIC_SOLVER_DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}"; '
+                "unset DYLD_LIBRARY_PATH OPAL_PREFIX MPI_ARCH_PATH; "
+            )
+            solver_command = (
+                f"{shlex.quote(str(policy.launcher))} "
+                '-x DYLD_LIBRARY_PATH="$FOAMNORDIC_SOLVER_DYLD_LIBRARY_PATH" '
+                f"-np {longship.case.ranks} {solver_command}"
+            )
+        elif policy.launcher is not None:
+            solver_command = quote_command(
+                [policy.launcher, "-np", str(longship.case.ranks), *solver]
+            )
+        else:
+            solver_command = quote_command(
+                ["mpirun", "-np", str(longship.case.ranks), *solver]
+            )
     return toolchain_shell(
         longship.case._toolchain,
-        environment + "exec " + quote_command(solver),
+        environment + "exec " + solver_command,
     )
 
 

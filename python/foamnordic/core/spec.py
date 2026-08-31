@@ -85,7 +85,7 @@ class Operator:
         request ``key``, ``exchange_index``, ``physical_time``, or ``rank``
         as keyword parameters. Random keys are derived deterministically from
         the field-program key, stable program identity, exchange index, and
-        optionally the solver rank. Legacy ``seed`` and NumPy ``rng``
+        optionally the solver rank. Compatibility ``seed`` and NumPy ``rng``
         injection remain available for source compatibility.
         """
 

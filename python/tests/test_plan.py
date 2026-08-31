@@ -629,9 +629,9 @@ class PlanTests(unittest.TestCase):
         )
         native.write_model_manifest.assert_called_once()
 
-    def test_legacy_seed_is_normalized_to_a_public_key(self) -> None:
+    def test_compatibility_seed_is_normalized_to_a_public_key(self) -> None:
         transform = fno.Transform(
-            "legacySeed",
+            "compatibilitySeed",
             fno.Operator.model("model.fnom"),
             {"velocity": fno.field("U")},
             {"velocity": fno.field("U")},

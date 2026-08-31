@@ -31,7 +31,7 @@ to the FoamNordic build:
 6. Call `thermo.correct()` once.
 7. Continue pressure-density coupling using the corrected state.
 
-An adapter may preserve a legacy one-corrector lag, but it must declare that
+An adapter may preserve a one-corrector lag, but it must declare that
 policy instead of acquiring it accidentally from include-file order.
 
 ## Portability rules
