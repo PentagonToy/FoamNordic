@@ -1,0 +1,12 @@
+operations/expression.C
+operations/frame.C
+combustion/progressVariableSource.C
+closureHook.C
+closureObservation.C
+closureSession.C
+fieldBridge.C
+fjordExchange.C
+models/makeClosureModels.C
+models/makeCombustionModels.C
+
+LIB = $(FOAM_USER_LIBBIN)/libfoamnordicOpenFOAM

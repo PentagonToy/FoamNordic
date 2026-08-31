@@ -1,0 +1,23 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Provider:  ESI-OpenCFD (www.openfoam.com)        |
+|   \\  /    A nd           | Extension: FoamNordic                           |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+/*
+ * This file is part of FoamNordic.
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+observation
+{
+    path        "@FOAMNORDIC_OBSERVATION_PATH@";
+    fields      (@FOAMNORDIC_OBSERVATION_FIELDS@);
+    every       @FOAMNORDIC_OBSERVATION_EVERY@;
+    offset      @FOAMNORDIC_OBSERVATION_OFFSET@;
+    maxRecords  @FOAMNORDIC_OBSERVATION_MAX_RECORDS@;
+    maxBytes    @FOAMNORDIC_OBSERVATION_MAX_BYTES@;
+    overflow    @FOAMNORDIC_OBSERVATION_OVERFLOW@;
+}

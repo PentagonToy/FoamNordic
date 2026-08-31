@@ -1,0 +1,57 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "constant";
+    object          turbulenceProperties;
+}
+
+simulationType  LES;
+
+LES
+{
+    LESModel        @FOAMNORDIC_MODEL@;
+    turbulence      on;
+    printCoeffs     on;
+    delta           cubeRootVol;
+
+    cubeRootVolCoeffs
+    {
+        deltaCoeff      1;
+    }
+
+    @FOAMNORDIC_MODEL@Coeffs
+    {
+        @FOAMNORDIC_MODEL_CONFIGURATION@
+
+        foamNordicClosure
+        {
+            address          "@FOAMNORDIC_ADDRESS@";
+            sessionId        1;
+            sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+            ucx              false;
+
+            inputs
+            (
+                @FOAMNORDIC_INPUT_KEYS@
+            );
+
+            inputExpressions
+            (
+                @FOAMNORDIC_INPUT_EXPRESSIONS@
+            );
+
+            outputs
+            (
+                @FOAMNORDIC_OUTPUT_FIELDS@
+            );
+
+            outputKeys
+            (
+                @FOAMNORDIC_OUTPUT_KEYS@
+            );
+
+            @FOAMNORDIC_OBSERVATION_BLOCK@
+        }
+    }
+}

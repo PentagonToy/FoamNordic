@@ -1,0 +1,4 @@
+add_executable(foamnordic_field_adapter_test test_field.cpp)
+target_link_libraries(foamnordic_field_adapter_test PRIVATE FoamNordic::adapter)
+
+add_test(NAME backend.adapter.field COMMAND foamnordic_field_adapter_test)

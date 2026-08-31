@@ -1,0 +1,12 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      decomposeParDict;
+}
+
+numberOfSubdomains @NUMBER_OF_SUBDOMAINS@;
+
+method          @DECOMPOSITION_METHOD@;
+
+@METHOD_COEFFICIENTS@

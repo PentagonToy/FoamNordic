@@ -1,0 +1,12 @@
+@FUNCTION_NAME@
+{
+    type            @FUNCTION_TYPE@;
+    libs            (@FUNCTION_LIBRARY@);
+    enabled         @ENABLED@;
+    executeControl  @EXECUTE_CONTROL@;
+    executeInterval @EXECUTE_INTERVAL@;
+    writeControl    @WRITE_CONTROL@;
+    writeInterval   @WRITE_INTERVAL@;
+
+    @FUNCTION_CONFIGURATION@
+}

@@ -1,0 +1,796 @@
+from __future__ import annotations
+
+from contextlib import redirect_stdout
+import inspect
+import io
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+
+import foamnordic as fno
+from foamnordic._case import (
+    PreparedProgram,
+    _prepare_decomposition,
+    _observation_block,
+    _scheme_commands,
+    _scheme_requirements,
+    _socket_path,
+    prepare_case,
+    render_dictionary,
+    render_transform_dictionary,
+    validate_case,
+)
+from foamnordic.core.native_plan import available as native_available
+from foamnordic.execution.launch import _host_command
+
+
+def example_longship() -> fno.Longship:
+    case = fno.openfoam.Case(
+        case_dir=Path("/cases/cavity"),
+        run_dir=Path("/runs/cavity"),
+        of_cmd="openfoam/2512",
+        shell="bash",
+        ranks=2,
+    )
+    closure = fno.Closure(
+        name="kEqnFjord",
+        artifact=Path("/models/kEqnFjord.fnom"),
+        inputs={
+            "k": fno.field("k"),
+            "velocity_grad": fno.grad("U"),
+            "filter_width": fno.filter_width(),
+        },
+        outputs={
+            "eddy_viscosity": fno.field("nut"),
+            "k_production": fno.field("kProduction"),
+            "k_dissipation_coeff": fno.field("kDissipationCoeff"),
+        },
+    )
+    observation = fno.Observe(
+        summaries={"nut": ("min", "max"), "U": ("l2",)},
+        interval=100,
+    )
+    return fno.Longship(
+        name="cavity-keqn",
+        case=case,
+        closures=(closure,),
+        observations=(observation,),
+        placement=fno.Attached(data_path="ucx"),
+        scheduler=fno.Slurm(
+            account="project_example",
+            partition="small",
+            time="00:15:00",
+            nodes=1,
+            ntasks=2,
+        ),
+    )
+
+
+class PlanTests(unittest.TestCase):
+    def _parallel_case(self, root: Path, ranks: int = 2) -> fno.Longship:
+        source = root / "source"
+        for relative in (
+            "0/U",
+            "0/p",
+            "constant/turbulenceProperties",
+            "system/controlDict",
+            "system/fvSchemes",
+            "system/fvSolution",
+        ):
+            path = source / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+        (source / "system/decomposeParDict").write_text(
+            "numberOfSubdomains 8;\n"
+            "method hierarchical;\n"
+            "hierarchicalCoeffs { n (2 2 2); order xyz; }\n",
+            encoding="utf-8",
+        )
+        return fno.Longship(
+            name="parallel-case",
+            case=fno.OpenFOAM.Case(
+                case_dir=source,
+                run_dir=root / "output",
+                ranks=ranks,
+            ),
+        )
+
+    def test_parallel_preparation_normalizes_incompatible_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            longship = self._parallel_case(root)
+
+            def decompose(*_args, **_kwargs):
+                copied = next((root / "output/runs").glob("*/case"))
+                (copied / "processor0").mkdir()
+                (copied / "processor1").mkdir()
+                return Mock(returncode=0)
+
+            with patch("foamnordic._case.subprocess.run", side_effect=decompose) as run:
+                _, copied, _ = prepare_case(longship, longship.compile())
+
+            dictionary = (copied / "system/decomposeParDict").read_text()
+            self.assertIn("numberOfSubdomains 2", dictionary)
+            self.assertIn("method          scotch", dictionary)
+            self.assertNotIn("hierarchicalCoeffs", dictionary)
+            command = " ".join(run.call_args.args[0])
+            self.assertIn("numberOfSubdomains -set 2", command)
+            self.assertIn("decomposePar", command)
+
+    def test_parallel_preparation_preserves_compatible_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "decomposeParDict"
+            original = (
+                "numberOfSubdomains 4;\n"
+                "method hierarchical;\n"
+                "hierarchicalCoeffs { n (2 2 1); order xyz; }\n"
+            )
+            dictionary.write_text(original, encoding="utf-8")
+
+            changed = _prepare_decomposition(dictionary, 4)
+
+            self.assertFalse(changed)
+            self.assertEqual(dictionary.read_text(encoding="utf-8"), original)
+
+    def test_parallel_preparation_rejects_wrong_processor_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            longship = self._parallel_case(root)
+
+            def incomplete(*_args, **_kwargs):
+                copied = next((root / "output/runs").glob("*/case"))
+                (copied / "processor0").mkdir()
+                return Mock(returncode=0)
+
+            with (
+                patch("foamnordic._case.subprocess.run", side_effect=incomplete),
+                self.assertRaisesRegex(RuntimeError, "does not match Case.ranks"),
+            ):
+                prepare_case(longship, longship.compile())
+
+    def test_runtime_socket_path_stays_short_for_long_scratch_workspaces(self) -> None:
+        work = Path("/scratch") / ("very-long-project-segment/" * 12) / "run"
+        first = _socket_path(work, 0)
+        second = _socket_path(work, 1)
+        self.assertLess(len(os.fsencode(first)), 104)
+        self.assertNotEqual(first, second)
+
+    def test_slurm_uses_native_scheduler_vocabulary(self) -> None:
+        parameters = inspect.signature(fno.Slurm).parameters
+        self.assertIn("ntasks", parameters)
+        self.assertIn("cpus_per_task", parameters)
+        self.assertIn("mem_per_cpu", parameters)
+        self.assertNotIn("solver_tasks", parameters)
+        self.assertNotIn("solver_tasks_per_node", parameters)
+        self.assertNotIn("solver_cpus_per_task", parameters)
+
+    def test_observe_uses_solver_friendly_cadence(self) -> None:
+        parameters = inspect.signature(fno.Observe).parameters
+        self.assertIn("interval", parameters)
+        self.assertNotIn("every", parameters)
+        self.assertNotIn("retention", parameters)
+        self.assertNotIn("Retention", dir(fno))
+
+    def test_longship_name_inherits_from_case(self) -> None:
+        case = fno.openfoam.Case(
+            name="NACA4412",
+            case_dir="case",
+            run_dir="workspace",
+        )
+        run = fno.Longship(case=case)
+        self.assertEqual(run.name, "NACA4412")
+        self.assertEqual(run.compile().as_dict()["name"], "NACA4412")
+        self.assertEqual(run.compile().as_dict()["case"]["name"], "NACA4412")
+
+    def test_public_help_and_dir_are_discoverable(self) -> None:
+        self.assertIn("declarative coupled workload", fno.Longship.__doc__)
+        self.assertIn("Longship", dir(fno))
+        self.assertIn("Operator", dir(fno))
+        self.assertIn("Transform", dir(fno))
+        self.assertIn("Run", dir(fno))
+        self.assertIn("non-blocking native Longship", fno.Run.__doc__)
+        self.assertIn("openfoam", dir(fno))
+
+    def test_launch_verbose_must_be_boolean_before_preparation(self) -> None:
+        with self.assertRaisesRegex(TypeError, "verbose"):
+            example_longship().launch(verbose="yes")
+        with self.assertRaisesRegex(ValueError, "start_timeout"):
+            example_longship().launch(start_timeout=0)
+
+    def test_launch_reports_background_sailing_unless_quiet(self) -> None:
+        expected = Mock()
+        expected._wait_for_start.return_value = ("123456", "running")
+        expected._slurm_start_time.return_value = "2026-08-22T15:42:10"
+        with patch("foamnordic.execution.launch.launch", return_value=expected):
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                actual = example_longship().launch()
+            self.assertIs(actual, expected)
+            self.assertIn("launched with Job ID: 123456", stream.getvalue())
+            self.assertIn(
+                "Sailing started at: 2026-08-22T15:42:10",
+                stream.getvalue(),
+            )
+            self.assertIn("Sailing in background: cavity-keqn", stream.getvalue())
+
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                example_longship().launch(verbose=False)
+            self.assertEqual(stream.getvalue(), "")
+            self.assertEqual(expected._wait_for_start.call_count, 2)
+
+    def test_pending_launch_reports_slurm_estimated_start(self) -> None:
+        expected = Mock()
+        expected._wait_for_start.return_value = ("123456", "pending")
+        expected._slurm_start_time.return_value = "2026-08-22T16:10:00"
+        with patch("foamnordic.execution.launch.launch", return_value=expected):
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                example_longship().launch(start_timeout=0.1)
+        self.assertIn("remains pending with Job ID: 123456", stream.getvalue())
+        self.assertIn(
+            "Slurm estimates start at: 2026-08-22T16:10:00",
+            stream.getvalue(),
+        )
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_plan_is_deterministic_and_content_addressed(self) -> None:
+        first = example_longship().compile()
+        second = example_longship().compile()
+
+        self.assertEqual(first.digest, second.digest)
+        self.assertTrue(first.digest.startswith("sha256:"))
+        self.assertEqual(first.schema_version, 2)
+        self.assertEqual(first.as_dict(), second.as_dict())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_plan_contains_native_lifecycle_invariants(self) -> None:
+        value = example_longship().compile().as_dict()
+
+        self.assertEqual(value["case"]["ranks"], 2)
+        self.assertEqual(value["placement"]["data_path"], "ucx")
+        self.assertEqual(
+            value["scheduler"],
+            {
+                "kind": "slurm",
+                "account": "project_example",
+                "partition": "small",
+                "time": "00:15:00",
+                "nodes": 1,
+                "ntasks": 2,
+                "cpus_per_task": 1,
+                "mem_per_cpu": None,
+            },
+        )
+        self.assertEqual(value["runtime"]["lifecycle"]["host_starts_first"], True)
+        self.assertEqual(value["runtime"]["lifecycle"]["fail_together"], True)
+        self.assertEqual(value["runtime"]["allocation_cpus_per_node"], 3)
+        self.assertEqual(value["runtime"]["placement"]["data_path"], "ucx")
+        self.assertEqual(
+            value["closures"][0]["inputs"]["velocity_grad"],
+            {"operation": "grad", "field": "U"},
+        )
+        self.assertEqual(
+            value["closures"][0]["key"],
+            {"entropy": [42, 0], "path": [], "scope": "global"},
+        )
+        self.assertEqual(value["transforms"], [])
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_solver_only_plan_reserves_no_closure_host(self) -> None:
+        example = example_longship()
+        pure = fno.Longship(case=example.case, name="openfoam-baseline")
+        value = pure.compile().as_dict()
+        self.assertEqual(value["closures"], [])
+        self.assertEqual(value["runtime"]["host_tasks"], 0)
+        self.assertEqual(value["runtime"]["placement"]["kind"], "none")
+        self.assertFalse(value["runtime"]["lifecycle"]["host_starts_first"])
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_write_round_trips_as_json(self) -> None:
+        plan = example_longship().compile()
+        with tempfile.TemporaryDirectory() as directory:
+            path = plan.write(Path(directory) / "plan.json")
+            value = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(value, plan.as_dict())
+
+    def test_declarations_copy_mutable_inputs(self) -> None:
+        inputs = {"k": fno.field("k")}
+        closure = fno.Closure(
+            name="closure",
+            artifact="model.fnom",
+            inputs=inputs,
+            outputs={"nut": fno.field("nut")},
+        )
+        inputs["later"] = fno.field("U")
+        self.assertNotIn("later", closure.inputs)
+
+    def test_operator_model_uses_one_fnom_entry_point(self) -> None:
+        operator = fno.Operator.model(Path("model.fnom"))
+        self.assertEqual(operator.artifact, Path("model.fnom"))
+        self.assertEqual(
+            operator.to_plan(),
+            {"kind": "model", "manifest": "model.fnom"},
+        )
+        with self.assertRaisesRegex(ValueError, ".fnom"):
+            fno.Operator.model("model.onnx")
+        closure = fno.Closure(
+            name="closure",
+            operator=operator,
+            inputs={"velocity": fno.field("U")},
+            outputs={"viscosity": fno.field("nut")},
+        )
+        self.assertIs(closure.operator, operator)
+        self.assertEqual(closure.artifact, Path("model.fnom"))
+
+    def test_function_operator_is_declarative_and_transform_launchable(self) -> None:
+        operator = fno.Operator.function(lambda velocity: velocity)
+        transform = fno.Transform(
+            name="perturbVelocity",
+            operator=operator,
+            inputs={"velocity": fno.field("U")},
+            outputs={"velocity": fno.field("U")},
+        )
+        plan = transform.to_plan()
+        self.assertEqual(
+            plan["key"],
+            {"entropy": [42, 0], "path": [], "scope": "global"},
+        )
+        self.assertEqual(plan["operator"]["kind"], "function")
+        self.assertTrue(plan["operator"]["identity"].startswith("sha256:"))
+        self.assertIsNone(operator.artifact)
+
+    def test_legacy_seed_is_normalized_to_a_public_key(self) -> None:
+        transform = fno.Transform(
+            "legacySeed",
+            fno.Operator.model("model.fnom"),
+            {"velocity": fno.field("U")},
+            {"velocity": fno.field("U")},
+            "time_step_start",
+            7,
+        )
+        self.assertEqual(transform.key, fno.Random.key(7))
+        with self.assertRaisesRegex(ValueError, "either key or seed"):
+            fno.Transform(
+                name="ambiguousSeed",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                key=fno.Random.key(7),
+                seed=8,
+            )
+
+    def test_transform_renders_logical_keys_separately_from_fields(self) -> None:
+        transform = fno.Transform(
+            name="predictVelocity",
+            operator=fno.Operator.model("velocity.fnom"),
+            inputs={
+                "x_coordinate": fno.field("x"),
+                "pressure": fno.field("p"),
+            },
+            outputs={"predicted_velocity": fno.field("U")},
+            seed=7,
+        )
+        rendered = render_transform_dictionary(
+            transform,
+            "unix:///tmp/transform.sock",
+            True,
+        )
+        self.assertIn("exchangeStage   timeStepStart;", rendered)
+        self.assertIn("inputKeys       (x_coordinate pressure);", rendered)
+        self.assertIn("inputs          (x p);", rendered)
+        self.assertIn("outputKeys      (predicted_velocity);", rendered)
+        self.assertIn("outputs         (U);", rendered)
+        self.assertEqual(transform.to_plan()["key"]["entropy"], [7, 0])
+
+    def test_transform_declares_all_solver_stages_without_aliasing_them(self) -> None:
+        expected = {
+            "time_step_start": "timeStepStart",
+            "outer_corrector": "outerCorrector",
+            "pressure_corrected": "pressureCorrected",
+            "time_step_end": "timeStepEnd",
+        }
+        for public, native in expected.items():
+            transform = fno.Transform(
+                name="lateTransform",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                at=public,
+            )
+            self.assertEqual(transform.to_plan()["at"], public)
+            rendered = render_transform_dictionary(
+                transform, "unix:///tmp/transform.sock", True
+            )
+            self.assertIn(f"exchangeStage   {native};", rendered)
+        with self.assertRaisesRegex(ValueError, "transform at must"):
+            fno.Transform(
+                name="invalidTransform",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                at="somewhere",
+            )
+
+    def test_stock_solver_rejects_only_inner_iteration_stages(self) -> None:
+        example = example_longship()
+        for stage in ("outer_corrector", "pressure_corrected"):
+            transform = fno.Transform(
+                name="innerTransform",
+                operator=fno.Operator.model("model.fnom"),
+                inputs={"velocity": fno.field("U")},
+                outputs={"velocity": fno.field("U")},
+                at=stage,
+            )
+            with self.assertRaisesRegex(NotImplementedError, "solver-native"):
+                validate_case(
+                    fno.Longship(case=example.case, transforms=(transform,))
+                )
+
+    def test_nested_openfoam_operations_render_into_closure_dictionary(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="kEqnFjord",
+            artifact="model.fnom",
+            inputs={
+                "convection": fno.Math.div("phi", "U"),
+                "diffusion": fno.Math.laplacian("nu", "U"),
+                "strain": fno.Math.dev(fno.Math.symm(fno.Math.grad("U"))),
+            },
+            outputs={"nut": fno.field("nut")},
+        )
+        _, rendered = render_dictionary(
+            fno.Longship(case=example.case, closures=(closure,)),
+            closure,
+            "unix:///tmp/closure.sock",
+            True,
+        )
+        self.assertIn('"div(phi,U)"', rendered)
+        self.assertIn('"laplacian(nu,U)"', rendered)
+        self.assertIn('"dev(symm(grad(U)))"', rendered)
+
+    def test_python_artifact_selects_managed_resident_automatically(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="joblibClosure",
+            artifact="model.fnom",
+            inputs={"features": fno.field("U")},
+            outputs={"prediction": fno.field("nut")},
+        )
+        longship = fno.Longship(case=example.case, closures=(closure,))
+        metadata = {
+            "format": "joblib",
+            "inputs": [("features", 3, "float64")],
+            "outputs": [("prediction", 1, "float64")],
+        }
+        with patch("foamnordic.execution.launch._artifact_metadata", return_value=metadata):
+            command = _host_command(
+                longship,
+                PreparedProgram(
+                    closure,
+                    Path("/tmp/ready"),
+                    Path("/tmp/program.sock"),
+                    None,
+                ),
+            )
+        rendered = " ".join(command)
+        self.assertIn(sys.executable, rendered)
+        self.assertIn("foamnordic.execution.resident", rendered)
+        self.assertIn(f"--connections {longship.case.ranks}", rendered)
+        key_index = command.index("--key")
+        self.assertEqual(
+            command[key_index + 1],
+            '{"entropy":[42,0],"path":[],"scope":"global"}',
+        )
+
+    def test_transform_selects_the_same_managed_resident(self) -> None:
+        example = example_longship()
+        transform = fno.Transform(
+            name="predictVelocity",
+            operator=fno.Operator.model("model.fnom"),
+            inputs={"features": fno.field("U")},
+            outputs={"prediction": fno.field("U")},
+        )
+        longship = fno.Longship(case=example.case, transforms=(transform,))
+        metadata = {
+            "format": "equinox",
+            "inputs": [("features", 3, "float64")],
+            "outputs": [("prediction", 3, "float64")],
+        }
+        with patch("foamnordic.execution.launch._artifact_metadata", return_value=metadata):
+            command = _host_command(
+                longship,
+                PreparedProgram(
+                    transform,
+                    Path("/tmp/ready"),
+                    Path("/tmp/program.sock"),
+                    None,
+                ),
+            )
+        rendered = " ".join(command)
+        self.assertIn("foamnordic.execution.resident", rendered)
+        key_index = command.index("--key")
+        self.assertEqual(
+            command[key_index + 1],
+            '{"entropy":[42,0],"path":[],"scope":"global"}',
+        )
+
+    def test_ml_expression_schemes_are_planned_without_overriding_defaults(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="nutFjord",
+            artifact="model.fnom",
+            inputs={
+                "convection": fno.Math.div("phi", "U"),
+                "diffusion": fno.Math.laplacian("nu", "U"),
+                "vorticity": fno.Math.curl("U"),
+            },
+            outputs={"nut": fno.field("nut")},
+        )
+        longship = fno.Longship(case=example.case, closures=(closure,))
+        self.assertEqual(
+            _scheme_requirements(longship),
+            (
+                ("divSchemes", "div(phi,U)", "Gauss linear"),
+                (
+                    "laplacianSchemes",
+                    "laplacian(nu,U)",
+                    "Gauss linear corrected",
+                ),
+                ("gradSchemes", "curl(U)", "Gauss linear"),
+            ),
+        )
+        commands = "\n".join(_scheme_commands(longship, Path("/runs/case")))
+        self.assertIn("divSchemes/div(phi,U)", commands)
+        self.assertIn("divSchemes/default", commands)
+        self.assertIn("foamnordic_default", commands)
+        self.assertNotIn("-entry divSchemes/default -set", commands)
+
+    def test_ntasks_must_divide_evenly_across_nodes(self) -> None:
+        with self.assertRaisesRegex(ValueError, "divide evenly"):
+            fno.Slurm(
+                account="project",
+                partition="small",
+                time="00:15:00",
+                nodes=2,
+                ntasks=3,
+            )
+
+    def test_scheduler_directive_values_reject_whitespace(self) -> None:
+        with self.assertRaisesRegex(ValueError, "whitespace"):
+            fno.Slurm(
+                account="project invalid",
+                partition="small",
+                time="00:15:00",
+                nodes=1,
+                ntasks=1,
+            )
+
+    def test_case_accepts_explicit_openfoam_shell_command(self) -> None:
+        case = fno.openfoam.Case(
+            case_dir="case",
+            run_dir="runs",
+            of_cmd="source /opt/openfoam/etc/bashrc",
+            shell="zsh",
+        )
+        self.assertEqual(
+            case._toolchain.command,
+            "source /opt/openfoam/etc/bashrc",
+        )
+        self.assertEqual(case.shell, "zsh")
+
+    def test_openfoam_module_name_is_a_convenience_shorthand(self) -> None:
+        case = fno.openfoam.Case(
+            case_dir="case",
+            run_dir="runs",
+            of_cmd="openfoam/2512",
+        )
+        self.assertEqual(case._toolchain.command, "module load openfoam/2512")
+        self.assertEqual(case.shell, "bash")
+
+    def test_case_rejects_unsupported_shell(self) -> None:
+        with self.assertRaisesRegex(ValueError, "bash or zsh"):
+            fno.openfoam.Case(
+                case_dir="case",
+                run_dir="runs",
+                of_cmd="true",
+                shell="fish",
+            )
+
+    def test_custom_dictionary_template_stays_inside_case(self) -> None:
+        with self.assertRaisesRegex(ValueError, "inside the case"):
+            fno.openfoam.DictionaryTemplate(
+                source="combustion.in",
+                destination="../combustionProperties",
+            )
+
+    def test_default_dictionary_embeds_rank_sharded_native_observation(self) -> None:
+        longship = example_longship()
+        destination, rendered = render_dictionary(
+            longship,
+            longship.closures[0],
+            "unix:///tmp/closure.sock",
+            True,
+            Path("/runs/cavity/observations.{rank}.jsonl"),
+        )
+        self.assertEqual(destination, Path("constant/turbulenceProperties"))
+        self.assertIn('path        "/runs/cavity/observations.{rank}.jsonl";', rendered)
+        self.assertIn("fields      (nut U);", rendered)
+        self.assertIn("every       100;", rendered)
+        self.assertIn("maxRecords  64;", rendered)
+
+    def test_transform_dictionary_embeds_general_observation(self) -> None:
+        longship = example_longship()
+        transform = fno.Transform(
+            name="perturbVelocity",
+            operator=fno.Operator.model("velocity.fnom"),
+            inputs={"velocity": fno.field("U")},
+            outputs={"velocity": fno.field("U")},
+        )
+        observed = fno.Longship(
+            case=longship.case,
+            transforms=(transform,),
+            observations=(
+                fno.Observe(
+                    summaries={"U": ("min", "max")},
+                    interval=10,
+                ),
+            ),
+        )
+        rendered = render_transform_dictionary(
+            transform,
+            "unix:///tmp/transform.sock",
+            True,
+            _observation_block(
+                observed,
+                Path("/runs/cavity/observations.{rank}.jsonl"),
+            ),
+        )
+        self.assertIn("observation", rendered)
+        self.assertIn("every       10;", rendered)
+        self.assertIn("fields      (U);", rendered)
+
+    def test_custom_dictionary_template_renders_combustion_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            template = Path(directory) / "combustion.in"
+            template.write_text(
+                "model @FOAMNORDIC_MODEL@;\n"
+                "inputs (@FOAMNORDIC_INPUT_KEYS@);\n"
+                "outputs (@FOAMNORDIC_OUTPUT_FIELDS@);\n"
+                "table @BETA_FDF_TABLE@;\n",
+                encoding="utf-8",
+            )
+            case = fno.openfoam.Case(
+                case_dir="source",
+                run_dir="workspace",
+                integration=fno.openfoam.DictionaryTemplate(
+                    source=template,
+                    destination="constant/combustionProperties",
+                    variables={"BETA_FDF_TABLE": '"betaFdf.tbl"'},
+                ),
+            )
+            closure = fno.Closure(
+                name="reactionRateFjord",
+                artifact="reaction-rate.fnom",
+                inputs={
+                    "c_tilde": fno.field("c_tilde"),
+                    "c_var": fno.field("c_var"),
+                    "T_tilde": fno.field("T_tilde"),
+                },
+                outputs={"omega_c": fno.field("omega_c")},
+            )
+            longship = fno.Longship(case=case, closures=(closure,))
+            destination, rendered = render_dictionary(
+                longship, closure, "unix:///tmp/reaction.sock", True
+            )
+            self.assertEqual(destination, Path("constant/combustionProperties"))
+            self.assertIn("model reactionRateFjord", rendered)
+            self.assertIn("c_tilde", rendered)
+            self.assertIn("omega_c", rendered)
+            self.assertIn('table "betaFdf.tbl"', rendered)
+
+    def test_custom_template_requires_output_keys_for_renamed_ports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            template = Path(directory) / "closure.in"
+            template.write_text(
+                "outputs (@FOAMNORDIC_OUTPUT_FIELDS@);\n",
+                encoding="utf-8",
+            )
+            case = fno.openfoam.Case(
+                case_dir="source",
+                run_dir="workspace",
+                integration=fno.openfoam.DictionaryTemplate(
+                    source=template,
+                    destination="constant/modelProperties",
+                ),
+            )
+            closure = fno.Closure(
+                name="mapped",
+                artifact="mapped.fnom",
+                inputs={"velocity": fno.field("U")},
+                outputs={"prediction": fno.field("nut")},
+            )
+            with self.assertRaisesRegex(ValueError, "OUTPUT_KEYS"):
+                render_dictionary(
+                    fno.Longship(case=case, closures=(closure,)),
+                    closure,
+                    "unix:///tmp/mapped.sock",
+                    True,
+                )
+
+    def test_case_and_scheduler_rank_mismatch_is_rejected(self) -> None:
+        run = example_longship()
+        with self.assertRaisesRegex(ValueError, "ranks"):
+            fno.Longship(
+                case=run.case,
+                closures=run.closures,
+                scheduler=fno.Slurm(
+                    account="project",
+                    partition="small",
+                    time="00:15:00",
+                    nodes=1,
+                    ntasks=1,
+                ),
+            )
+
+    def test_output_must_be_a_mutable_field(self) -> None:
+        with self.assertRaisesRegex(ValueError, "mutable field"):
+            fno.Closure(
+                name="closure",
+                artifact="model.fnom",
+                inputs={"U": fno.field("U")},
+                outputs={"bad": fno.grad("U")},
+            )
+
+    def test_duplicate_output_writers_are_rejected(self) -> None:
+        run = example_longship()
+        duplicate = fno.Closure(
+            name="second",
+            artifact="second.fnom",
+            inputs={"U": fno.field("U")},
+            outputs={"prediction": fno.field("nut")},
+        )
+        with self.assertRaisesRegex(ValueError, "same output field"):
+            fno.Longship(case=run.case, closures=run.closures + (duplicate,))
+
+    def test_same_field_may_be_transformed_at_distinct_stages(self) -> None:
+        run = example_longship()
+        start = fno.Transform(
+            name="startVelocity",
+            operator=fno.Operator.model("start.fnom"),
+            inputs={"U": fno.field("U")},
+            outputs={"U": fno.field("U")},
+            at="time_step_start",
+        )
+        end = fno.Transform(
+            name="endVelocity",
+            operator=fno.Operator.model("end.fnom"),
+            inputs={"U": fno.field("U")},
+            outputs={"U": fno.field("U")},
+            at="time_step_end",
+        )
+        longship = fno.Longship(case=run.case, transforms=(start, end))
+        self.assertEqual(len(longship.transforms), 2)
+
+    def test_same_field_and_stage_remain_ambiguous(self) -> None:
+        run = example_longship()
+        programs = tuple(
+            fno.Transform(
+                name=f"velocity{index}",
+                operator=fno.Operator.model(f"model{index}.fnom"),
+                inputs={"U": fno.field("U")},
+                outputs={"U": fno.field("U")},
+                at="time_step_start",
+            )
+            for index in range(2)
+        )
+        with self.assertRaisesRegex(ValueError, "same solver stage"):
+            fno.Longship(case=run.case, transforms=programs)
+
+
+if __name__ == "__main__":
+    unittest.main()

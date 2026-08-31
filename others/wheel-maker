@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: others/wheel-maker [options]
+
+Build FoamNordic wheels with GitHub Actions and prepare a checked wheelhouse.
+The script stops immediately before publishing to TestPyPI.
+
+Options:
+  --ref REF          Remote branch to build (default: main)
+  --output DIR       Destination directory (default: wheelhouse-<version>-<run-id>)
+  --workflow FILE    Workflow file (default: wheels.yml)
+  --keep-downloads   Keep the nested GitHub artifact directories
+  -h, --help         Show this help
+
+Requirements:
+  git, gh, and Python 3.9 or newer. GitHub CLI authentication must be active.
+EOF
+}
+
+fail() {
+    printf '%s\n' "[FoamNordic] Error: $*" >&2
+    exit 1
+}
+
+note() {
+    printf '%s\n' "[FoamNordic] $*"
+}
+
+ref=main
+workflow=wheels.yml
+output=""
+keep_downloads=false
+
+while (($#)); do
+    case "$1" in
+        --ref)
+            (($# >= 2)) || fail "--ref requires a value"
+            ref=$2
+            shift 2
+            ;;
+        --output)
+            (($# >= 2)) || fail "--output requires a value"
+            output=$2
+            shift 2
+            ;;
+        --workflow)
+            (($# >= 2)) || fail "--workflow requires a value"
+            workflow=$2
+            shift 2
+            ;;
+        --keep-downloads)
+            keep_downloads=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            fail "unknown option: $1"
+            ;;
+    esac
+done
+
+for command in git gh python3 shasum; do
+    command -v "$command" >/dev/null 2>&1 \
+        || fail "required command is unavailable: $command"
+done
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo=$(git -C "$script_dir/.." rev-parse --show-toplevel 2>/dev/null) \
+    || fail "the script must remain inside the FoamNordic repository"
+cd "$repo"
+
+[[ -f ".github/workflows/$workflow" ]] \
+    || fail "workflow does not exist: .github/workflows/$workflow"
+[[ -f python/pyproject.toml ]] || fail "python/pyproject.toml is missing"
+
+python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+python_major=${python_version%%.*}
+python_minor=${python_version#*.}
+if ((python_major < 3 || (python_major == 3 && python_minor < 9))); then
+    fail "Python 3.9 or newer is required for Twine; found $python_version"
+fi
+
+version=$(sed -nE 's/^version = "([^"]+)"/\1/p' python/pyproject.toml | head -1)
+[[ -n "$version" ]] || fail "could not read the FoamNordic version"
+
+gh auth status >/dev/null 2>&1 \
+    || fail "GitHub CLI is not authenticated; run: gh auth login"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+    fail "the worktree is dirty; commit and push the release source first"
+fi
+
+note "Checking origin/$ref"
+git fetch --quiet origin "$ref"
+local_sha=$(git rev-parse HEAD)
+remote_sha=$(git rev-parse FETCH_HEAD)
+[[ "$local_sha" == "$remote_sha" ]] \
+    || fail "local HEAD is not origin/$ref; push or update the repository first"
+
+note "Starting $workflow at $ref (${local_sha:0:7})"
+dispatch_output=$(gh workflow run "$workflow" --ref "$ref" 2>&1) \
+    || fail "GitHub Actions dispatch failed: $dispatch_output"
+printf '%s\n' "$dispatch_output"
+
+run_url=$(printf '%s\n' "$dispatch_output" \
+    | grep -Eo 'https://[^[:space:]]+/actions/runs/[0-9]+' \
+    | tail -1 || true)
+run_id=${run_url##*/}
+[[ "$run_id" =~ ^[0-9]+$ ]] \
+    || fail "could not identify the workflow run; inspect: gh run list --workflow $workflow"
+
+note "Watching run $run_id"
+gh run watch "$run_id" --compact --exit-status
+
+run_sha=$(gh run view "$run_id" --json headSha --jq .headSha)
+[[ "$run_sha" == "$local_sha" ]] \
+    || fail "run $run_id built $run_sha instead of $local_sha"
+
+if [[ -z "$output" ]]; then
+    output="$repo/wheelhouse-$version-$run_id"
+elif [[ "$output" != /* ]]; then
+    output="$repo/$output"
+fi
+[[ ! -e "$output" ]] || fail "output already exists: $output"
+mkdir -p "$output"
+
+download=$(mktemp -d "${TMPDIR:-/tmp}/foamnordic-wheels.XXXXXX")
+cleanup() {
+    rm -rf -- "$download"
+}
+trap cleanup EXIT
+
+note "Downloading wheel artifacts"
+gh run download "$run_id" --dir "$download/artifacts"
+
+while IFS= read -r -d '' wheel; do
+    cp -- "$wheel" "$output/"
+done < <(find "$download/artifacts" -type f -name '*.whl' -print0)
+
+wheels=()
+while IFS= read -r -d '' wheel; do
+    wheels+=("$wheel")
+done < <(find "$output" -maxdepth 1 -type f -name '*.whl' -print0)
+((${#wheels[@]} == 6)) \
+    || fail "expected 6 wheels, found ${#wheels[@]} in $output"
+
+for wheel in "${wheels[@]}"; do
+    name=${wheel##*/}
+    [[ "$name" == "foamnordic-$version-"*.whl ]] \
+        || fail "wheel version does not match $version: $name"
+done
+
+for python_tag in cp311 cp312; do
+    for target in '*macosx*arm64.whl' '*manylinux*aarch64.whl' '*manylinux*x86_64.whl'; do
+        count=$(find "$output" -maxdepth 1 -type f \
+            -name "*-$python_tag-*${target#\*}" | wc -l | tr -d ' ')
+        [[ "$count" == 1 ]] \
+            || fail "expected one $python_tag ${target#\*} wheel, found $count"
+    done
+done
+
+check_python=python3
+if ! python3 -c 'import twine' >/dev/null 2>&1; then
+    note "Creating an isolated temporary environment for twine"
+    python3 -m venv "$download/twine"
+    "$download/twine/bin/python" -m pip install --quiet --upgrade pip twine
+    check_python="$download/twine/bin/python"
+fi
+
+note "Checking wheel metadata"
+"$check_python" -m twine check "${wheels[@]}"
+
+(
+    cd "$output"
+    shasum -a 256 ./*.whl > SHA256SUMS
+)
+
+upload_helper="$output/upload-testpypi"
+cat > "$upload_helper" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+wheelhouse=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python_command=python3
+temporary=""
+cleanup() {
+    if [[ -n "$temporary" ]]; then
+        rm -rf -- "$temporary"
+    fi
+}
+trap cleanup EXIT
+if ! python3 -c 'import twine' >/dev/null 2>&1; then
+    temporary=$(mktemp -d "${TMPDIR:-/tmp}/foamnordic-twine.XXXXXX")
+    python3 -m venv "$temporary/environment"
+    "$temporary/environment/bin/python" -m pip install --quiet --upgrade pip twine
+    python_command="$temporary/environment/bin/python"
+fi
+"$python_command" -m twine check "$wheelhouse"/*.whl
+"$python_command" -m twine upload --repository testpypi "$wheelhouse"/*.whl
+EOF
+chmod 0755 "$upload_helper"
+
+if [[ "$keep_downloads" == true ]]; then
+    cp -R "$download/artifacts" "$output/github-artifacts"
+    note "Nested downloads kept in $output/github-artifacts"
+fi
+
+printf '\n%s\n' "[FoamNordic] Wheelhouse ready: $output"
+printf '%s\n' "[FoamNordic] Version: $version"
+printf '%s\n' "[FoamNordic] Commit: $local_sha"
+printf '%s\n' "[FoamNordic] Run: $run_url"
+printf '%s\n\n' "[FoamNordic] TestPyPI upload command (prompts for the token):"
+printf '%q\n' "$upload_helper"

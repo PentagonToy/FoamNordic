@@ -1,0 +1,73 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.4"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "foamnordic"
+version = "1.0.3.dev6"
+description = "Declarative orchestration for native OpenFOAM closure workloads"
+readme = { file = "../others/README.pypi.md", content-type = "text/markdown" }
+requires-python = ">=3.11,<3.13"
+license = "GPL-3.0-only"
+authors = [{ name = "Hanseul Kang", email = "hanseul.kang@aalto.fi" }]
+keywords = ["OpenFOAM", "CFD", "HPC", "machine learning", "scientific computing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "cmake>=3.20",
+    "cloudpickle>=3,<4",
+    "equinox>=0.13.1,<0.14",
+    "foamlib>=1.7,<2",
+    "jax>=0.7,<1",
+    "joblib>=1.4,<2",
+    "numpy>=1.26,<3",
+    "onnx>=1.17,<2",
+    "onsaemiro>=1.0.5",
+    "scikit-learn>=1.4,<2",
+]
+
+[project.urls]
+Homepage = "https://github.com/PentagonToy/FoamNordic"
+Documentation = "https://github.com/PentagonToy/FoamNordic#readme"
+Issues = "https://github.com/PentagonToy/FoamNordic/issues"
+Source = "https://github.com/PentagonToy/FoamNordic"
+
+[project.scripts]
+foamnordic = "foamnordic._cli:main"
+
+[tool.scikit-build]
+cmake.source-dir = ".."
+wheel.packages = ["foamnordic"]
+wheel.license-files = ["../LICENSE"]
+install.components = ["Python"]
+
+[tool.scikit-build.cmake.define]
+FOAMNORDIC_PYTHON = "ON"
+FOAMNORDIC_TESTS = "OFF"
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^darwin"
+cmake.define.CMAKE_OSX_DEPLOYMENT_TARGET = "12.0"
+cmake.define.FOAMNORDIC_PYTHON = "ON"
+cmake.define.FOAMNORDIC_TESTS = "OFF"
+
+[tool.cibuildwheel]
+build = "cp311-* cp312-*"
+skip = "*-musllinux_*"
+test-command = "python -c 'import foamnordic._native as native; print(\"FoamNordic native:\", native.__file__)' && python -m unittest discover -s {project}/python/tests -v"
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

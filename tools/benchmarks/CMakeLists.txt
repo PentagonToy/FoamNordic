@@ -1,0 +1,5 @@
+add_executable(foamnordic_fjord_benchmark fjord.cpp)
+target_link_libraries(foamnordic_fjord_benchmark PRIVATE FoamNordic::fjord)
+
+add_executable(foamnordic_field_benchmark field.cpp)
+target_link_libraries(foamnordic_field_benchmark PRIVATE FoamNordic::adapter)
