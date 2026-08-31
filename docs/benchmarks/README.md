@@ -10,6 +10,7 @@ not confused with architectural promises.
 | [HPC transport](hpc-transport.md) | Implemented data planes, UCX environment, and portable site checks |
 | [OpenFOAM cases](openfoam-cases.md) | Laminar, RAS, LES, combustion, and copied-case compatibility evidence |
 | [Closure validation](closure-validation.md) | Mathematical parity and learned-closure accuracy and timing |
+| [Compiled estimator](compiled-estimator.md) | Compiled C++ versus Joblib startup, memory, parity, and batch-size crossover |
 | [Validation gates](validation-gates.md) | Remaining HPC and combustion acceptance work |
 
 Measurements are development records, not portable performance guarantees.

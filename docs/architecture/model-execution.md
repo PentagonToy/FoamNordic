@@ -43,6 +43,18 @@ Scikit-learn estimators that convert faithfully to ONNX should prefer the
 native route. Joblib fallback must report that Python is present in the hot
 path so performance comparisons remain honest.
 
+## Compiled estimators
+
+Supported scikit-learn estimator graphs can be lowered to portable C++ in the
+FNOM artifact. A managed resident compiles the source once per target/compiler
+identity, loads the cached shared library, and calls a stable C ABI. Python
+still owns the Fjord callback boundary, but neither scikit-learn nor the fitted
+estimator participates in inference.
+
+This path favors repeated small and medium cell batches and low startup memory.
+Joblib remains necessary for unsupported graphs and can outperform the compact
+row-parallel tree walker on very large batches.
+
 ## Declared native operations
 
 Simple field modifications such as
@@ -65,6 +77,7 @@ diagnostic mode with a visible latency warning.
 ```text
 native operation available       native C++/Fortran kernel
 model converts faithfully        ONNX Runtime
+supported sklearn graph          compiled C++ resident
 Equinox requires JAX semantics   attached Equinox executor
 Joblib cannot convert            attached Joblib executor
 central GPU explicitly selected  node gateway → UCX/TCP → GPU executor

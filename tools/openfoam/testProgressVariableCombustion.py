@@ -118,7 +118,7 @@ def _artifacts(root: Path) -> tuple[Path, Path]:
     )
     source = 2.0e-2 * (1.0 - features[:, 0])
     reaction_model = LinearRegression().fit(features, source)
-    reaction = fno.export.joblib(
+    reaction = fno.export.sklearn(
         reaction_model,
         path=model_dir / "reaction-rate.fnom",
         inputs={
@@ -134,7 +134,7 @@ def _artifacts(root: Path) -> tuple[Path, Path]:
         (1.0 - manifold_features[:, 0], manifold_features[:, 0])
     )
     manifold_model = LinearRegression().fit(manifold_features, species)
-    manifold = fno.export.joblib(
+    manifold = fno.export.sklearn(
         manifold_model,
         path=model_dir / "flamelet.fnom",
         inputs={

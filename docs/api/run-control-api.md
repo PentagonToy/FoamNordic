@@ -72,16 +72,28 @@ artifact = fno.Export.onnx(
 ```
 
 The ONNX exporter accepts bytes, a path, or an object exposing
-`SerializeToString()`. Joblib and Equinox have matching FNOM exporters:
+`SerializeToString()`. Scikit-learn models use one exporter with automatic or
+explicit backend selection, while Equinox retains its native exporter:
 
 ```python
-joblib_artifact = fno.export.joblib(
+compiled_artifact = fno.export.sklearn(
+    extra_trees,
+    path=model_dir / "reactionRateNative.fnom",
+    inputs={"features": fno.Tensor.vector(components=3)},
+    outputs={"omega": fno.Tensor.scalar()},
+    x_scaler=fitted_input_scaler,
+    y_scaler=fitted_output_scaler,
+    backend="compiled",
+)
+
+joblib_artifact = fno.export.sklearn(
     voting_regressor,
     path=model_dir / "reactionRate.fnom",
     inputs={"features": fno.Tensor.vector(components=3)},
     outputs={"omega": fno.Tensor.scalar()},
     x_scaler=fitted_input_scaler,
     y_scaler=fitted_output_scaler,
+    backend="joblib",
 )
 
 equinox_artifact = fno.export.equinox(
@@ -95,10 +107,10 @@ equinox_artifact = fno.export.equinox(
 ```
 
 `Longship.launch()` reads the FNOM format and selects the fully native ONNX
-worker or managed Joblib/Equinox resident automatically. All formats retain
-the same Fjord transport and native packing boundary. Callable JAX-to-ONNX
-lowering remains an exporter concern. Every export function is quiet by
-default; `verbose=True` displays an Onsaemiro artifact summary.
+worker or managed compiled/Joblib/Equinox resident automatically. All formats
+retain the same Fjord transport and native packing boundary. Callable
+JAX-to-ONNX lowering remains an exporter concern. Every export function is
+quiet by default; `verbose=True` displays an Onsaemiro artifact summary.
 
 The model CPU declaration is an active runtime budget, not scheduler metadata
 only. Under Slurm, `Slurm.model(cpus_per_task=N)` reserves and passes `N` CPUs
@@ -240,8 +252,8 @@ velocity_transform = fno.Transform(
 )
 ```
 
-`Operator.model()` accepts only `.fnom`; its metadata selects ONNX, Joblib, or
-Equinox without exposing backend-specific launch classes.
+`Operator.model()` accepts only `.fnom`; its metadata selects ONNX, compiled
+C++, Joblib, or Equinox without exposing backend-specific launch classes.
 `Operator.function()` packages a callable and its inferred stored-field
 contract inside the marker-owned run directory. Logical input names become
 keyword arguments and a returned mapping uses logical output names:

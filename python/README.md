@@ -200,11 +200,12 @@ Onsaemiro tables. See the
 `fno.Export.onnx(...)` accepts a path without loading the entire ONNX payload
 into Python memory while exporting, which is important for large ensembles.
 The resulting `.fnom` is one uncompressed, self-contained model bundle.
-`fno.Export.joblib(...)` embeds its trusted Joblib stream in the same way and
-loads it once at worker startup. Linux and macOS workers directly memory-map
-large aligned payloads from the `.fnom` container using absolute file offsets,
-with automatic private-storage fallback for incompatible Joblib interfaces,
-filesystems, and legacy bundles.
+`fno.Export.sklearn(...)` selects compiled C++ for supported estimator graphs
+and otherwise embeds a trusted Joblib stream. Joblib payloads load once at
+worker startup. Linux and macOS workers directly memory-map large aligned
+payloads from the `.fnom` container using absolute file offsets, with automatic
+private-storage fallback for incompatible Joblib interfaces, filesystems, and
+legacy bundles.
 `fno.Export.equinox(...)` records the PyTree leaves in FNOM and reconstructs
 and JIT-compiles the trusted model once. Joblib and Equinox are selected by
 the artifact rather than by separate installation profiles.
@@ -213,13 +214,14 @@ All exporters accept fitted scikit-learn preprocessing without embedding the
 Python scaler in the runtime model:
 
 ```python
-artifact = fno.Export.joblib(
+artifact = fno.Export.sklearn(
     model,
     path="reactionRate.fnom",
     inputs={"features": fno.Tensor.vector(components=3)},
     outputs={"omega": fno.Tensor.scalar()},
     x_scaler=fitted_x_scaler,
     y_scaler=fitted_y_scaler,
+    backend="joblib",
     runtime="sklearnex",  # optional; default is "sklearn"
 )
 ```

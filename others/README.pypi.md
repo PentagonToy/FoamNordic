@@ -28,8 +28,8 @@ foamnordic --help
 foamnordic dir
 ```
 
-The same installation includes ONNX packaging, Joblib/scikit-learn models,
-and JAX/Equinox resident models. No backend-specific extra is required.
+The same installation includes ONNX packaging, compiled and Joblib/scikit-learn
+models, and JAX/Equinox resident models. No backend-specific extra is required.
 
 Binary wheels carry the native Python control runtime and compact OpenFOAM
 source build kit. `foamnordic build` compiles it for the currently loaded ABI;

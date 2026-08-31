@@ -3,7 +3,7 @@
 **FNOM (FoamNordic Model, pronounced “ef-nom”) is FoamNordic's
 self-contained, backend-neutral execution artifact for deploying analytical
 and learned model kernels into coupled simulations.** FNOM does not replace
-backend model formats. It binds an ONNX, Joblib, Equinox, or future payload to
+backend model formats. It binds an ONNX, compiled C++, Joblib, Equinox, or future payload to
 the tensor contract, preprocessing metadata, runtime requirements, and
 compatibility rules required by FoamNordic.
 
@@ -35,8 +35,8 @@ artifact.validate()
 
 `validate` checks the container, bounds, manifest version, tensor contract,
 scalers, tree metadata, and payload layout. It deliberately does not unpickle
-Joblib or Equinox payloads and does not execute an ONNX graph. Backend loading
-remains an execution-time validation performed by ClosureHost.
+Joblib or Equinox payloads, compile C++ source, or execute an ONNX graph.
+Backend loading remains an execution-time validation performed by ClosureHost.
 
 ## Encoding rules
 
@@ -47,7 +47,7 @@ bytes are rejected.
 
 Container version and manifest schema are independent. The current writer
 emits the `FNOBND2` container. A manifest uses schema 1 unless it needs the
-schema-2 Joblib runtime field.
+schema-2 backend runtime field.
 
 ### `FNOBND2` container header
 
@@ -72,7 +72,7 @@ reader accepts it, but the writer never emits it.
 The manifest begins with `FNOMAN1\0`, followed by:
 
 1. manifest schema, `u32`;
-2. backend family, `u8` (`1` Equinox, `2` Joblib, `3` ONNX);
+2. backend family, `u8` (`1` Equinox, `2` Joblib, `3` ONNX, `4` compiled C++);
 3. backend artifact name string;
 4. closure-contract name string;
 5. input field sequence;
@@ -80,7 +80,7 @@ The manifest begins with `FNOMAN1\0`, followed by:
 7. optional input affine scaler;
 8. optional output affine scaler;
 9. Equinox tree-leaf sequence;
-10. Joblib runtime string when schema is 2 or newer.
+10. backend runtime string when schema is 2 or newer.
 
 Each field is encoded as a name string, element-type `u8`, and component count
 `u64`. A scaler contains a presence flag; when present it records kind, feature
@@ -111,6 +111,33 @@ New readers must reject unsupported versions instead of guessing their
 meaning. New writers emit only the current container while readers retain the
 documented legacy paths.
 
+## Compiled C++ payloads
+
+A compiled v1 FNOM stores portable C++ source and runtime identifier `cpp-v1`,
+not a platform-specific shared library. The first worker on a target compiles
+the source with a C++17 compiler. FoamNordic caches the resulting library by
+the SHA-256 digest of the source, code-generator version, operating system,
+architecture, compiler identity, and optimization flags. Subsequent workers
+load the cached library directly.
+
+Keeping target binaries outside FNOM preserves one artifact across macOS
+arm64, Linux x86-64, and Linux arm64. Compilation is never part of an exchange
+hot path. A cache miss does, however, add startup latency and transient compiler
+memory; production deployments should warm the cache before a scheduled run.
+
+```console
+foamnordic compile model.fnom
+```
+
+Compiled v1 lowers scalar-output `Ridge`, `Lasso`, `ElasticNet`,
+`LinearRegression`, `ExtraTreesRegressor`, `RandomForestRegressor`,
+`KNeighborsRegressor`, `GradientBoostingRegressor`, `XGBRegressor`,
+`XGBRFRegressor`, `LGBMRegressor`, and `VotingRegressor` graphs composed from
+supported estimators. KNN accepts uniform or distance weights with Euclidean or
+Manhattan distance. Boosting exporters accept scalar regression objectives and
+numeric tree splits. Unsupported estimators must remain Joblib artifacts rather
+than silently changing semantics.
+
 ## Performance and trust
 
 The execution payload is never compressed or encrypted. It is decoded once at
@@ -120,5 +147,6 @@ parsing, mandatory extraction, or per-exchange deserialization in the FNOM
 hot path.
 
 FNOM is an execution contract, not a security sandbox. Joblib and current
-Equinox payloads may contain pickle-compatible objects and must come from a
-trusted source. Inspection and structural validation do not execute them.
+Equinox payloads may contain pickle-compatible objects, while compiled payloads
+contain source code passed to the target compiler. All must come from a trusted
+source. Inspection and structural validation do not unpickle or compile them.

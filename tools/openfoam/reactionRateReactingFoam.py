@@ -95,7 +95,7 @@ def _artifact(workspace: Path) -> Path:
     # the reduced chemistry trajectory.
     source = 1.0e-4 * (1.0 - features[:, 0])
     model = LinearRegression().fit(features, source)
-    return fno.export.joblib(
+    return fno.export.sklearn(
         model,
         path=workspace / "models/reaction-rate.fnom",
         inputs={

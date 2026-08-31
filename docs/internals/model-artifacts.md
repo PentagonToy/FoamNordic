@@ -133,11 +133,12 @@ Joblib export may select the resident execution runtime without changing
 `Operator.model()` or the solver declaration:
 
 ```python
-artifact = fno.Export.joblib(
+artifact = fno.Export.sklearn(
     model,
     path="smagorinsky.fnom",
     inputs={"features": fno.Tensor.vector(components=10)},
     outputs={"nut": fno.Tensor.scalar()},
+    backend="joblib",
     runtime="sklearnex",
 )
 ```

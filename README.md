@@ -33,8 +33,9 @@ foamnordic --help
 foamnordic dir
 ```
 
-The same installation includes ONNX packaging, Joblib/scikit-learn models,
-and JAX/Equinox resident models. No backend-specific install command is needed.
+The same installation includes ONNX packaging, compiled and Joblib/scikit-learn
+models, and JAX/Equinox resident models. No backend-specific install command is
+needed.
 
 Binary wheels include the native Python control runtime and a compact source
 build kit for the OpenFOAM ABI selected on the machine:
@@ -210,7 +211,7 @@ stops the group as one fail-together workload. Writing the same field at
 different stages is supported; two programs writing the same field at the same
 stage are rejected as ambiguous.
 
-FNOM selects ONNX, Joblib, or Equinox internally. Stochastic field programs
+FNOM selects ONNX, compiled C++, Joblib, or Equinox internally. Stochastic field programs
 use the backend-neutral `fno.Random.Key`; the default root key is 42 and each
 program receives an exchange-specific derivation. `scope="global"` shares one
 invocation key across ranks and `scope="rank"` derives independent rank keys.
