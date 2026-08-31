@@ -15,6 +15,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 from time import monotonic, sleep
 from typing import Callable, Mapping, Sequence, TextIO
@@ -72,6 +73,8 @@ def _banner() -> str:
 
 
 def _initialize_sailing_log(path: Path, name: str) -> None:
+    if path.is_file():
+        return
     path.write_text(
         f"{_banner()}\n\n[FoamNordic] Sailing: {name}\n",
         encoding="utf-8",
@@ -333,6 +336,72 @@ def _timestamp(value: datetime) -> str:
     return value.isoformat(timespec="seconds")
 
 
+class _OpenFOAMProgress:
+    """Incrementally render the latest OpenFOAM time without writing a log."""
+
+    _TIME = re.compile(r"^\s*Time\s*=\s*([^\s]+)\s*$")
+    _ITERATION = re.compile(r"^\s*Iteration\s*=\s*([^\s]+)\s*$")
+
+    def __init__(self, path: Path, *, started: float, stream: TextIO) -> None:
+        self._path = path
+        self._started = started
+        self._stream = stream
+        self._offset = 0
+        self._pending = ""
+        self._latest: tuple[str, str] | None = None
+        self._width = 0
+        self._rendered = False
+
+    def refresh(self, *, final: bool = False) -> None:
+        try:
+            size = self._path.stat().st_size
+            if size < self._offset:
+                self._offset = 0
+                self._pending = ""
+            with self._path.open("rb") as stream:
+                stream.seek(self._offset)
+                chunk = stream.read()
+                self._offset = stream.tell()
+        except OSError:
+            return
+
+        text = self._pending + chunk.decode("utf-8", errors="replace")
+        lines = text.splitlines(keepends=True)
+        self._pending = ""
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            self._pending = lines.pop()
+        if final and self._pending:
+            lines.append(self._pending)
+            self._pending = ""
+
+        for line in lines:
+            match = self._TIME.match(line.rstrip("\r\n"))
+            if match is not None:
+                self._latest = ("t", match.group(1))
+                continue
+            match = self._ITERATION.match(line.rstrip("\r\n"))
+            if match is not None:
+                self._latest = ("iteration", match.group(1))
+
+        if self._latest is None:
+            return
+        label, value = self._latest
+        elapsed = _format_elapsed(monotonic() - self._started)
+        message = (
+            f"[FoamNordic] Sailing in OpenFOAM: {label} = {value}"
+            f" | elapsed {elapsed}"
+        )
+        padding = " " * max(0, self._width - len(message))
+        print(f"\r{message}{padding}", end="", flush=True, file=self._stream)
+        self._width = len(message)
+        self._rendered = True
+
+    def clear(self) -> None:
+        if not self._rendered:
+            return
+        print(f"\r{' ' * self._width}\r", end="", flush=True, file=self._stream)
+
+
 class Run:
     """A non-blocking native Longship process with one terminal stop operation."""
 
@@ -401,16 +470,47 @@ class Run:
                 return RunStatus.RUNNING
             return self._finish_locked(exit_code).status
 
-    def _wait(self, timeout: float | None = None) -> Result:
+    def _wait(
+        self,
+        timeout: float | None = None,
+        *,
+        progress: bool = False,
+    ) -> Result:
         """Wait for terminal state and return the same immutable result each time."""
 
         with self._lock:
             if self._result is not None:
                 return self._result
+        if not progress:
+            try:
+                exit_code = self._process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired as error:
+                raise TimeoutError("Longship is still running") from error
+            with self._lock:
+                return self._finish_locked(exit_code)
+
+        monitor = _OpenFOAMProgress(
+            self._solver_log,
+            started=self._started,
+            stream=sys.stdout,
+        )
+        deadline = None if timeout is None else monotonic() + timeout
         try:
-            exit_code = self._process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired as error:
-            raise TimeoutError("Longship is still running") from error
+            while True:
+                wait_timeout = 1.0
+                if deadline is not None:
+                    remaining = deadline - monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("Longship is still running")
+                    wait_timeout = min(wait_timeout, remaining)
+                try:
+                    exit_code = self._process.wait(timeout=wait_timeout)
+                    monitor.refresh(final=True)
+                    break
+                except subprocess.TimeoutExpired:
+                    monitor.refresh()
+        finally:
+            monitor.clear()
         with self._lock:
             return self._finish_locked(exit_code)
 
@@ -419,15 +519,18 @@ class Run:
         *,
         force: bool = False,
         timeout: float | None = None,
+        progress: bool = False,
     ) -> Result:
-        """Wait normally, or force-stop every process owned by this run."""
+        """Wait normally, optionally showing time, or force-stop owned processes."""
 
         if timeout is not None and timeout <= 0:
             raise ValueError("stop timeout must be positive")
         if not isinstance(force, bool):
             raise TypeError("force must be a boolean")
+        if not isinstance(progress, bool):
+            raise TypeError("progress must be a boolean")
         if not force:
-            return self._wait(timeout=timeout)
+            return self._wait(timeout=timeout, progress=progress)
         with self._lock:
             if self._result is not None:
                 return self._result
@@ -502,8 +605,13 @@ class Run:
                 return actual
         return _query_slurm_estimated_start(job_id)
 
-    def observe(self, *, poll_interval: float = 0.1):
-        """Return an iterable observation stream; no context manager is required."""
+    def observe(
+        self,
+        *,
+        poll_interval: float = 0.1,
+        progress: bool = False,
+    ):
+        """Return observations, optionally rendering their latest solver time."""
 
         from .observe import ObservationStream
 
@@ -512,6 +620,7 @@ class Run:
             self._work_dir / "observations/observations.jsonl",
             poll_interval=poll_interval,
             expected_sources=self._observation_sources,
+            progress=progress,
         )
 
     def summary(

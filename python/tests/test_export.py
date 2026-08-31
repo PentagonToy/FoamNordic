@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import inspect
+import sys
 import tempfile
+import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import foamnordic as fno
 from foamnordic.core.native_plan import available as native_available
@@ -39,6 +41,39 @@ class ExportTests(unittest.TestCase):
             parameters = inspect.signature(exporter).parameters
             self.assertIsNone(parameters["x_scaler"].default)
             self.assertIsNone(parameters["y_scaler"].default)
+
+    def test_joblib_runtime_is_strict(self) -> None:
+        with self.assertRaisesRegex(ValueError, "'sklearn' or 'sklearnex'"):
+            fno.export.joblib(
+                _LinearPrediction(),
+                path="model.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                runtime="automatic",
+            )
+
+    def test_sklearnex_runtime_patches_the_resident_process(self) -> None:
+        from foamnordic.execution.resident import _activate_joblib_runtime
+
+        patch_sklearn = Mock()
+        module = types.SimpleNamespace(patch_sklearn=patch_sklearn)
+        with patch.dict(sys.modules, {"sklearnex": module}):
+            _activate_joblib_runtime("sklearnex")
+        patch_sklearn.assert_called_once_with(verbose=False)
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_sklearnex_runtime_is_stored_in_fnom(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = fno.export.joblib(
+                _LinearPrediction(),
+                path=Path(directory) / "accelerated.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                runtime="sklearnex",
+            )
+            metadata = fno._native.read_model_manifest(str(manifest))
+        self.assertEqual(metadata["schema_version"], 2)
+        self.assertEqual(metadata["runtime"], "sklearnex")
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_existing_onnx_payload_exports_native_manifest(self) -> None:
@@ -200,6 +235,8 @@ class ExportTests(unittest.TestCase):
             )
             metadata = fno._native.read_model_manifest(str(manifest))
             self.assertEqual(metadata["format"], "joblib")
+            self.assertEqual(metadata["schema_version"], 2)
+            self.assertEqual(metadata["runtime"], "sklearn")
             payload = root / metadata["artifact_path"]
             self.assertTrue(payload.is_file())
             loaded = joblib.load(payload, mmap_mode="r")

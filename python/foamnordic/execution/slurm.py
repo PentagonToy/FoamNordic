@@ -9,7 +9,7 @@ import subprocess
 import time
 from typing import Mapping, Sequence, TYPE_CHECKING
 
-from .run import _banner, _internal_path, _longship_executable, _sailing_paths
+from .run import _internal_path, _longship_executable, _sailing_paths
 from .shell import quote_command
 
 if TYPE_CHECKING:
@@ -69,11 +69,6 @@ def write_batch(
         else "unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE"
     )
     longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
-    banner = "\n".join(f"printf '%s\\n' {quote_command((line,))}" for line in _banner().splitlines())
-    heading = (
-        f"{banner}\n"
-        f"printf '%s\\n' {quote_command((f'[FoamNordic] Sailing: {longship.name}',))}"
-    )
     if host is None:
         launch_body = f""": >> {quote_command((host_log,))}
 exec srun \\
@@ -124,7 +119,6 @@ exec srun \\
                 "MEMORY_DIRECTIVE": memory,
                 "MEMORY_SANITIZER": memory_sanitizer,
                 "SAILING_LOG": longship_log,
-                "BANNER": heading,
                 "LAUNCH_BODY": launch_body,
             },
         ),

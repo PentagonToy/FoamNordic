@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 from ..random import Key, invocation, key as random_key
+from ..core.layout import FieldLayout
 
 try:
     from .. import _native
@@ -49,7 +50,59 @@ def _packed_result(value, outputs, rows: int, dtype: str):
     return np.ascontiguousarray(result, dtype=dtype)
 
 
-def _joblib_evaluator(path: Path, outputs):
+def _physical_input(values, layout: Mapping[str, object], rows: int):
+    """Decode a packed OpenFOAM port into its Python physical shape."""
+
+    return FieldLayout.from_plan(layout).unpack(values, rows)
+
+
+def _transport_output(values, layout: Mapping[str, object], rows: int):
+    """Encode one Python physical value into its OpenFOAM packed shape."""
+
+    return FieldLayout.from_plan(layout).pack(values, rows)
+
+
+def _packed_function_result(value, outputs, layouts, rows: int, dtype: str):
+    """Pack logical function outputs using their OpenFOAM value layouts."""
+
+    import numpy as np
+
+    if len(layouts) != len(outputs):
+        raise ValueError("Operator.function output layouts do not match its ports")
+    if isinstance(value, Mapping):
+        values = tuple(value[name] for name, _ in outputs)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        if len(value) != len(outputs):
+            raise ValueError("model output count does not match the FNOM contract")
+        values = tuple(value)
+    else:
+        values = (value,)
+        if len(outputs) != 1:
+            raise ValueError("model output count does not match the FNOM contract")
+    pieces = [
+        _transport_output(item, layout, rows)
+        for item, layout in zip(values, layouts, strict=True)
+    ]
+    return np.ascontiguousarray(np.concatenate(pieces, axis=1), dtype=dtype)
+
+
+def _activate_joblib_runtime(runtime: str) -> None:
+    if runtime == "sklearn":
+        return
+    if runtime != "sklearnex":
+        raise ValueError(f"unsupported Joblib runtime {runtime!r}")
+    try:
+        from sklearnex import patch_sklearn
+    except ImportError as error:
+        raise ImportError(
+            "this artifact requires scikit-learn-intelex; install it on a "
+            "supported Linux x86-64 worker"
+        ) from error
+    patch_sklearn(verbose=False)
+
+
+def _joblib_evaluator(path: Path, outputs, runtime: str = "sklearn"):
+    _activate_joblib_runtime(runtime)
     try:
         import joblib
         import numpy as np
@@ -106,16 +159,27 @@ def _function_evaluator(package, outputs):
     ):
         features = np.frombuffer(buffer, dtype=dtype).reshape(rows, columns)
         widths = package.get("input_widths")
+        layouts = package.get("input_layouts")
         if widths is None:
             # Widths are copied into the package by the launcher. Retain a
             # clear diagnostic for artifacts created by an older launcher.
             raise ValueError("Operator.function payload is missing input widths")
         arguments = {}
         offset = 0
-        for name, width in zip(input_names, widths, strict=True):
+        if layouts is not None and len(layouts) != len(input_names):
+            raise ValueError("Operator.function input layouts do not match its ports")
+        for index, (name, width) in enumerate(
+            zip(input_names, widths, strict=True)
+        ):
             width = int(width)
             value = features[:, offset : offset + width]
-            arguments[name] = value[:, 0] if width == 1 else value
+            arguments[name] = (
+                _physical_input(value, layouts[index], rows)
+                if layouts is not None
+                else value[:, 0]
+                if width == 1
+                else value
+            )
             offset += width
         if offset != columns:
             raise ValueError("Operator.function input widths do not match the buffer")
@@ -135,7 +199,12 @@ def _function_evaluator(package, outputs):
             if name in parameters and name not in arguments:
                 arguments[name] = value
         result = function(**arguments)
-        return _packed_result(result, outputs, rows, dtype)
+        output_layouts = package.get("output_layouts")
+        if output_layouts is None:
+            return _packed_result(result, outputs, rows, dtype)
+        return _packed_function_result(
+            result, outputs, output_layouts, rows, dtype
+        )
 
     return evaluate
 
@@ -245,7 +314,8 @@ def main(argv: list[str] | None = None) -> int:
     outputs = _output_contract(manifest)
     dtype = str(manifest["inputs"][0][2])
     if model_format == "joblib":
-        evaluator = _joblib_evaluator(payload, outputs)
+        runtime = str(manifest.get("runtime") or "sklearn")
+        evaluator = _joblib_evaluator(payload, outputs, runtime)
     elif model_format == "equinox":
         evaluator = _equinox_evaluator(
             payload,
@@ -256,7 +326,13 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         raise ValueError(f"managed Python worker does not support {model_format!r}")
-    print(f"[FoamNordic] {model_format.title()} model loaded once: {payload}")
+    runtime_label = (
+        f" ({manifest['runtime']})" if manifest.get("runtime") is not None else ""
+    )
+    print(
+        f"[FoamNordic] {model_format.title()} model{runtime_label} loaded once: "
+        f"{payload}"
+    )
     _native.run_python_worker(
         arguments.address,
         str(manifest_path),

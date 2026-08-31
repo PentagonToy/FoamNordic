@@ -309,6 +309,9 @@ std::vector<std::byte> encode_manifest(const ModelArtifact& artifact) {
         writer.u64(leaf.byte_offset);
         writer.u64(leaf.byte_count);
     }
+    if (artifact.schema_version >= 2) {
+        writer.string(artifact.runtime);
+    }
     return std::move(writer).finish();
 }
 
@@ -349,6 +352,9 @@ ModelArtifact decode_manifest(std::span<const std::byte> bytes) {
         leaf.byte_offset = reader.u64();
         leaf.byte_count = reader.u64();
         artifact.tree_leaves.push_back(std::move(leaf));
+    }
+    if (artifact.schema_version >= 2) {
+        artifact.runtime = reader.string();
     }
     if (!reader.empty()) {
         throw std::invalid_argument("Manifest contains trailing data.");

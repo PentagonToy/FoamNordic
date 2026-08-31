@@ -11,7 +11,8 @@ These documents describe code implemented in the current repository.
 | [Model artifacts](model-artifacts.md) | Manifests, scalers, Equinox and Joblib boundaries, and ONNX Runtime |
 | [Field pipeline](field-pipeline.md) | Zero-copy field views, native transforms, observations, and ownership |
 | [OpenFOAM adapter](openfoam-adapter.md) | ClosureHook, field operations, build contract, and end-to-end probes |
-| [OpenFOAM case validation](openfoam-case-validation.md) | Copied-case laminar, RAS, LES, analytical-closure, and combustion evidence |
+| [OpenFOAM case validation](openfoam-case-validation.md) | Copied-case laminar, RAS, LES, and combustion compatibility evidence |
+| [Mathematical and learned closure validation](closure-validation.md) | Exact LES parity and learned Joblib closure accuracy and timing evidence |
 | [Progress-variable combustion contract](combustion-contract.md) | Reaction-rate, beta-FDF manifold, thermodynamic ordering, and guarded adapter rules |
 | [Placement and lifecycle](placement-and-lifecycle.md) | Attached and central ClosureHost policies and transport selection |
 | [Benchmarks](benchmarks.md) | Recorded transport measurements and the release performance gate |

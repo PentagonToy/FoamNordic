@@ -126,9 +126,8 @@ case = fno.OpenFOAM.Case(
     case_dir=Path("cases/NACA4412"),
     run_dir="output/NACA4412",
     of_cmd="openfoam/2512",
-    shell="bash",
-    ranks=16,
 )
+case.initialize(ranks=16, mesh=None, validate_mesh=True)
 
 print(case.fields.keys())
 print(case.field("U").internal_value)
@@ -138,7 +137,7 @@ run = longship.launch()
 run.summary()
 
 # Later, when a terminal result is needed:
-result = run.stop(force=False, timeout=900)
+result = run.stop(force=False, timeout=900, progress=True)
 result.summary(style="compact")
 
 post = result.postprocess
@@ -180,8 +179,8 @@ combustion closure semantics:
 transform = fno.Transform(
     name="predictVelocity",
     operator=fno.Operator.model("velocity.fnom"),
-    inputs={"pressure": fno.field("p")},
-    outputs={"velocity": fno.field("U")},
+    inputs={"pressure": fno.Field("p")},
+    outputs={"velocity": fno.Field("U")},
     at="time_step_start",
     key=fno.Random.key(42, scope="global"),
 )

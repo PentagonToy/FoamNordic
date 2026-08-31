@@ -282,6 +282,9 @@ nb::dict manifest_dict(const foamnordic::closure::ModelArtifact& artifact) {
     };
     result["input_scaler"] = scaler(artifact.input_scaler);
     result["output_scaler"] = scaler(artifact.output_scaler);
+    result["runtime"] = artifact.runtime.empty()
+                            ? nb::object(nb::none())
+                            : nb::cast(artifact.runtime);
     return result;
 }
 
@@ -299,18 +302,20 @@ void bind_artifacts(nb::module_& module) {
            const std::string& dtype,
            const std::vector<Leaf>& tree_leaves,
            nb::object x_scaler,
-           nb::object y_scaler) {
+           nb::object y_scaler,
+           const std::string& runtime) {
             const auto value_type = element(dtype);
             foamnordic::closure::write_manifest(
                 manifest_path,
                 {
-                    1,
+                    runtime.empty() ? 1U : 2U,
                     format(model_format),
                     artifact_path,
                     {name, fields(inputs, value_type), fields(outputs, value_type)},
                     leaves(tree_leaves),
                     create_cpp_scaler(std::move(x_scaler), feature_count(inputs)),
                     create_cpp_scaler(std::move(y_scaler), feature_count(outputs)),
+                    runtime,
                 });
         },
         "manifest_path"_a,
@@ -323,6 +328,7 @@ void bind_artifacts(nb::module_& module) {
         "tree_leaves"_a = std::vector<Leaf>{},
         "x_scaler"_a = nb::none(),
         "y_scaler"_a = nb::none(),
+        "runtime"_a = "",
         "Write one backend-neutral FNOM manifest.");
 
     module.def(

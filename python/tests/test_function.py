@@ -9,6 +9,83 @@ import foamnordic as fno
 
 
 class FunctionOperatorTests(unittest.TestCase):
+    def test_tensor_port_is_exposed_in_physical_matrix_shape(self) -> None:
+        observed = None
+
+        def keqn(k, velocity_grad, delta):
+            nonlocal observed
+            observed = velocity_grad.shape
+            symmetric = fno.Math.symm(velocity_grad)
+            production = fno.Math.ddot(velocity_grad, symmetric)
+            return k + delta * production
+
+        package = {
+            "schema": "foamnordic.function/v1",
+            "function": keqn,
+            "inputs": ("k", "velocity_grad", "delta"),
+            "input_widths": (1, 9, 1),
+            "input_layouts": (
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+                {
+                    "kind": "tensor",
+                    "physical_shape": [3, 3],
+                    "transport_width": 9,
+                },
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+            ),
+            "outputs": ("nut",),
+            "output_layouts": (
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+            ),
+            "seed": 42,
+        }
+        rows = 2
+        k = np.asarray([[1.0], [2.0]])
+        gradient = np.arange(18, dtype=np.float64).reshape(rows, 9)
+        delta = np.asarray([[0.5], [0.25]])
+        values = np.concatenate((k, gradient, delta), axis=1)
+        evaluator = _function_evaluator(package, (("nut", 1),))
+
+        actual = evaluator(memoryview(values), rows, 11, "float64", 0, 0.0)
+
+        self.assertEqual(observed, (rows, 3, 3))
+        expected_gradient = gradient.reshape(rows, 3, 3)
+        expected = k[:, 0] + delta[:, 0] * np.sum(
+            expected_gradient
+            * 0.5
+            * (expected_gradient + expected_gradient.swapaxes(-1, -2)),
+            axis=(-2, -1),
+        )
+        np.testing.assert_allclose(actual[:, 0], expected)
+
+    def test_symmetric_tensor_uses_matrix_shape_at_function_boundary(self) -> None:
+        def identity(stress):
+            self.assertEqual(stress.shape, (2, 3, 3))
+            np.testing.assert_array_equal(stress, stress.swapaxes(-1, -2))
+            return stress
+
+        layout = {
+            "kind": "symm_tensor",
+            "physical_shape": [3, 3],
+            "transport_width": 6,
+        }
+        package = {
+            "schema": "foamnordic.function/v1",
+            "function": identity,
+            "inputs": ("stress",),
+            "input_widths": (6,),
+            "input_layouts": (layout,),
+            "outputs": ("stress",),
+            "output_layouts": (layout,),
+            "seed": 42,
+        }
+        values = np.arange(12, dtype=np.float64).reshape(2, 6)
+        evaluator = _function_evaluator(package, (("stress", 6),))
+
+        actual = evaluator(memoryview(values), 2, 6, "float64", 0, 0.0)
+
+        np.testing.assert_array_equal(actual, values)
+
     def test_named_fields_and_seeded_rng_are_deterministic(self) -> None:
         def perturb(velocity, *, rng, exchange_index, physical_time):
             scale = rng.uniform(0.995, 1.005, size=(velocity.shape[0], 1))

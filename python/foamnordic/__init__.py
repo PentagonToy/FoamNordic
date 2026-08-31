@@ -4,7 +4,15 @@ __version__ = "1.0.3.dev6"
 
 from . import combustion, export, math, models, openfoam, postprocess, random, runtime
 from .export import Tensor
-from .core.expressions import FieldExpression, FieldSelection, field, fields, filter_width, grad
+from .core.expressions import (
+    Field,
+    FieldExpression,
+    FieldSelection,
+    field,
+    fields,
+    filter_width,
+    grad,
+)
 from .core.plan import CompiledPlan
 from .execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
 from .execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
@@ -56,6 +64,7 @@ __all__ = [
     "Tensor",
     "Transform",
     "Export",
+    "Field",
     "__version__",
     "export",
     "field",

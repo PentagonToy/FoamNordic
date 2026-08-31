@@ -1,4 +1,4 @@
-"""Immutable OpenFOAM case declarations."""
+"""OpenFOAM case declarations."""
 
 from __future__ import annotations
 
@@ -119,6 +119,12 @@ class Case:
     application: str = "pimpleFoam"
     ranks: int = 1
     integration: DictionaryTemplate | None = None
+    _mesh: str | None = dataclass_field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _validate_mesh: bool = dataclass_field(
+        default=False, init=False, repr=False, compare=False
+    )
     _fields: dict[str, Field] = dataclass_field(
         default_factory=dict, init=False, repr=False, compare=False
     )
@@ -212,6 +218,31 @@ class Case:
                 f"OpenFOAM field {field_name!r} was not found; available: {available}"
             ) from None
 
+    def initialize(
+        self,
+        *,
+        ranks: int | None = None,
+        mesh: str | None = None,
+        validate_mesh: bool = False,
+    ) -> "Case":
+        """Declare isolated case preparation performed when Longship launches.
+
+        ``mesh='blockMesh'`` generates a mesh in the copied run case. ``None``
+        requires an existing ``constant/polyMesh``.  The source case is never
+        modified.  Returning ``self`` permits both a separate notebook cell
+        and a compact chained declaration.
+        """
+
+        if ranks is not None:
+            object.__setattr__(self, "ranks", require_positive(ranks, "ranks"))
+        if mesh not in {None, "blockMesh"}:
+            raise ValueError("mesh must be None or 'blockMesh'")
+        if not isinstance(validate_mesh, bool):
+            raise TypeError("validate_mesh must be a boolean")
+        object.__setattr__(self, "_mesh", mesh)
+        object.__setattr__(self, "_validate_mesh", validate_mesh)
+        return self
+
     def to_plan(self) -> dict[str, object]:
         return {
             "name": self.name,
@@ -221,6 +252,10 @@ class Case:
             "shell": self.shell,
             "application": self.application,
             "ranks": self.ranks,
+            "initialization": {
+                "mesh": self._mesh,
+                "validate_mesh": self._validate_mesh,
+            },
             "integration": (
                 None if self.integration is None else self.integration.to_plan()
             ),

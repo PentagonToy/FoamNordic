@@ -26,6 +26,13 @@ def runtime_available() -> bool:
     return True
 
 
+def write_mesh(case: Path) -> None:
+    mesh = case / "constant/polyMesh"
+    mesh.mkdir(parents=True, exist_ok=True)
+    for name in ("points", "faces", "owner", "neighbour", "boundary"):
+        (mesh / name).write_text("fixture\n", encoding="utf-8")
+
+
 class HostGroupTests(unittest.TestCase):
     def test_multiple_workers_publish_one_group_readiness_marker(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -178,6 +185,7 @@ class LaunchTests(unittest.TestCase):
                 path = source / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("original\n", encoding="utf-8")
+            write_mesh(source)
             artifact = root / "nutFjord.fnom"
             fno.export.onnx(
                 b"fixture",
@@ -273,6 +281,11 @@ class LaunchTests(unittest.TestCase):
                 result.host_log.read_text(),
             )
             self.assertIn("[FoamNordic] Timing:", result.longship_log.read_text())
+            self.assertIn(
+                "[FoamNordic] Preparing isolated OpenFOAM case",
+                result.longship_log.read_text(),
+            )
+            self.assertFalse(any(result.work_dir.rglob("prepare.log")))
             self.assertEqual(result.longship_log.parent.name, "logs")
             self.assertEqual(
                 {path.name for path in result.work_dir.iterdir() if not path.name.startswith(".")},
@@ -296,6 +309,7 @@ class LaunchTests(unittest.TestCase):
                 path = source / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("baseline\n", encoding="utf-8")
+            write_mesh(source)
             self._write_executable(tools / "foamDictionary", "#!/bin/sh\nexit 0\n")
             self._write_executable(tools / "pimpleFoam", "#!/bin/sh\nexit 0\n")
             run = fno.Longship(
@@ -335,6 +349,7 @@ class LaunchTests(unittest.TestCase):
                 path = source / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("zero-orig\n", encoding="utf-8")
+            write_mesh(source)
             self._write_executable(tools / "foamDictionary", "#!/bin/sh\nexit 0\n")
             self._write_executable(tools / "pimpleFoam", "#!/bin/sh\nexit 0\n")
             case = fno.OpenFOAM.Case(

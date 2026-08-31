@@ -14,13 +14,19 @@ import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
+from .contracts import adapter_contract
+from .core.expressions import FieldExpression
+from .core.layout import FieldLayout, field_layout
 from .core.managed import mark_generated
 from .core.plan import CompiledPlan
-from .execution.run import _internal_path
+from .execution.run import (
+    _initialize_sailing_log,
+    _internal_path,
+    _sailing_paths,
+)
 from .execution.shell import quote_command, toolchain_shell
 
 if TYPE_CHECKING:
-    from .core.expressions import FieldExpression
     from .core.spec import Closure, Longship, Transform
 
 
@@ -36,11 +42,6 @@ def validate_case(longship: Longship) -> None:
         raise NotImplementedError(
             "one solver closure may be active at a time; use multiple Transform "
             "programs for independent field exchanges"
-        )
-    if closures and any(item.operator.kind == "function" for item in closures):
-        raise NotImplementedError(
-            "Operator.function is currently a Transform operator; Closure "
-            "functions require derived-expression component inference"
         )
     unsupported = next(
         (
@@ -579,26 +580,26 @@ def render_transform_dictionary(
     return rendered.strip()
 
 
-_FIELD_COMPONENTS = {
-    "volScalarField": 1,
-    "volVectorField": 3,
-    "volSphericalTensorField": 1,
-    "volSymmTensorField": 6,
-    "volTensorField": 9,
+_FIELD_LAYOUTS = {
+    "volScalarField": "scalar",
+    "volVectorField": "vector",
+    "volSphericalTensorField": "spherical_tensor",
+    "volSymmTensorField": "symm_tensor",
+    "volTensorField": "tensor",
 }
 
 
-def _field_width(longship: Longship, expression: FieldExpression) -> int:
-    """Resolve a stored field port width from the source-case header."""
+def _field_layout(longship: Longship, expression: FieldExpression) -> FieldLayout:
+    """Resolve a stored field layout from the source-case header."""
 
     assert expression.field_name is not None
     name = expression.field_name
     if name in {"x", "y", "z"}:
-        return 1
+        return field_layout("scalar")
     base, separator, component = name.partition(".")
     metadata = longship.case.field(base)
     try:
-        width = _FIELD_COMPONENTS[metadata.field_class]
+        layout = field_layout(_FIELD_LAYOUTS[metadata.field_class])
     except KeyError:
         raise ValueError(
             f"unsupported OpenFOAM field class for {base!r}: "
@@ -612,18 +613,131 @@ def _field_width(longship: Longship, expression: FieldExpression) -> int:
                 f"component selector {name!r} requires U.x/U.y/U.z-style "
                 "access to a volVectorField"
             )
-        return 1
-    return width
+        return field_layout("scalar")
+    return layout
+
+
+def _expression_layout(
+    longship: Longship, expression: FieldExpression
+) -> FieldLayout:
+    """Infer the physical and packed layout of an OpenFOAM expression."""
+
+    if expression.operation == "field":
+        return _field_layout(longship, expression)
+    if expression.operation == "filter_width":
+        return field_layout("scalar")
+
+    if expression.field_name is not None:
+        arguments = (FieldExpression("field", expression.field_name),)
+    else:
+        arguments = expression.arguments
+    layouts = tuple(_expression_layout(longship, value) for value in arguments)
+    kinds = tuple(value.kind for value in layouts)
+    operation = expression.operation
+
+    if operation == "grad":
+        if kinds == ("scalar",):
+            return field_layout("vector")
+        if kinds == ("vector",):
+            return field_layout("tensor")
+        raise ValueError("grad() function inputs support scalar or vector fields")
+    if operation == "div":
+        if len(layouts) == 2:
+            return layouts[1]
+        if kinds == ("vector",):
+            return field_layout("scalar")
+        if kinds in {("symm_tensor",), ("tensor",)}:
+            return field_layout("vector")
+        raise ValueError("div() function input has an unsupported field shape")
+    if operation == "laplacian":
+        return layouts[-1]
+    if operation == "curl":
+        if kinds != ("vector",):
+            raise ValueError("curl() function input requires a vector field")
+        return field_layout("vector")
+    if operation in {"mag", "ddot"}:
+        return field_layout("scalar")
+    if operation == "symm":
+        if kinds != ("tensor",):
+            raise ValueError("symm() function input requires a tensor field")
+        return field_layout("symm_tensor")
+    if operation == "dev":
+        if kinds not in {("scalar",), ("symm_tensor",), ("tensor",)}:
+            raise ValueError("dev() function input requires a scalar or tensor field")
+        return layouts[0]
+    if operation == "dot":
+        dot_kinds = {
+            ("vector", "vector"): "scalar",
+            ("tensor", "vector"): "vector",
+            ("symm_tensor", "vector"): "vector",
+            ("vector", "tensor"): "vector",
+            ("vector", "symm_tensor"): "vector",
+            ("tensor", "tensor"): "tensor",
+            ("tensor", "symm_tensor"): "tensor",
+            ("symm_tensor", "tensor"): "tensor",
+            ("symm_tensor", "symm_tensor"): "tensor",
+        }
+        try:
+            return field_layout(dot_kinds[kinds])
+        except KeyError:
+            raise ValueError(
+                "dot() function inputs have unsupported field shapes"
+            ) from None
+    raise ValueError(
+        f"cannot infer function input width for OpenFOAM operation {operation!r}"
+    )
+
+
+def _expression_width(longship: Longship, expression: FieldExpression) -> int:
+    """Return the packed width retained by the native model contract."""
+
+    return _expression_layout(longship, expression).transport_width
+
+
+def _output_layout(
+    longship: Longship,
+    program: Closure | Transform,
+    expression: FieldExpression,
+) -> FieldLayout:
+    """Resolve a mutable output from its case or built-in adapter contract."""
+
+    try:
+        return _expression_layout(longship, expression)
+    except KeyError:
+        if expression.operation != "field" or expression.field_name is None:
+            raise
+        contract = adapter_contract(program.name)
+        if contract is not None:
+            try:
+                return contract.outputs[expression.field_name]
+            except KeyError:
+                pass
+        raise KeyError(
+            f"cannot infer output field {expression.field_name!r} for "
+            f"case-sensitive adapter {program.name!r}; add the field to "
+            "the source case, declare a built-in adapter contract, or use "
+            "a model artifact with an explicit contract"
+        ) from None
+
+
+def _output_width(
+    longship: Longship,
+    program: Closure | Transform,
+    expression: FieldExpression,
+) -> int:
+    """Return the packed width of a mutable output field."""
+
+    return _output_layout(longship, program, expression).transport_width
 
 
 def _package_function(
     longship: Longship,
-    transform: Transform,
+    program: Closure | Transform,
     work_dir: Path,
 ) -> Path | None:
     """Serialize one direct function and its inferred native tensor contract."""
 
-    if transform.operator.kind != "function":
+    if program.operator.kind != "function":
         return None
     try:
         import cloudpickle
@@ -634,35 +748,50 @@ def _package_function(
         ) from error
     internal = _internal_path(work_dir, "function")
     internal.mkdir(parents=True, exist_ok=True)
-    payload = internal / f"{transform.name}.function"
-    manifest = internal / f"{transform.name}.fnom"
+    payload = internal / f"{program.name}.function"
+    manifest = internal / f"{program.name}.fnom"
     with payload.open("wb") as stream:
-        input_widths = tuple(
-            _field_width(longship, expression)
-            for expression in transform.inputs.values()
+        input_layouts = tuple(
+            _expression_layout(longship, expression)
+            for expression in program.inputs.values()
+        )
+        output_layouts = tuple(
+            _output_layout(longship, program, expression)
+            for expression in program.outputs.values()
         )
         cloudpickle.dump(
             {
                 "schema": "foamnordic.function/v1",
-                "function": transform.operator.source,
-                "inputs": tuple(transform.inputs),
-                "input_widths": input_widths,
-                "outputs": tuple(transform.outputs),
-                "program": transform.name,
-                "key": transform.key.to_plan(),
+                "function": program.operator.source,
+                "inputs": tuple(program.inputs),
+                "input_widths": tuple(
+                    layout.transport_width for layout in input_layouts
+                ),
+                "input_layouts": tuple(
+                    layout.to_plan() for layout in input_layouts
+                ),
+                "outputs": tuple(program.outputs),
+                "output_layouts": tuple(
+                    layout.to_plan() for layout in output_layouts
+                ),
+                "program": program.name,
+                "key": program.key.to_plan(),
             },
             stream,
             protocol=5,
         )
-    inputs = list(zip(transform.inputs, input_widths, strict=True))
+    inputs = [
+        (name, layout.transport_width)
+        for name, layout in zip(program.inputs, input_layouts, strict=True)
+    ]
     outputs = [
-        (name, _field_width(longship, expression))
-        for name, expression in transform.outputs.items()
+        (name, _output_width(longship, program, expression))
+        for name, expression in program.outputs.items()
     ]
     _native.write_model_manifest(
         str(manifest),
         payload.name,
-        transform.name,
+        program.name,
         "joblib",
         inputs,
         outputs,
@@ -704,10 +833,46 @@ def _socket_path(work_dir: Path, index: int) -> Path:
     return path
 
 
+_POLYMESH_FILES = ("points", "faces", "owner", "neighbour", "boundary")
+
+
+def _has_poly_mesh(case_dir: Path) -> bool:
+    mesh = case_dir / "constant/polyMesh"
+    return all(
+        (mesh / name).is_file() or (mesh / f"{name}.gz").is_file()
+        for name in _POLYMESH_FILES
+    )
+
+
+def _mesh_commands(longship: Longship, case_dir: Path) -> list[str]:
+    mesh = longship.case._mesh
+    case_path = quote_command((case_dir,))
+    commands: list[str] = []
+    if mesh == "blockMesh":
+        dictionary = case_dir / "system/blockMeshDict"
+        if not dictionary.is_file():
+            raise FileNotFoundError(
+                "OpenFOAM blockMesh initialization requires "
+                f"system/blockMeshDict: {dictionary}"
+            )
+        commands.append(f"blockMesh -case {case_path}")
+    elif not _has_poly_mesh(case_dir):
+        raise FileNotFoundError(
+            "OpenFOAM mesh is missing from constant/polyMesh. Generate it "
+            "before launch or call "
+            "case.initialize(mesh='blockMesh', validate_mesh=True)."
+        )
+    if longship.case._validate_mesh:
+        commands.append(f"checkMesh -case {case_path}")
+    return commands
+
+
 def prepare_case(
     longship: Longship,
     plan: CompiledPlan,
     openfoam_library: Path | None = None,
+    *,
+    verbose: bool = False,
 ) -> tuple[Path, Path, tuple[PreparedProgram, ...]]:
     workspace = longship.case.run_dir.expanduser().resolve()
     runs = workspace / "runs"
@@ -740,7 +905,8 @@ def prepare_case(
         slug = _program_slug(program.name, index)
         ready = _internal_path(work_dir, f"{slug}.ready")
         socket = _socket_path(work_dir, index)
-        prepared.append(PreparedProgram(program, ready, socket, None))
+        artifact = _package_function(longship, program, work_dir)
+        prepared.append(PreparedProgram(program, ready, socket, artifact))
     for offset, transform in enumerate(longship.transforms, len(prepared)):
         slug = _program_slug(transform.name, offset)
         ready = _internal_path(work_dir, f"{slug}.ready")
@@ -824,7 +990,9 @@ def prepare_case(
     # controlDict stores an OpenFOAM word, while the process command may be an
     # absolute executable selected by an advanced user.
     application = quote_command((Path(longship.case.application).name,))
+    mesh_commands = _mesh_commands(longship, case_dir)
     commands = [
+        *mesh_commands,
         f"foamDictionary {control_path} -entry application -set {application}",
     ]
     for transform, transform_dictionary in transform_dictionaries:
@@ -861,13 +1029,34 @@ def prepare_case(
             f"-entry numberOfSubdomains -set {longship.case.ranks}"
         )
         commands.append(f"decomposePar -case {quote_command((case_dir,))} -force")
-    with _internal_path(work_dir, "prepare.log").open("wb") as stream:
-        subprocess.run(
-            toolchain_shell(longship.case._toolchain, " && ".join(commands)),
-            check=True,
-            stdout=stream,
-            stderr=subprocess.STDOUT,
-        )
+    if verbose and mesh_commands:
+        if longship.case._mesh == "blockMesh":
+            print(
+                f"[FoamNordic] Preparing mesh with blockMesh: {longship.name}"
+            )
+        else:
+            print(
+                "[FoamNordic] Validating existing mesh with checkMesh: "
+                f"{longship.name}"
+            )
+    sailing_log, _, _ = _sailing_paths(work_dir, longship.name)
+    _initialize_sailing_log(sailing_log, longship.name)
+    with sailing_log.open("a", encoding="utf-8") as stream:
+        stream.write("[FoamNordic] Preparing isolated OpenFOAM case\n")
+    try:
+        with sailing_log.open("ab") as stream:
+            subprocess.run(
+                toolchain_shell(longship.case._toolchain, " && ".join(commands)),
+                check=True,
+                stdout=stream,
+                stderr=subprocess.STDOUT,
+            )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"OpenFOAM case preparation failed; inspect {sailing_log}"
+        ) from error
+    if verbose and mesh_commands:
+        print(f"[FoamNordic] Mesh is ready: {longship.name}")
     if longship.case.ranks > 1:
         expected = {f"processor{rank}" for rank in range(longship.case.ranks)}
         actual = {

@@ -1,0 +1,30 @@
+schema: foamnordic.openfoam-adapters/v1
+
+adapters:
+  kEqnFjord:
+    category: les_model
+    inputs:
+      k:
+        kind: scalar
+      grad(U):
+        kind: tensor
+      delta:
+        kind: scalar
+    outputs:
+      nut:
+        kind: scalar
+      kProduction:
+        kind: scalar
+      kDissipationCoeff:
+        kind: scalar
+
+  nutFjord:
+    category: les_model
+    inputs:
+      grad(U):
+        kind: tensor
+      delta:
+        kind: scalar
+    outputs:
+      nut:
+        kind: scalar

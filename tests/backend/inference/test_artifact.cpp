@@ -338,6 +338,23 @@ void test_manifest_round_trip_and_corruption_rejection() {
             && decoded.output_scaler->clip_upper() == 1.0,
         "Manifest output clipping did not round-trip.");
 
+    foamnordic::closure::ModelArtifact accelerated{
+        2,
+        foamnordic::closure::ModelFormat::joblib,
+        "models/closure.joblib",
+        contract(),
+        {},
+        std::nullopt,
+        std::nullopt,
+        "sklearnex",
+    };
+    const auto accelerated_round_trip = foamnordic::closure::decode_manifest(
+        foamnordic::closure::encode_manifest(accelerated));
+    require(
+        accelerated_round_trip.schema_version == 2
+            && accelerated_round_trip.runtime == "sklearnex",
+        "Manifest did not round-trip the Joblib execution runtime.");
+
     auto corrupted = encoded;
     corrupted.front() = std::byte{0};
     bool bad_magic_rejected = false;

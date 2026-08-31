@@ -473,6 +473,7 @@ class Longship:
             self,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
+            verbose=verbose,
         )
         if verbose:
             if self.scheduler is None:

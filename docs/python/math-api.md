@@ -1,8 +1,10 @@
 # Math API
 
-`fno.Math` is the backend-neutral mathematical vocabulary used by closure and
-transform functions. It keeps NumPy arrays in NumPy and JAX arrays or tracers
-in JAX; importing FoamNordic does not install or eagerly import either backend.
+`fno.Math` is the backend-neutral numerical vocabulary used by closure and
+transform functions. `fno.Field` separately declares OpenFOAM fields, geometry,
+and finite-volume expressions. NumPy arrays remain in NumPy and JAX arrays or
+tracers remain in JAX; importing FoamNordic does not eagerly import either
+backend.
 
 ```python
 def keqn(k, velocity_grad, filter_width, C_k=0.094, C_e=1.048):
@@ -17,16 +19,16 @@ def keqn(k, velocity_grad, filter_width, C_k=0.094, C_e=1.048):
 
 The public layer includes:
 
-- OpenFOAM declarations: `field`, `filter_width`, `grad`, `div`, `laplacian`,
-  `curl`, `mag`, `symm`, `dev`, `dot`, `ddot`;
+- OpenFOAM declarations: `Field(name)`, `Field.grad`, `Field.delta`,
+  `Field.coordinate`, `Field.div`, `Field.laplacian`, and `Field.curl`;
 - element-wise operations: `abs`, `sqrt`, `square`, `exp`, `expm1`, `log`,
   `log1p`, `sin`, `cos`, `tan`, `tanh`, `minimum`, `maximum`, `clip`, `where`;
 - reductions and layouts: `sum`, `mean`, `min`, `max`, `reshape`, `transpose`,
   `stack`, `concatenate`, `einsum`;
 - physical tensor operations: `mag`, `symm`, `dev`, `dot`, `ddot`.
 
-Field declarations and array mathematics deliberately share the namespace but
-not their representation. For example, `fno.Math.grad("U")` creates a native
+For compatibility, existing declaration methods under `fno.Math` remain
+available. New code should use `fno.Field.grad("U")` for a native
 `FieldExpression`, while `fno.Math.symm(array)` evaluates immediately using the
 array's backend. Spatial derivatives of arbitrary arrays are not approximated
 in Python because they require the OpenFOAM mesh and discretisation scheme.
@@ -35,14 +37,14 @@ Expressions compose without manually constructing strings:
 
 ```python
 inputs = {
-    "velocity_gradient": fno.Math.grad("U"),
-    "convection": fno.Math.div("phi", "U"),
-    "thermal_diffusion": fno.Math.laplacian("alphaEff", "T"),
-    "vorticity": fno.Math.curl("U"),
-    "strain": fno.Math.dev(fno.Math.symm(fno.Math.grad("U"))),
+    "velocity_gradient": fno.Field.grad("U"),
+    "convection": fno.Field.div("phi", "U"),
+    "thermal_diffusion": fno.Field.laplacian("alphaEff", "T"),
+    "vorticity": fno.Field.curl("U"),
+    "strain": fno.Math.dev(fno.Math.symm(fno.Field.grad("U"))),
     "gradient_alignment": fno.Math.dot(
-        fno.Math.grad("T"),
-        fno.Math.grad("c"),
+        fno.Field.grad("T"),
+        fno.Field.grad("c"),
     ),
 }
 ```

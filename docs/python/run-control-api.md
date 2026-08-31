@@ -21,7 +21,9 @@ Python has four responsibilities:
 3. declare Slurm placement, observations, and lifecycle;
 4. inspect bounded observations and durable results.
 
-Python never evaluates or returns a closure field in the solver loop.
+The orchestration notebook never evaluates or returns a closure field in the
+solver loop. `Operator.function()` may run in a separate resident Python
+worker; OpenFOAM still exchanges through the same native Fjord boundary.
 
 ## Model-build workflow
 
@@ -112,9 +114,8 @@ importing JAX or reconstructing the training model.
 
 ## Case and closure declaration
 
-The source case is immutable input. `prepare()` materializes an execution
-workspace under the output root and restricts cleaning to generated files in
-that workspace.
+The source case is immutable input. `initialize()` declares preparation for
+the isolated execution copy; it does not generate files in the source case.
 
 ```python
 import foamnordic as fno
@@ -124,26 +125,31 @@ case = fno.OpenFOAM.Case(
     case_dir=project / "FoamNordic/openfoam_tutorials/les/NACA4412",
     run_dir=project / "FoamNordic/tutorials/incompressible/output/NACA4412",
     of_cmd="openfoam/2512",
-    shell="bash",
-    ranks=16,
 )
+case.initialize(ranks=16, mesh=None, validate_mesh=True)
 
 closure = fno.Closure(
     name="kEqnFjord",
     operator=fno.Operator.model(model_dir / "kEqnFjord.fnom"),
     inputs={
-        "k": fno.field("k"),
-        "velocity_grad": fno.grad("U"),
-        "filter_width": fno.filter_width(),
+        "k": fno.Field("k"),
+        "grad_U": fno.Field.grad("U"),
+        "delta": fno.Field.delta(),
     },
     outputs={
-        "eddy_viscosity": fno.field("nut"),
-        "k_production": fno.field("kProduction"),
-        "k_dissipation_coeff": fno.field("kDissipationCoeff"),
+        "nut": fno.Field("nut"),
+        "kProduction": fno.Field("kProduction"),
+        "kDissipationCoeff": fno.Field("kDissipationCoeff"),
     },
     key=fno.Random.key(42),
 )
 ```
+
+`mesh=None` requires an existing `constant/polyMesh` and fails before solver
+launch when it is absent. `mesh="blockMesh"` runs `blockMesh` in the copied
+run case. `validate_mesh=True` follows either path with `checkMesh`. Parallel
+initialization then writes a compatible `decomposeParDict` and decomposes the
+prepared mesh for the declared ranks.
 
 NACA4412 is a staged validation target rather than the first software gate.
 The native multi-output artifact and a compact `kEqnFjord` cavity run should
@@ -157,6 +163,46 @@ combination. Logical tensor names are bound directly to OpenFOAM expressions
 and mutable output fields. The plan compiler rejects missing fields, component
 count mismatches, duplicate writers, and unsupported expressions before
 submission whenever case metadata is sufficient.
+
+For direct scientific functions, the same declaration infers native component
+widths for stored fields, coordinates, `grad(...)`, and LES `delta` before it
+packages a resident callable:
+
+```python
+def keqn(k, grad_U, delta):
+    root_k = fno.Math.sqrt(fno.Math.maximum(k, 0.0))
+    nut = 0.094 * delta * root_k
+    strain = fno.Math.dev(2.0 * fno.Math.symm(grad_U))
+    return {
+        "nut": nut,
+        "kProduction": nut * fno.Math.ddot(grad_U, strain),
+        "kDissipationCoeff": 1.048 * root_k / delta,
+    }
+
+closure = fno.Closure(
+    name="kEqnFjord",
+    operator=fno.Operator.function(keqn),
+    inputs={
+        "k": fno.Field("k"),
+        "grad_U": fno.Field.grad("U"),
+        "delta": fno.Field.delta(),
+    },
+    outputs={
+        "nut": fno.Field("nut"),
+        "kProduction": fno.Field("kProduction"),
+        "kDissipationCoeff": fno.Field("kDissipationCoeff"),
+    },
+)
+```
+
+Closure and OpenFOAM adapter names remain case-sensitive. In particular, the
+built-in model is exactly `kEqnFjord`, not `KEqnFjord` or `keqnfjord`.
+
+`fno.Field("p")` binds a stored field, `fno.Field.grad("U")` requests a native
+derived expression, `fno.Field.delta()` requests the active LES filter width,
+and `fno.Field.coordinate("x")` requests a synthesized cell-centre coordinate.
+The older top-level `field()`, `grad()`, and `filter_width()` functions remain
+compatible aliases.
 
 A general field mutation uses a separate declaration. Logical model ports can
 bind to different OpenFOAM field names, so both `U -> U` perturbations and
@@ -314,7 +360,7 @@ memory. Consuming the stream is optional, and slow plotting does not block the
 solver.
 
 ```python
-for observation in run.observe():
+for observation in run.observe(progress=True):
     if observation.exchange_index % 100 == 0:
         table.add_row([
             observation.exchange_index,
@@ -333,6 +379,19 @@ No context manager is required. Stopping local observation consumption does
 not stop the solver. `launch()` reports the background sailing and returns
 immediately. `stop(force=False)` waits for normal completion; without a timeout
 it waits indefinitely, while an expired timeout leaves the workload running.
+Set `progress=True` on `run.stop()` to read the existing OpenFOAM output
+incrementally and show the latest physical `Time` (or steady-solver `Iteration`)
+on one transient line. This does not create another log or add work to the
+solver, MPI, or Fjord path.
+When consuming observations, prefer `run.observe(progress=True)`: it shows the
+latest observed physical time and exchange index, and clears the line when the
+stream ends. A compact collection therefore needs no hand-written print loop:
+
+```python
+records = list(run.observe(progress=True))
+result = run.stop(force=False)
+```
+
 `stop(force=True)` immediately terminates the complete locally owned process
 group or issues Slurm `scancel KILL`, then returns the resulting cancelled
 state. There is no separate public `wait()` or `raise_for_status()` step.

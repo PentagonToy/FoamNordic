@@ -6,9 +6,10 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import sys
 from types import MappingProxyType
 import time
-from typing import Iterator, Mapping, TYPE_CHECKING
+from typing import Iterator, Mapping, TextIO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .run import Run
@@ -90,80 +91,127 @@ class ObservationStream:
         *,
         poll_interval: float,
         expected_sources: int = 1,
+        progress: bool = False,
+        progress_stream: TextIO | None = None,
     ) -> None:
         if poll_interval <= 0:
             raise ValueError("observation poll_interval must be positive")
+        if not isinstance(progress, bool):
+            raise TypeError("observation progress must be a boolean")
         self._run = run
         self.path = Path(path)
         self.poll_interval = poll_interval
         self.expected_sources = expected_sources
+        self._progress = progress
+        self._progress_stream = (
+            progress_stream if progress_stream is not None else sys.stdout
+        )
+        self._progress_width = 0
+        self._progress_rendered = False
         self._closed = False
 
     def __iter__(self) -> Iterator[ObservationRecord]:
         offsets: dict[Path, int] = {}
         pending: dict[int, dict[Path, ObservationRecord]] = {}
         terminal_seen = False
-        while not self._closed:
-            emitted = False
-            # A completed run is renamed from its private preparation path to
-            # its durable local/Slurm identity. Follow that atomic rename so
-            # an observation iterator opened before completion can drain the
-            # final records afterwards.
-            current = self._run._work_dir / "observations" / self.path.name
-            if current != self.path:
-                previous_parent = self.path.parent
-                self.path = current
-                offsets = {
-                    current.parent / path.name: offset
-                    for path, offset in offsets.items()
-                    if path.parent == previous_parent
-                }
-                pending = {
-                    exchange_index: {
-                        current.parent / path.name: record
-                        for path, record in group.items()
+        try:
+            while not self._closed:
+                emitted = False
+                # A completed run is renamed from its private preparation path to
+                # its durable local/Slurm identity. Follow that atomic rename so
+                # an observation iterator opened before completion can drain the
+                # final records afterwards.
+                current = self._run._work_dir / "observations" / self.path.name
+                if current != self.path:
+                    previous_parent = self.path.parent
+                    self.path = current
+                    offsets = {
+                        current.parent / path.name: offset
+                        for path, offset in offsets.items()
+                        if path.parent == previous_parent
                     }
-                    for exchange_index, group in pending.items()
-                }
-            paths = sorted(self.path.parent.glob(f"{self.path.stem}*.jsonl"))
-            for path in paths:
-                try:
-                    with path.open("r", encoding="utf-8") as stream:
-                        stream.seek(offsets.get(path, 0))
-                        while True:
-                            line = stream.readline()
-                            if not line or not line.endswith("\n"):
-                                break
-                            offsets[path] = stream.tell()
-                            if not line.strip():
-                                continue
-                            record = ObservationRecord.from_dict(json.loads(line))
-                            if self.expected_sources == 1:
-                                emitted = True
-                                yield record
-                                continue
-                            group = pending.setdefault(record.exchange_index, {})
-                            group[path] = record
-                            if len(group) >= self.expected_sources:
-                                emitted = True
-                                yield _merge_records(group.values())
-                                del pending[record.exchange_index]
-                except FileNotFoundError:
-                    pass
-            if self._run.status.value != "running":
-                if terminal_seen and not emitted:
-                    for exchange_index in sorted(pending):
-                        yield _merge_records(pending[exchange_index].values())
-                    pending.clear()
-                    break
-                terminal_seen = True
-            if not emitted:
-                time.sleep(self.poll_interval)
+                    pending = {
+                        exchange_index: {
+                            current.parent / path.name: record
+                            for path, record in group.items()
+                        }
+                        for exchange_index, group in pending.items()
+                    }
+                paths = sorted(self.path.parent.glob(f"{self.path.stem}*.jsonl"))
+                for path in paths:
+                    try:
+                        with path.open("r", encoding="utf-8") as stream:
+                            stream.seek(offsets.get(path, 0))
+                            while True:
+                                line = stream.readline()
+                                if not line or not line.endswith("\n"):
+                                    break
+                                offsets[path] = stream.tell()
+                                if not line.strip():
+                                    continue
+                                record = ObservationRecord.from_dict(json.loads(line))
+                                if self.expected_sources == 1:
+                                    emitted = True
+                                    self._render_progress(record)
+                                    yield record
+                                    continue
+                                group = pending.setdefault(record.exchange_index, {})
+                                group[path] = record
+                                if len(group) >= self.expected_sources:
+                                    emitted = True
+                                    merged = _merge_records(group.values())
+                                    self._render_progress(merged)
+                                    yield merged
+                                    del pending[record.exchange_index]
+                    except FileNotFoundError:
+                        pass
+                if self._run.status.value != "running":
+                    if terminal_seen and not emitted:
+                        for exchange_index in sorted(pending):
+                            merged = _merge_records(pending[exchange_index].values())
+                            self._render_progress(merged)
+                            yield merged
+                        pending.clear()
+                        break
+                    terminal_seen = True
+                if not emitted:
+                    time.sleep(self.poll_interval)
+        finally:
+            self._clear_progress()
+
+    def _render_progress(self, record: ObservationRecord) -> None:
+        if not self._progress:
+            return
+        message = (
+            f"[FoamNordic] Observing OpenFOAM: t = {record.time:.6g}"
+            f" | exchange = {record.exchange_index}"
+        )
+        padding = " " * max(0, self._progress_width - len(message))
+        print(
+            f"\r{message}{padding}",
+            end="",
+            flush=True,
+            file=self._progress_stream,
+        )
+        self._progress_width = len(message)
+        self._progress_rendered = True
+
+    def _clear_progress(self) -> None:
+        if not self._progress_rendered:
+            return
+        print(
+            f"\r{' ' * self._progress_width}\r",
+            end="",
+            flush=True,
+            file=self._progress_stream,
+        )
+        self._progress_rendered = False
 
     def close(self) -> None:
         """Stop local consumption; the solver and retained records are unaffected."""
 
         self._closed = True
+        self._clear_progress()
 
 
 def _merge_records(records) -> ObservationRecord:

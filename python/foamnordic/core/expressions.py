@@ -197,3 +197,42 @@ def filter_width() -> FieldExpression:
     """Request the LES filter-width expression."""
 
     return FieldExpression("filter_width")
+
+
+class Field:
+    """Grouped OpenFOAM field and geometry expression vocabulary.
+
+    Calling ``Field(name)`` binds a stored field. Derived expressions stay
+    explicit: ``Field.grad("U")`` requests a native gradient and
+    ``Field.delta()`` requests the active LES filter width rather than a
+    stored field named ``delta``.
+    """
+
+    def __new__(cls, name: str) -> FieldExpression:
+        return field(name)
+
+    field = staticmethod(field)
+    fields = staticmethod(fields)
+    grad = staticmethod(grad)
+    delta = staticmethod(filter_width)
+
+    @staticmethod
+    def coordinate(axis: str) -> FieldExpression:
+        """Request one cell-centre coordinate synthesized by OpenFOAM."""
+
+        name = require_nonempty(axis, "coordinate axis")
+        if name not in {"x", "y", "z"}:
+            raise ValueError("coordinate axis must be x, y, or z")
+        return field(name)
+
+    @staticmethod
+    def div(*values: str | FieldExpression) -> FieldExpression:
+        return operation("div", *values)
+
+    @staticmethod
+    def laplacian(*values: str | FieldExpression) -> FieldExpression:
+        return operation("laplacian", *values)
+
+    @staticmethod
+    def curl(value: str | FieldExpression) -> FieldExpression:
+        return operation("curl", value)

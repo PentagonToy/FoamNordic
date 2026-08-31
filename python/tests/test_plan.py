@@ -14,8 +14,12 @@ from unittest.mock import Mock, patch
 import foamnordic as fno
 from foamnordic._case import (
     PreparedProgram,
+    _expression_width,
+    _mesh_commands,
+    _package_function,
     _prepare_decomposition,
     _observation_block,
+    _output_width,
     _scheme_commands,
     _scheme_requirements,
     _socket_path,
@@ -26,6 +30,13 @@ from foamnordic._case import (
 )
 from foamnordic.core.native_plan import available as native_available
 from foamnordic.execution.launch import _host_command
+
+
+def write_mesh(case: Path) -> None:
+    mesh = case / "constant/polyMesh"
+    mesh.mkdir(parents=True, exist_ok=True)
+    for name in ("points", "faces", "owner", "neighbour", "boundary"):
+        (mesh / name).write_text("fixture\n", encoding="utf-8")
 
 
 def example_longship() -> fno.Longship:
@@ -71,6 +82,68 @@ def example_longship() -> fno.Longship:
 
 
 class PlanTests(unittest.TestCase):
+    def test_missing_mesh_has_actionable_initialization_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case = fno.OpenFOAM.Case(case_dir=root / "case", run_dir=root / "runs")
+            with self.assertRaisesRegex(FileNotFoundError, "initialize.*blockMesh"):
+                _mesh_commands(fno.Longship(case=case), root / "case")
+
+    def test_block_mesh_initialization_precedes_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case_root = root / "case"
+            (case_root / "system").mkdir(parents=True)
+            (case_root / "system/blockMeshDict").write_text(
+                "fixture\n", encoding="utf-8"
+            )
+            case = fno.OpenFOAM.Case(
+                case_dir=case_root,
+                run_dir=root / "runs",
+            ).initialize(mesh="blockMesh", validate_mesh=True)
+
+            commands = _mesh_commands(fno.Longship(case=case), case_root)
+
+            self.assertEqual(len(commands), 2)
+            self.assertTrue(commands[0].startswith("blockMesh -case"))
+            self.assertTrue(commands[1].startswith("checkMesh -case"))
+
+    def test_mesh_preparation_reports_compact_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "case"
+            for relative in (
+                "0/U",
+                "system/blockMeshDict",
+                "system/controlDict",
+                "system/fvSchemes",
+                "system/fvSolution",
+            ):
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            case = fno.OpenFOAM.Case(
+                name="pitzDaily",
+                case_dir=source,
+                run_dir=root / "runs",
+            ).initialize(mesh="blockMesh", validate_mesh=True)
+            longship = fno.Longship(case=case)
+            output = io.StringIO()
+
+            with (
+                patch("foamnordic._case.subprocess.run", return_value=Mock(returncode=0)),
+                redirect_stdout(output),
+            ):
+                prepare_case(longship, longship.compile(), verbose=True)
+
+            self.assertEqual(
+                output.getvalue().splitlines(),
+                [
+                    "[FoamNordic] Preparing mesh with blockMesh: pitzDaily",
+                    "[FoamNordic] Mesh is ready: pitzDaily",
+                ],
+            )
+
     def _parallel_case(self, root: Path, ranks: int = 2) -> fno.Longship:
         source = root / "source"
         for relative in (
@@ -90,6 +163,7 @@ class PlanTests(unittest.TestCase):
             "hierarchicalCoeffs { n (2 2 2); order xyz; }\n",
             encoding="utf-8",
         )
+        write_mesh(source)
         return fno.Longship(
             name="parallel-case",
             case=fno.OpenFOAM.Case(
@@ -343,6 +417,127 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(plan["operator"]["kind"], "function")
         self.assertTrue(plan["operator"]["identity"].startswith("sha256:"))
         self.assertIsNone(operator.artifact)
+
+    def test_function_closure_infers_k_equation_expression_widths(self) -> None:
+        case = Mock()
+        case.field.side_effect = lambda name: Mock(
+            field_class={
+                "k": "volScalarField",
+                "U": "volVectorField",
+            }[name]
+        )
+        longship = Mock(case=case)
+
+        self.assertEqual(_expression_width(longship, fno.Field("k")), 1)
+        self.assertEqual(_expression_width(longship, fno.Field.grad("U")), 9)
+        self.assertEqual(_expression_width(longship, fno.Field.delta()), 1)
+        self.assertEqual(_expression_width(longship, fno.Field.coordinate("z")), 1)
+
+        closure = fno.Closure(
+            name="kEqnFjord",
+            operator=fno.Operator.function(lambda k, grad_U, delta: k),
+            inputs={
+                "k": fno.Field("k"),
+                "grad_U": fno.Field.grad("U"),
+                "delta": fno.Field.delta(),
+            },
+            outputs={
+                "nut": fno.Field("nut"),
+                "kProduction": fno.Field("kProduction"),
+                "kDissipationCoeff": fno.Field("kDissipationCoeff"),
+            },
+        )
+        self.assertEqual(closure.name, "kEqnFjord")
+        self.assertEqual(tuple(closure.inputs), ("k", "grad_U", "delta"))
+
+    def test_closure_names_remain_case_sensitive(self) -> None:
+        closure = fno.Closure(
+            name="KEqnFjord",
+            operator=fno.Operator.model("model.fnom"),
+            inputs={"k": fno.Field("k")},
+            outputs={"nut": fno.Field("nut")},
+        )
+        self.assertEqual(closure.name, "KEqnFjord")
+        missing_case = Mock()
+        missing_case.field.side_effect = KeyError("missing")
+        longship = Mock(case=missing_case)
+        exact = fno.Closure(
+            name="kEqnFjord",
+            operator=fno.Operator.function(lambda k: k),
+            inputs={"k": fno.Field("k")},
+            outputs={"nut": fno.Field("nut")},
+        )
+        self.assertEqual(_output_width(longship, exact, fno.Field("nut")), 1)
+        with self.assertRaisesRegex(KeyError, "case-sensitive adapter"):
+            _output_width(longship, closure, fno.Field("nut"))
+
+    def test_function_closure_packages_derived_input_contract(self) -> None:
+        try:
+            import cloudpickle
+        except ImportError:
+            self.skipTest("cloudpickle is not installed")
+
+        case = Mock()
+        case.field.side_effect = lambda name: Mock(
+            field_class={
+                "k": "volScalarField",
+                "U": "volVectorField",
+            }[name]
+        )
+        longship = Mock(case=case)
+        closure = fno.Closure(
+            name="kEqnFjord",
+            operator=fno.Operator.function(lambda k, grad_U, delta: k),
+            inputs={
+                "k": fno.Field("k"),
+                "grad_U": fno.Field.grad("U"),
+                "delta": fno.Field.delta(),
+            },
+            outputs={
+                "nut": fno.Field("nut"),
+                "kProduction": fno.Field("kProduction"),
+                "kDissipationCoeff": fno.Field("kDissipationCoeff"),
+            },
+        )
+        native = Mock()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(fno, "_native", native, create=True),
+            patch.dict(sys.modules, {"foamnordic._native": native}),
+        ):
+            artifact = _package_function(longship, closure, Path(directory))
+            self.assertIsNotNone(artifact)
+            assert artifact is not None
+            payload = artifact.with_suffix(".function")
+            with payload.open("rb") as stream:
+                package = cloudpickle.load(stream)
+
+        self.assertEqual(package["input_widths"], (1, 9, 1))
+        self.assertEqual(
+            package["input_layouts"],
+            (
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+                {
+                    "kind": "tensor",
+                    "physical_shape": [3, 3],
+                    "transport_width": 9,
+                },
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+            ),
+        )
+        self.assertEqual(
+            package["output_layouts"],
+            (
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+                {"kind": "scalar", "physical_shape": [], "transport_width": 1},
+            ),
+        )
+        self.assertEqual(
+            package["outputs"],
+            ("nut", "kProduction", "kDissipationCoeff"),
+        )
+        native.write_model_manifest.assert_called_once()
 
     def test_legacy_seed_is_normalized_to_a_public_key(self) -> None:
         transform = fno.Transform(

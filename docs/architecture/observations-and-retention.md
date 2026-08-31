@@ -20,7 +20,7 @@ observations = fno.Observe(
     interval=100,
 )
 
-for observation in run.observe():
+for observation in run.observe(progress=True):
     table.update(observation.summary)
 ```
 

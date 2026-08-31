@@ -36,8 +36,16 @@ void TreeLeaf::validate() const {
 }
 
 void ModelArtifact::validate() const {
-    if (schema_version != 1 || artifact_path.empty()) {
+    if ((schema_version != 1 && schema_version != 2) || artifact_path.empty()) {
         throw std::invalid_argument("FoamNordic model artifact metadata is invalid.");
+    }
+    if (schema_version == 1 && !runtime.empty()) {
+        throw std::invalid_argument("FNOM v1 artifacts cannot define a runtime.");
+    }
+    if (!runtime.empty()
+        && (format != ModelFormat::joblib
+            || (runtime != "sklearn" && runtime != "sklearnex"))) {
+        throw std::invalid_argument("Joblib artifact runtime is invalid.");
     }
     contract.validate();
     const auto feature_count = [](const std::vector<FieldContract>& fields) {

@@ -12,6 +12,16 @@ class MathTests(unittest.TestCase):
         self.assertEqual(fno.Math.grad("U"), fno.grad("U"))
         self.assertEqual(fno.Math.filter_width(), fno.filter_width())
 
+    def test_grouped_field_vocabulary_is_compact_and_strict(self) -> None:
+        self.assertEqual(fno.Field("k"), fno.field("k"))
+        self.assertEqual(fno.Field.field("U"), fno.field("U"))
+        self.assertEqual(fno.Field.grad("U").canonical, "grad(U)")
+        self.assertEqual(fno.Field.delta().canonical, "delta")
+        self.assertEqual(fno.Field.coordinate("x").canonical, "x")
+        self.assertEqual(fno.Field.div("phi", "U").canonical, "div(phi,U)")
+        with self.assertRaisesRegex(ValueError, "x, y, or z"):
+            fno.Field.coordinate("X")
+
     def test_openfoam_operations_build_nested_expression_trees(self) -> None:
         strain = fno.Math.dev(fno.Math.symm(fno.Math.grad("U")))
         contraction = fno.Math.ddot(fno.Math.grad("U"), strain)
@@ -94,6 +104,7 @@ class MathTests(unittest.TestCase):
 
     def test_public_directory_contains_math(self) -> None:
         self.assertIn("Math", dir(fno))
+        self.assertIn("Field", dir(fno))
 
 
 if __name__ == "__main__":

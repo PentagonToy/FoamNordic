@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import subprocess
 import tempfile
 import unittest
 
@@ -73,7 +75,8 @@ class SlurmRenderingTests(unittest.TestCase):
             "unset SLURM_MEM_PER_NODE SLURM_MEM_PER_GPU",
             script,
         )
-        self.assertIn("███████╗", script)
+        self.assertIn("#SBATCH --open-mode=append", script)
+        self.assertNotIn("███████╗", script)
         self.assertEqual(batch.parent.name, "slurm")
 
     def test_coupled_batch_reserves_native_sidecar_task(self) -> None:
@@ -105,6 +108,52 @@ class SlurmRenderingTests(unittest.TestCase):
         self.assertIn('scancel "$job_id"', script)
         self.assertIn(".foamnordic/job.id", script)
         self.assertIn('SLURM_*|SBATCH_*|SRUN_*) unset "$key"', script)
+        self.assertIn('"${job_id}.batch" "$job_id"', script)
+        self.assertIn("COMPLETED*|FAILED*|CANCELLED*|TIMEOUT*", script)
+        self.assertNotIn(
+            'while squeue --noheader --job "$job_id"',
+            script,
+        )
+
+
+class SubmissionWrapperTests(unittest.TestCase):
+    def test_terminal_batch_step_does_not_wait_for_allocation_epilog(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".foamnordic").mkdir()
+            wrapper = write_submission_wrapper(root, root / "slurm/longship.sbatch")
+            commands = root / "commands"
+            commands.mkdir()
+            scripts = {
+                "sbatch": "#!/bin/bash\nprintf '12345\\n'\n",
+                "sacct": (
+                    "#!/bin/bash\n"
+                    "case \"$*\" in\n"
+                    "  *12345.batch*) printf 'COMPLETED|\\n' ;;\n"
+                    "esac\n"
+                ),
+                # A completing allocation may remain visible during its site
+                # epilog. The completed batch step is already authoritative.
+                "squeue": "#!/bin/bash\nprintf '12345 completing\\n'\n",
+                "scancel": "#!/bin/bash\nexit 0\n",
+            }
+            for name, contents in scripts.items():
+                path = commands / name
+                path.write_text(contents, encoding="utf-8")
+                path.chmod(0o750)
+            environment = dict(os.environ)
+            environment["PATH"] = f"{commands}:{environment['PATH']}"
+
+            result = subprocess.run(
+                (wrapper,),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=3,
+                env=environment,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

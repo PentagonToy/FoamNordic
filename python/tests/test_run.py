@@ -8,7 +8,9 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
+from foamnordic.execution.observe import ObservationStream
 from foamnordic.execution.run import (
+    _OpenFOAMProgress,
     RunStatus,
     _launch_local,
     _launch_process,
@@ -18,6 +20,90 @@ from foamnordic.execution.run import (
     _query_slurm_estimated_start,
     _sailing_paths,
 )
+
+
+class OpenFOAMProgressTests(unittest.TestCase):
+    def test_incrementally_reports_latest_physical_time_and_clears(self) -> None:
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "Sailing_cavity.out"
+            stream = StringIO()
+            monitor = _OpenFOAMProgress(output, started=time.monotonic(), stream=stream)
+
+            output.write_text("Create time\nTime = 0.001\n", encoding="utf-8")
+            monitor.refresh()
+            with output.open("a", encoding="utf-8") as log:
+                log.write("PIMPLE: iteration 1\nTime = 0.002\n")
+            monitor.refresh()
+            monitor.clear()
+
+            rendered = stream.getvalue()
+            self.assertIn("Sailing in OpenFOAM: t = 0.001", rendered)
+            self.assertIn("Sailing in OpenFOAM: t = 0.002", rendered)
+            self.assertFalse(output.read_text(encoding="utf-8").endswith("elapsed"))
+
+    def test_steady_solver_iteration_is_a_fallback(self) -> None:
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "Sailing_simpleFoam.out"
+            output.write_text("Iteration = 12\n", encoding="utf-8")
+            stream = StringIO()
+            monitor = _OpenFOAMProgress(output, started=time.monotonic(), stream=stream)
+            monitor.refresh(final=True)
+            self.assertIn("Sailing in OpenFOAM: iteration = 12", stream.getvalue())
+
+
+class ObservationProgressTests(unittest.TestCase):
+    def test_collection_reports_exchange_progress_and_clears(self) -> None:
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            observations = root / "observations"
+            observations.mkdir()
+            path = observations / "observations.jsonl"
+            path.write_text(
+                json.dumps(
+                    {
+                        "exchange_index": 17,
+                        "time": 0.125,
+                        "summary": {"U": {"l2": 2.5}},
+                        "timing": {},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run = Mock(_work_dir=root)
+            run.status.value = "succeeded"
+            output = StringIO()
+            stream = ObservationStream(
+                run,
+                path,
+                poll_interval=0.001,
+                progress=True,
+                progress_stream=output,
+            )
+
+            records = list(stream)
+
+            self.assertEqual(len(records), 1)
+            self.assertIn(
+                "Observing OpenFOAM: t = 0.125 | exchange = 17",
+                output.getvalue(),
+            )
+            self.assertTrue(output.getvalue().endswith("\r"))
+
+    def test_progress_requires_a_boolean(self) -> None:
+        with self.assertRaisesRegex(TypeError, "boolean"):
+            ObservationStream(
+                Mock(),
+                Path("observations.jsonl"),
+                poll_interval=0.1,
+                progress="yes",
+            )
 
 
 def packaged_longship_available() -> bool:

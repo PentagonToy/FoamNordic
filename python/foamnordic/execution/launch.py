@@ -224,6 +224,7 @@ def launch(
     *,
     readiness_timeout: float = 120.0,
     termination_grace: float = 30.0,
+    verbose: bool = True,
 ) -> Run:
     """Compile, prepare, and start one non-blocking coupled workload."""
 
@@ -238,6 +239,7 @@ def launch(
         longship,
         plan,
         integration_library,
+        verbose=verbose,
     )
     local = longship.scheduler is None
     solver = _solver_command(

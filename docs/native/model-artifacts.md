@@ -20,11 +20,13 @@ string, field, feature, rank, and leaf counts; it rejects truncation, invalid
 enum values, malformed scaler flags, and trailing bytes before a worker starts.
 Model payloads remain separate from this small control artifact.
 
-`.fnom` v1 is deliberately not compressed. It is a bounded (64 MiB maximum),
+`.fnom` is deliberately not compressed. It is a bounded (64 MiB maximum),
 deterministic binary manifest that native C++ validates directly before a
 worker starts; the usually much larger ONNX payload remains a sibling file.
 Adding zstd to this control path would add a mandatory runtime dependency while
-compressing the wrong part of the artifact. A future single-file distribution
+compressing the wrong part of the artifact. FNOM v2 adds an optional Joblib
+resident-runtime field while the reader remains compatible with v1. A future
+single-file distribution
 bundle may use independently checksummed zstd entries after measurements, but
 that container will not silently change the `.fnom` wire format.
 
@@ -104,6 +106,28 @@ and must be trusted.
 `pip install foamnordic` installs the Joblib/scikit-learn and JAX/Equinox
 runtimes together. Backend selection is a model-artifact decision rather than
 an installation profile.
+
+Joblib export may select the resident execution runtime without changing
+`Operator.model()` or the solver declaration:
+
+```python
+artifact = fno.Export.joblib(
+    model,
+    path="smagorinsky.fnom",
+    inputs={"features": fno.Tensor.vector(components=10)},
+    outputs={"nut": fno.Tensor.scalar()},
+    runtime="sklearnex",
+)
+```
+
+The choice is stored in FNOM v2. The worker activates `patch_sklearn()` before
+loading the Joblib payload; the default `runtime="sklearn"` performs no patch.
+The Intel extension is installed automatically on its supported Linux x86-64
+platform. An artifact that explicitly requests `sklearnex` fails clearly on an
+unsupported worker instead of silently changing its runtime. This setting can
+accelerate supported estimator kernels, but it does not alter model size,
+statistical validity, or the asymptotic lookup cost of a K-nearest-neighbor
+model.
 
 ## ONNX boundary
 

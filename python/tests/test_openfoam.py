@@ -42,6 +42,23 @@ class ForeignPath:
 
 
 class OpenFOAMReaderTests(unittest.TestCase):
+    def test_initialize_declares_isolated_mesh_preparation(self) -> None:
+        case = fno.OpenFOAM.Case(case_dir="case", run_dir="runs")
+
+        returned = case.initialize(ranks=8, mesh="blockMesh", validate_mesh=True)
+
+        self.assertIs(returned, case)
+        self.assertEqual(case.ranks, 8)
+        self.assertEqual(
+            case.to_plan()["initialization"],
+            {"mesh": "blockMesh", "validate_mesh": True},
+        )
+
+    def test_initialize_rejects_unknown_mesh_generator(self) -> None:
+        case = fno.OpenFOAM.Case(case_dir="case", run_dir="runs")
+        with self.assertRaisesRegex(ValueError, "blockMesh"):
+            case.initialize(mesh="snappyHexMesh")
+
     def test_case_accepts_string_pathlib_and_foreign_pathlike(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

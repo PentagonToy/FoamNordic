@@ -33,7 +33,9 @@ dependencies = [
     "numpy>=1.26,<3",
     "onnx>=1.17,<2",
     "onsaemiro>=1.0.5",
+    "pyyaml>=6,<7",
     "scikit-learn>=1.4,<2",
+    "scikit-learn-intelex>=2025.8,<2027; platform_system == 'Linux' and platform_machine == 'x86_64'",
 ]
 
 [project.urls]

@@ -20,12 +20,36 @@ done
 raw_job_id=$(sbatch --parsable @BATCH_PATH@)
 job_id=${raw_job_id%%;*}
 printf '%s\n' "$job_id" > @JOB_FILE@
-while squeue --noheader --job "$job_id" 2>/dev/null | grep -q .; do sleep 1; done
+
+terminal_state() {
+    local target state
+    for target in "${job_id}.batch" "$job_id"; do
+        state=$(sacct --noheader --parsable2 --jobs "$target" \
+            --starttime 1970-01-01 --format=State 2>/dev/null \
+            | awk -F'|' 'NF && $1 != "" {print $1; exit}')
+        case "$state" in
+            COMPLETED*|FAILED*|CANCELLED*|TIMEOUT*|NODE_FAIL*|OUT_OF_ME*|\
+            PREEMPTED*|BOOT_FAIL*|DEADLINE*|REVOKED*)
+                printf '%s\n' "$state"
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
 state=""
-for _ in $(seq 1 60); do
-    state=$(sacct --noheader --parsable2 --jobs "$job_id" \
-        --starttime 1970-01-01 --format=State | head -1)
+accounting_retries=0
+while [[ -z "$state" ]]; do
+    state=$(terminal_state || true)
     [[ -n "$state" ]] && break
+    if ! squeue --noheader --job "$job_id" 2>/dev/null | grep -q .; then
+        accounting_retries=$((accounting_retries + 1))
+        if (( accounting_retries >= 60 )); then
+            echo "FoamNordic: Slurm accounting did not publish a terminal state" >&2
+            exit 1
+        fi
+    fi
     sleep 1
 done
 case "$state" in

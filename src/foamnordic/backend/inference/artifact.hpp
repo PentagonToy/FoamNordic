@@ -45,6 +45,7 @@ struct ModelArtifact {
     std::vector<TreeLeaf> tree_leaves;
     std::optional<AffineScaler> input_scaler;
     std::optional<AffineScaler> output_scaler;
+    std::string runtime;
 
     void validate() const;
 };

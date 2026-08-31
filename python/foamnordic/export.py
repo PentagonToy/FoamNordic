@@ -145,6 +145,7 @@ def _manifest_contract(
     *,
     x_scaler: object | None = None,
     y_scaler: object | None = None,
+    runtime: str | None = None,
 ) -> str:
     if _native is None:
         raise RuntimeError("native artifact export requires a FoamNordic binary wheel")
@@ -165,6 +166,7 @@ def _manifest_contract(
         list(tree_leaves),
         x_scaler,
         y_scaler,
+        "" if runtime is None else runtime,
     )
     return dtype
 
@@ -203,12 +205,15 @@ def joblib(
     name: str | None = None,
     x_scaler: object | None = None,
     y_scaler: object | None = None,
+    runtime: str = "sklearn",
     verbose: bool = False,
 ) -> Path:
-    """Export one path-backed or fitted Joblib model without archive copies."""
+    """Export one Joblib model with an explicit resident execution runtime."""
 
     if not isinstance(verbose, bool):
         raise TypeError("verbose must be a boolean")
+    if runtime not in {"sklearn", "sklearnex"}:
+        raise ValueError("Joblib runtime must be 'sklearn' or 'sklearnex'")
     manifest, payload, default_name = _destination(path, ".joblib")
     model_name = require_nonempty(name or default_name, "model name")
     temporary = _temporary_for(payload)
@@ -233,6 +238,7 @@ def joblib(
             outputs,
             x_scaler=x_scaler,
             y_scaler=y_scaler,
+            runtime=runtime,
         )
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -356,10 +362,10 @@ def _display_export(
         columns=["Property", "Value"],
         mode="static",
     )
-    rows = (
+    rows = [
         ("Manifest", manifest.name),
         ("Payload", model.name),
-        ("Format", f"{format_name} + FNOM v1"),
+        ("Format", f"{format_name} + FNOM v{metadata['schema_version']}"),
         ("Dtype", dtype),
         ("Inputs", ", ".join(f"{key}[{value.components}]" for key, value in inputs.items())),
         ("Outputs", ", ".join(f"{key}[{value.components}]" for key, value in outputs.items())),
@@ -367,7 +373,9 @@ def _display_export(
         ("Output scaler", "none" if output_scaler is None else output_scaler["kind"]),
         ("Compression", "none (path-backed startup)"),
         ("Payload size", f"{model.stat().st_size} B"),
-    )
+    ]
+    if metadata.get("runtime") is not None:
+        rows.insert(3, ("Runtime", metadata["runtime"]))
     for row in rows:
         table.add_row(row)
     table.display()

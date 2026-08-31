@@ -1,0 +1,56 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2606                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+AoA             13.87;       // Angle-of-attack (deg)
+magUInf         1.0;         // Freestream velocity (m/s)
+
+inletVelocity  #eval{
+    $magUInf * vector(cos(degToRad($AoA)), 0, sin(degToRad($AoA)))
+};
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform $inletVelocity;
+
+boundaryField
+{
+    inlet
+    {
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
+    }
+
+    outlet
+    {
+        type            inletOutlet; 
+        inletValue      $internalField;
+        value           $internalField;
+    }
+
+    aerofoil
+    {
+        type            fixedValue;
+        value           uniform (0 0 0);
+    }
+
+    "yPeriodic_.*"
+    {
+        type            cyclic;
+    }
+}
+
+// ************************************************************************* //

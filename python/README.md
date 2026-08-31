@@ -206,12 +206,15 @@ artifact = fno.Export.joblib(
     outputs={"omega": fno.Tensor.scalar()},
     x_scaler=fitted_x_scaler,
     y_scaler=fitted_y_scaler,
+    runtime="sklearnex",  # optional; default is "sklearn"
 )
 ```
 
 `StandardScaler`, `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, and affine
 `FunctionTransformer` are converted to FNOM coefficients once; C++ applies
 them for every backend. Both scaler arguments default to `None`.
+The Joblib runtime is an export-time artifact contract, so
+`fno.Operator.model(...)` remains backend-neutral.
 
 Field mutation and physical closure remain separate declarations while sharing
 the same native worker and Fjord transport. Use
