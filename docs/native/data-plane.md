@@ -72,7 +72,7 @@ Native handshake policies are:
 - `disabled`: skip negotiation only when both peers were configured out of
   band with the same session contract.
 
-The future Python API controls this policy, while the native default remains
+The Python control plane controls this policy, while the native default remains
 `blocking`.
 
 ## Channel roles
@@ -85,7 +85,7 @@ Rune frames when shared memory is unavailable or unnecessary.
 
 ### POSIX shared memory (SHM)
 
-SHM is the same-node bulk channel. It will use session-scoped regions and two
+SHM is the same-node bulk channel. It uses session-scoped regions and two
 single-producer/single-consumer rings, one in each direction. Atomic sequence
 counters publish complete slots; a reader must never observe a partially
 written tensor.

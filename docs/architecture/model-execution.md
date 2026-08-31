@@ -51,7 +51,7 @@ Simple field modifications such as
 U_out = U * 1.00005
 ```
 
-are operation plans, not remote callbacks. A future Python API records the
+are operation plans, not remote callbacks. The Python API records the
 expression before launch and C++ evaluates it beside the solver. The same plan
 can include clipping, affine scaling, component selection, masks, or a native
 physics bypass without moving the field through Python.

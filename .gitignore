@@ -10,5 +10,6 @@ Testing/
 *.so
 *.dylib
 *.log
+tutorials/openfoam_tutorials/**/constant/polyMesh/
 __pycache__/
 *.py[cod]

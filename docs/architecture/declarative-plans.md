@@ -19,7 +19,9 @@ ClosureHost then owns the executable plan for the lifetime of the solver job.
 
 ## User code remains outside the solver loop
 
-The intended future Python shape is declarative:
+The current public declaration family is declarative. The following is
+architecture pseudocode, deliberately independent of exact public method
+names:
 
 ```python
 closure = model.bind(
@@ -42,10 +44,11 @@ longship = experiment.plan(
 longship.run()
 ```
 
-The exact API is provisional. The architectural property is not: there is no
-Python `for step` loop in the production closure path. `operation.scale` is
-compiled to a node-local native operation, and `model.bind` becomes a native
-field and executor contract.
+The public API expresses this through `Longship`, `Closure`, `Transform`, and
+`Observe`. The architectural property is invariant: there is no Python `for
+step` loop in the production closure path. A transform is compiled to a
+node-local native operation, and a closure becomes a native field and executor
+contract.
 
 ## Compile phase
 

@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Python will describe experiments before launch and inspect compact results
+Python describes experiments before launch and inspects compact results
 after or between selected exchanges. C++ owns solver-call timing, field views,
 feature evaluation, scaling, bypass, inference, atomic publication, and error
 handling.
@@ -12,7 +12,7 @@ state, and training datasets belong to a model-build notebook or batch job. A
 run-control notebook loads only artifact metadata and should remain usable in
 a 4 GiB process allocation.
 
-The API should eventually cover four roles:
+The installed API covers four roles:
 
 | Role | Responsibility |
 | --- | --- |
@@ -21,7 +21,10 @@ The API should eventually cover four roles:
 | Closure | Bind OpenFOAM expressions and output fields to a model contract |
 | Experiment | Select local or Slurm resources, placement, lifecycle, and data path |
 
-Names and signatures remain provisional until bindings exist.
+The public facade is implemented by the `foamnordic` package. Its primary
+declarations are `OpenFOAM`, `Longship`, `Closure`, `Transform`, `Observe`,
+`Export`, and `Postprocess`. Architecture documents label illustrative names
+explicitly when they are not public API.
 
 The Python process may run interactively, under Papermill, or as the control
 process of a submitted Longship job. In every form it remains an orchestrator:
@@ -31,13 +34,13 @@ central accelerator or remote diagnostic callback. See the
 
 ## Binding boundary
 
-The binding implementation will use nanobind. It will expose small owning
+The binding implementation uses nanobind. It exposes small owning
 configuration values and lifecycle handles, while native field storage,
 OpenFOAM objects, `Harbor`, and the closure state machine remain C++-owned.
 Bindings may release the GIL while waiting for a launched workload or a native
-summary, but a Python callback must never be part of a solver closure call.
+summary, but a Python callback is never part of a solver closure call.
 
-The first module should bind only stable facade types. Internal Rune messages,
+The module deliberately binds only stable facade types. Internal Rune messages,
 SHM ring slots, raw OpenFOAM field views, and ONNX Runtime objects are not a
 public Python ABI. NumPy views are permitted only for explicit observations;
 their lifetime must be tied to an owning native snapshot rather than solver
@@ -71,7 +74,7 @@ transport request, or own solver field memory.
 
 ## Stabilization gate
 
-A public Python API is ready only after bindings, packaging, API tests, local
-OpenFOAM examples, and Slurm examples all use the same native contracts. Until
-then, native behavior documented under [C++ internals](../native/README.md) is
-authoritative.
+The public Python API is packaged with nanobind bindings and API tests. Local
+and Slurm OpenFOAM validation use the same native contracts. The native
+behavior documented under [C++ internals](../native/README.md) remains the
+authoritative definition of low-level transport and OpenFOAM ABI behavior.

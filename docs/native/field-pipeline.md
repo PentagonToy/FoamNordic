@@ -52,8 +52,11 @@ executed inside the timestep loop.
 
 ## Declarative plan boundary
 
-The future Python API will declare work before launching OpenFOAM. The example
-below is a design target, not an API shipped by the current repository:
+The Python control plane declares work before launching OpenFOAM. It compiles
+`Closure`, `Transform`, `Observe`, and `Longship` declarations into separate
+native execution and observation plans. The compact example below is
+illustrative pseudocode for that internal plan boundary, not a second public
+Python API:
 
 ```python
 execution = fno.ExecutionPlan()
@@ -73,7 +76,7 @@ exchanges 1, 501, 1001, and so on publish compact observations. Omitting the
 observation plan constructs no observation buffer and sends no monitoring
 traffic.
 
-See the [Python API design](../python/design.md) for the intended ownership
+See the [Python API design](../python/design.md) for the implemented ownership
 boundary.
 
 ## Ownership

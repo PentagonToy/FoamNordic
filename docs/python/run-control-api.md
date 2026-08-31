@@ -1,9 +1,9 @@
-# Provisional run-control API
+# Run-control API
 
-This document describes the Python direction for a FoamNordic LES experiment.
-The compile, isolated case preparation, launch, wait, cancel, and result
-contracts now ship; observation streaming and richer preparation options below
-remain staged design targets.
+This document describes the Python control plane for a FoamNordic LES
+experiment. Compile, isolated case preparation, launch, wait, cancel, result,
+and bounded file-backed observation contracts ship today. Sections explicitly
+labelled as design targets describe future extensions rather than public API.
 
 ## Design character
 
