@@ -171,9 +171,12 @@ def _host_command(
     longship: Longship,
     prepared: PreparedProgram,
     model_threads: int = 1,
+    connections: int | None = None,
 ) -> tuple[str, ...]:
     if model_threads < 1:
         raise ValueError("model_threads must be positive")
+    if connections is not None and connections < 1:
+        raise ValueError("connections must be positive")
     program = prepared.program
     if program.artifact is None and prepared.artifact is None:
         raise RuntimeError("a model-backed field program is required")
@@ -206,7 +209,7 @@ def _host_command(
         f"unix://{prepared.socket}",
         artifact,
         "--connections",
-        str(longship.case.ranks),
+        str(connections or longship.case.ranks),
         "--threads",
         str(model_threads),
         "--ready-file",
@@ -229,6 +232,7 @@ def _host_group_command(
     prepared: tuple[PreparedProgram, ...],
     work_dir: Path,
     host_cpus: int,
+    connections: int | None = None,
 ) -> tuple[tuple[str, ...], tuple[Path, ...]]:
     if host_cpus < 1:
         raise ValueError("host_cpus must be positive")
@@ -241,7 +245,16 @@ def _host_group_command(
         quotient + (index < remainder) for index in range(len(prepared))
     )
     commands = [
-        _host_command(longship, item, threads)
+        (
+            _host_command(longship, item, threads)
+            if connections is None
+            else _host_command(
+                longship,
+                item,
+                threads,
+                connections=connections,
+            )
+        )
         for item, threads in zip(prepared, thread_budgets, strict=True)
     ]
     if len(commands) == 1:
@@ -263,6 +276,47 @@ def _host_group_command(
     return (sys.executable, "-m", "foamnordic.execution.host_group", str(configuration)), (
         aggregate,
     )
+
+
+def _node_ready_path(path: Path, node_index: int) -> Path:
+    """Return one shared-filesystem readiness marker per attached node."""
+
+    return path.with_name(f"{path.name}.node{node_index}")
+
+
+def _multi_node_host_command(
+    host: tuple[str, ...],
+    ready_files: tuple[Path, ...],
+    work_dir: Path,
+    nodes: int,
+) -> tuple[tuple[str, ...], tuple[Path, ...]]:
+    """Wrap an attached host command with Slurm node-local specialization."""
+
+    if nodes < 2:
+        return host, ready_files
+    configuration = _internal_path(work_dir, "node-host.json")
+    configuration.write_text(
+        json.dumps(
+            {
+                "command": list(host),
+                "nodes": nodes,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    expanded_ready = tuple(
+        _node_ready_path(path, node_index)
+        for path in ready_files
+        for node_index in range(nodes)
+    )
+    return (
+        sys.executable,
+        "-m",
+        "foamnordic.execution.node_host",
+        str(configuration),
+    ), expanded_ready
 
 
 def launch(
@@ -301,10 +355,18 @@ def launch(
             prepared,
             work_dir,
             int(runtime["host_cpus_per_task"]),
+            int(runtime["solver_tasks_per_node"]),
         )
         if prepared
         else (None, ())
     )
+    if host is not None and longship.scheduler is not None:
+        host, ready_files = _multi_node_host_command(
+            host,
+            ready_files,
+            work_dir,
+            longship.scheduler.nodes,
+        )
 
     if local and host is None:
         longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
@@ -343,7 +405,7 @@ def launch(
         work_dir,
         host,
         solver,
-        ready_files[0] if host is not None else None,
+        ready_files,
         readiness_timeout,
         termination_grace,
     )

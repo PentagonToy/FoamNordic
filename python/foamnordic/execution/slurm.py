@@ -46,7 +46,7 @@ def write_batch(
     work_dir: Path,
     host: Sequence[str] | None,
     solver: Sequence[str],
-    ready: Path | None,
+    ready: Sequence[Path] | None,
     readiness_timeout: float,
     termination_grace: float,
 ) -> Path:
@@ -112,9 +112,13 @@ exec srun \\
   --exclusive \\
   {quote_command(solver)}"""
     else:
-        assert ready is not None
+        if not ready:
+            raise ValueError("coupled Slurm launch requires readiness markers")
+        ready_arguments = " \\\n".join(
+            f"  --ready {quote_command((path,))}" for path in ready
+        )
         launch_body = f"""exec {quote_command((_longship_executable(),))} \\
-  --ready {quote_command((ready,))} \\
+{ready_arguments} \\
   --host-output {quote_command((host_log,))} \\
   --solver-output {quote_command((solver_log,))} \\
   --readiness-timeout-ms {round(readiness_timeout * 1000)} \\

@@ -70,10 +70,6 @@ def validate_case(longship: Longship) -> None:
     missing = [str(path.relative_to(source)) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"OpenFOAM source case is incomplete: {', '.join(missing)}")
-    if longship.scheduler is not None and longship.scheduler.nodes != 1:
-        raise NotImplementedError(
-            "automatic Slurm launch currently supports one attached solver node"
-        )
     if len(longship.observations) > 1:
         raise NotImplementedError("launch currently supports one observation schedule")
     _validate_observation_fields(longship)

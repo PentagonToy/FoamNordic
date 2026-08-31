@@ -371,6 +371,13 @@ FoamNordic adds this transport capacity to the Slurm node-memory reservation.
 OpenFOAM and the model otherwise share the job's node allocation while
 retaining their separately declared CPU and memory budgets.
 
+The same API extends to multiple solver nodes. For example, `nodes=2` and
+`ntasks=16` place eight OpenFOAM ranks and one model host on each node. Each
+host accepts only its eight node-local ranks; all bulk field exchange remains
+in node-local shared memory. The model artifact is loaded once per node, and
+Longship waits for both node hosts before starting the distributed solver.
+`ntasks` must be divisible by `nodes`.
+
 Submission uses a private environment copy with inherited `SLURM_*`,
 `SBATCH_*`, and `SRUN_*` values removed. This prevents a Jupyter or parent batch
 allocation from leaking incompatible resource variables into the new job and

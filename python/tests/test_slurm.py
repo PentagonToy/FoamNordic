@@ -5,15 +5,41 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import foamnordic as fno
 from foamnordic.core.native_plan import available as native_available
 from foamnordic.execution.resources import resource_values
+from foamnordic.execution.node_host import _node_index, _rewrite_ready_file
 from foamnordic.execution.slurm import write_batch, write_submission_wrapper
 
 
 @unittest.skipUnless(native_available(), "nanobind extension is not installed")
 class SlurmRenderingTests(unittest.TestCase):
+    def test_node_host_uses_slurm_process_index(self) -> None:
+        with patch.dict(os.environ, {"SLURM_PROCID": "1"}, clear=False):
+            self.assertEqual(_node_index(2), 1)
+
+    def test_node_host_rewrites_each_ready_marker(self) -> None:
+        command = [
+            "worker",
+            "--ready-file",
+            "/tmp/first.ready",
+            "--ready-file",
+            "/tmp/second.ready",
+        ]
+
+        self.assertEqual(
+            _rewrite_ready_file(command, ".node1"),
+            [
+                "worker",
+                "--ready-file",
+                "/tmp/first.ready.node1",
+                "--ready-file",
+                "/tmp/second.ready.node1",
+            ],
+        )
+
     def _longship(self, *, coupled: bool = False) -> fno.Longship:
         case = fno.openfoam.Case(
             case_dir="case",
@@ -93,7 +119,7 @@ class SlurmRenderingTests(unittest.TestCase):
                 root,
                 ("closure-host",),
                 ("pimpleFoam", "-parallel"),
-                root / ".foamnordic/closure.ready",
+                (root / ".foamnordic/closure.ready",),
                 120.0,
                 30.0,
             )
@@ -141,7 +167,7 @@ class SlurmRenderingTests(unittest.TestCase):
                 root,
                 ("closure-host",),
                 ("pimpleFoam", "-parallel"),
-                root / ".foamnordic/closure.ready",
+                (root / ".foamnordic/closure.ready",),
                 120.0,
                 30.0,
             ).read_text(encoding="utf-8")
@@ -156,6 +182,62 @@ class SlurmRenderingTests(unittest.TestCase):
         self.assertIn("--host srun --nodes=1 --ntasks=1", script)
         self.assertIn("--cpus-per-task=8 --cpu-bind=none", script)
         self.assertIn("--solver srun --nodes=1 --ntasks=16", script)
+
+    def test_multi_node_batch_waits_for_every_attached_host(self) -> None:
+        case = fno.openfoam.Case(
+            case_dir="case",
+            run_dir="workspace",
+            of_cmd="openfoam/2512",
+            ranks=16,
+        )
+        closure = fno.Closure(
+            name="nutFjord",
+            artifact="model.fnom",
+            inputs={"U": fno.field("U")},
+            outputs={"nut": fno.field("nut")},
+        )
+        longship = fno.Longship(
+            case=case,
+            closures=(closure,),
+            scheduler=fno.Slurm(
+                account="project_example",
+                partition="small",
+                time="00:15:00",
+                openfoam=fno.Slurm.openfoam(
+                    nodes=2,
+                    ntasks=16,
+                    cpus_per_task=1,
+                    mem_per_cpu="2G",
+                ),
+                model=fno.Slurm.model(cpus_per_task=2, mem_per_cpu="1G"),
+            ),
+        )
+        runtime = longship.compile().as_dict()["runtime"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ready = (
+                root / ".foamnordic/closure.ready.node0",
+                root / ".foamnordic/closure.ready.node1",
+            )
+            script = write_batch(
+                longship,
+                runtime,
+                root,
+                ("node-host",),
+                ("pimpleFoam", "-parallel"),
+                ready,
+                120.0,
+                30.0,
+            ).read_text(encoding="utf-8")
+
+        self.assertIn("#SBATCH --nodes=2", script)
+        self.assertIn("#SBATCH --ntasks=20", script)
+        self.assertIn("--ready", script)
+        self.assertIn("closure.ready.node0", script)
+        self.assertIn("closure.ready.node1", script)
+        self.assertIn("--host srun --nodes=2 --ntasks=2", script)
+        self.assertIn("--solver srun --nodes=2 --ntasks=16", script)
+        self.assertIn("--ntasks-per-node=8", script)
 
     def test_submission_wrapper_owns_scancel(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

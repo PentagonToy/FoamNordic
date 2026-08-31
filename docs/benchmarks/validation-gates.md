@@ -15,24 +15,43 @@ HPC evidence:
 | Full progress-variable coordinator, volumetric rate | Three-step reaction model, manifold, transport, and thermodynamic ordering | 1 node, 1 rank |
 | Full progress-variable coordinator, specific rate | Same three-step coordinator with `rho*omega` conversion | 1 node, 1 rank |
 | Full progress-variable coordinator, specific rate MPI | Three-step decomposition, rank identity, two resident sessions, and reconstructed postprocessing | 1 node, 2 ranks |
+| Attached multi-node identity parity | One node-local host per solver node, distributed MPI, SHM exchange, and unchanged `U`/`p` | 2 nodes, 2 ranks |
 
 The runnable entry points are in [`tools/hpc/`](../../tools/hpc/). They accept
 site paths, account, partition, and environment through variables rather than
 embedding a user or project identity. Results are isolated by Slurm job and
 UTC timestamp.
 
+## Multi-node acceptance
+
+The attached multi-node software gate is runnable with
+[`tools/hpc/testMultiNodeLongship.py`](../../tools/hpc/testMultiNodeLongship.py).
+It runs the same short, two-node decomposition first without a field program
+and then with an identity `Transform`. Passing requires both runs to succeed
+and their final `U` and `p` arrays to agree within `1e-12`. This is a transport
+and lifecycle gate, not a scaling benchmark.
+
+Roihu's two-node `medium` gate passed on 2026-08-31 with OpenFOAM v2512.
+Baseline job `962069` ran on `rc4231-4232` in 6 seconds; identity-coupled job
+`962071` ran on `rc4152-4153` in 8 seconds. Both final fields matched exactly:
+maximum absolute error was `0.0` for `U` and `p`. This validates one attached
+ClosureHost per node, node-local SHM exchange, distributed MPI identity, and
+coupled startup/shutdown. It is not a cross-node scaling measurement because
+the two paths ran on different node pairs.
+
 ## Deliberately deferred
 
-A cross-node combustion run remains a higher-level sixth gate. It does not
-need one two-node allocation: on a site with one-node development partitions,
-the preferred topology is a resident ClosureHost in an existing `interactive`
-allocation and a one-node solver job submitted to `small`, excluding the host
-node. This mirrors the already validated UCX lifecycle gates. It is kept out
-of the default suite so the first failure can be attributed to combustion or
-MPI before adding cross-allocation placement.
+A central-host cross-node combustion run remains a higher-level sixth gate.
+It does not need one two-node allocation: on a site with one-node development
+partitions, the preferred topology is a resident ClosureHost in an existing
+`interactive` allocation and a one-node solver job submitted to `small`,
+excluding the host node. This mirrors the already validated UCX lifecycle
+gates. It is kept out of the default suite so the first failure can be
+attributed to combustion or MPI before adding cross-allocation placement.
 
-A solver itself decomposed across two or more solver nodes remains a later
-scaling campaign and should use a deliberately requested multi-node partition.
+Large multi-node scaling and central accelerator placement remain later
+campaigns. They should use deliberately requested partitions and report
+solver, model, and orchestration time separately.
 
 Production flamelet thermodynamics, conservation tolerances, realizability,
 and a physically representative trained artifact remain scientific acceptance

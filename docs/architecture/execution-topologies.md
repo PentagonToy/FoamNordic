@@ -27,6 +27,12 @@ once by the node host rather than once per rank. A host may batch compatible
 rank requests only when doing so preserves each blocking closure invocation,
 exchange index, solver time, and output identity.
 
+This topology is implemented directly by scheduled `Longship` runs. Slurm
+starts one ClosureHost task per requested solver node, assigns each host the
+node-local rank count, and uses a distinct readiness marker per node. The
+solver's MPI communicator spans the nodes normally; no FoamNordic master rank
+collects complete fields across the network.
+
 ## B. External Longship orchestrator with attached inference
 
 Papermill, a notebook, or a future FoamNordic service may live outside the

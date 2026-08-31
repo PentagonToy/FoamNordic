@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
+
+
+def _ready_path(value: str, suffix: str) -> Path:
+    return Path(value + suffix)
+
+
+def _rewrite_ready_files(command: list[str], suffix: str) -> list[str]:
+    rewritten = list(command)
+    for index, argument in enumerate(rewritten[:-1]):
+        if argument == "--ready-file":
+            rewritten[index + 1] += suffix
+    return rewritten
 
 
 def _terminate(processes: list[subprocess.Popen[bytes]]) -> None:
@@ -27,9 +40,15 @@ def _terminate(processes: list[subprocess.Popen[bytes]]) -> None:
 
 def main(path: str) -> int:
     configuration = json.loads(Path(path).read_text(encoding="utf-8"))
-    commands = configuration["commands"]
-    ready_files = [Path(value) for value in configuration["ready_files"]]
-    aggregate = Path(configuration["aggregate_ready"])
+    suffix = os.environ.get("FOAMNORDIC_READY_SUFFIX", "")
+    commands = [
+        _rewrite_ready_files(command, suffix)
+        for command in configuration["commands"]
+    ]
+    ready_files = [
+        _ready_path(value, suffix) for value in configuration["ready_files"]
+    ]
+    aggregate = _ready_path(configuration["aggregate_ready"], suffix)
     processes: list[subprocess.Popen[bytes]] = []
     stopping = False
 

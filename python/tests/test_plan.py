@@ -30,7 +30,12 @@ from foamnordic._case import (
     validate_case,
 )
 from foamnordic.core.native_plan import available as native_available
-from foamnordic.execution.launch import _host_command, _host_group_command
+from foamnordic.execution.launch import (
+    _host_command,
+    _host_group_command,
+    _multi_node_host_command,
+    _node_ready_path,
+)
 
 
 def write_mesh(case: Path) -> None:
@@ -289,6 +294,53 @@ class PlanTests(unittest.TestCase):
         self.assertIn("openfoam(", help_text)
         self.assertIn("model(", help_text)
         self.assertIn("exactly one ClosureHost task per node", help_text)
+
+    def test_multi_node_attached_plan_uses_one_host_per_node(self) -> None:
+        example = example_longship()
+        longship = fno.Longship(
+            case=fno.OpenFOAM.Case(
+                case_dir=example.case.case_dir,
+                run_dir=example.case.run_dir,
+                of_cmd=example.case.of_cmd,
+                ranks=16,
+            ),
+            closures=example.closures,
+            scheduler=fno.Slurm(
+                account="project_example",
+                partition="small",
+                time="00:15:00",
+                openfoam=fno.Slurm.openfoam(nodes=2, ntasks=16),
+                model=fno.Slurm.model(cpus_per_task=2),
+            ),
+        )
+
+        runtime = longship.compile().as_dict()["runtime"]
+
+        self.assertEqual(runtime["solver_tasks_per_node"], 8)
+        self.assertEqual(runtime["host_tasks"], 2)
+        self.assertEqual(runtime["placement"]["host_instances"], 2)
+        self.assertEqual(runtime["placement"]["data_path"], "shm")
+
+    def test_multi_node_host_specializes_readiness_per_node(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ready = root / "program.ready"
+            command, expanded = _multi_node_host_command(
+                ("worker", "--ready-file", str(ready)),
+                (ready,),
+                root,
+                2,
+            )
+
+            self.assertIn("foamnordic.execution.node_host", command)
+            self.assertEqual(
+                expanded,
+                (_node_ready_path(ready, 0), _node_ready_path(ready, 1)),
+            )
+            configuration = json.loads(
+                (root / ".foamnordic/node-host.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(configuration["nodes"], 2)
 
     def test_longship_verbose_displays_resource_plan_at_declaration(self) -> None:
         longship = example_longship()

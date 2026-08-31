@@ -59,3 +59,23 @@ FOAMNORDIC_GATE_SET=mpi FOAMNORDIC_SKIP_BUILD=true \
 
 `FOAMNORDIC_SKIP_BUILD=true` is intended only for a Python-only fix after the
 same checkout and OpenFOAM ABI have already completed `foamnordic build`.
+
+## Two-node attached Longship gate
+
+This gate compares a two-node OpenFOAM baseline with the same decomposition
+using an identity field exchange. Use a shared scratch path for the output:
+
+```bash
+export FOAMNORDIC_SLURM_ACCOUNT=<allocation-account>
+export FOAMNORDIC_TEST_ROOT=/scratch/<allocation-account>/<user>/Tests/foamnordic-multinode
+export FOAMNORDIC_SLURM_PARTITION=small
+
+module load openfoam/2512
+python "$FOAMNORDIC_REPO/tools/hpc/testMultiNodeLongship.py"
+```
+
+The script requests two nodes and two OpenFOAM tasks, places one ClosureHost
+beside each task, and prints `Two-node Longship gate: PASS` only after final
+`U` and `p` parity succeeds. macOS can exercise the MPI and node-wrapper unit
+paths, but it cannot reproduce separate node-local shared-memory namespaces;
+the real two-node Slurm run is the acceptance gate.
