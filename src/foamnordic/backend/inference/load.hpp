@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
@@ -19,12 +20,19 @@
 
 namespace foamnordic::closure {
 
+struct ModelLoadOptions {
+    std::uint32_t threads{1};
+
+    void validate() const;
+};
+
 struct LoadedModel {
     ModelArtifact artifact;
     std::unique_ptr<ModelKernel> kernel;
 };
 
 [[nodiscard]] LoadedModel load_model(
-    const std::filesystem::path& manifest_path);
+    const std::filesystem::path& manifest_path,
+    ModelLoadOptions options = {});
 
 }  // namespace foamnordic::closure

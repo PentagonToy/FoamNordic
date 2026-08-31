@@ -415,4 +415,22 @@ void bind_artifacts(nb::module_& module) {
         },
         "path"_a,
         "Read the embedded payload from a self-contained FNOM bundle.");
+
+    module.def(
+        "extract_model_payload",
+        [](const std::string& path, const std::string& destination) {
+            foamnordic::closure::extract_bundle_payload(path, destination);
+        },
+        "path"_a,
+        "destination"_a,
+        "Stream an embedded FNOM payload into a worker-local file.");
+
+    module.def(
+        "read_model_payload_region",
+        [](const std::string& path) {
+            const auto region = foamnordic::closure::bundle_payload_region(path);
+            return std::make_pair(region.offset, region.size);
+        },
+        "path"_a,
+        "Read the byte offset and size of an embedded FNOM payload.");
 }

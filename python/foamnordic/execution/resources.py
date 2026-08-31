@@ -50,7 +50,10 @@ def resource_values(longship: Longship) -> dict[str, object]:
     model_cpus_per_node = (
         model.cpus_per_task
         if scheduler.has_model_resources
-        else longship.placement.closure_cpus_per_node * max(1, programs)
+        else (
+            longship.placement.closure_cpus_per_node
+            or max(1, programs)
+        )
     )
     model_cpus = scheduler.nodes * model_cpus_per_node if model_active else 0
     memory_per_cpu = memory_bytes(scheduler.mem_per_cpu)

@@ -27,6 +27,7 @@ struct WorkerOptions {
     bool ucx{false};
     std::string ucx_host;
     std::uint32_t connections{1};
+    std::uint32_t model_threads{1};
     std::uint64_t maximum_payload{16ULL * 1024ULL * 1024ULL * 1024ULL};
 
     void validate() const;

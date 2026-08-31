@@ -65,6 +65,10 @@ void WorkerOptions::validate() const {
         throw std::invalid_argument(
             "Native closure worker connection count must be positive.");
     }
+    if (model_threads == 0) {
+        throw std::invalid_argument(
+            "Native closure worker model thread count must be positive.");
+    }
     if (maximum_payload == 0) {
         throw std::invalid_argument("Native closure worker payload limit must be positive.");
     }
@@ -108,7 +112,7 @@ NativeClosureWorker::NativeClosureWorker(
       options_(options) {
     requested_address_.validate();
     options_.validate();
-    auto loaded = load_model(manifest_path);
+    auto loaded = load_model(manifest_path, {options_.model_threads});
     artifact_ = std::move(loaded.artifact);
     owned_kernel_ = std::move(loaded.kernel);
     kernel_ = owned_kernel_.get();

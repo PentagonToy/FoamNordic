@@ -34,6 +34,7 @@ void usage() {
         << "  address   unix:///path/to/worker.sock or tcp://host:port\n"
         << "  manifest  FoamNordic native model manifest\n"
         << "  --connections N  Solver sessions accepted by this host\n"
+        << "  --threads N      Model CPUs reserved for this host\n"
         << "  --ready-file PATH Create PATH after the worker is ready\n"
         << "  --ucx-host HOST   Require UCX and advertise HOST to solvers\n"
         << "  --no-shm          Keep a Unix session on UDS\n";
@@ -133,6 +134,8 @@ int main(int argc, char** argv) {
                 options.shared_memory = false;
             } else if (argument == "--connections" && index + 1 < argc) {
                 options.connections = positive_count(argv[++index]);
+            } else if (argument == "--threads" && index + 1 < argc) {
+                options.model_threads = positive_count(argv[++index]);
             } else if (argument == "--ready-file" && index + 1 < argc) {
                 ready_file = expand_rank(argv[++index]);
             } else if (argument == "--ucx-host" && index + 1 < argc) {
@@ -152,6 +155,8 @@ int main(int argc, char** argv) {
             options);
         std::cout << "[FoamNordic] Closure worker ready: "
                   << worker.address().text() << std::endl;
+        std::cout << "[FoamNordic] Model CPU budget: "
+                  << options.model_threads << std::endl;
         ReadyMarker ready(std::move(ready_file));
         worker.run();
         return 0;

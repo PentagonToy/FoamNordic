@@ -265,6 +265,18 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
         "Multi-rank resident host left its Unix socket behind.");
 }
 
+void test_worker_rejects_an_empty_model_cpu_budget() {
+    foamnordic::closure::WorkerOptions options;
+    options.model_threads = 0;
+    bool rejected = false;
+    try {
+        options.validate();
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(rejected, "Resident worker accepted zero model threads.");
+}
+
 #ifdef FOAMNORDIC_HAVE_UCX
 void test_resident_worker_upgrades_tcp_control_to_ucx() {
     const foamnordic::closure::ClosureContract contract{
@@ -350,6 +362,7 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
 int main() {
     test_resident_worker_lifecycle();
     test_one_resident_host_serves_multiple_solver_ranks();
+    test_worker_rejects_an_empty_model_cpu_budget();
 #ifdef FOAMNORDIC_HAVE_UCX
     test_resident_worker_upgrades_tcp_control_to_ucx();
 #endif

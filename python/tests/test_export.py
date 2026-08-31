@@ -91,7 +91,7 @@ class ExportTests(unittest.TestCase):
                 },
                 outputs={"omega_c": fno.Tensor.scalar()},
             )
-            self.assertEqual(manifest.read_bytes()[:8], b"FNOBND1\0")
+            self.assertEqual(manifest.read_bytes()[:8], b"FNOBND2\0")
             self.assertEqual(
                 fno._native.read_model_payload(str(manifest)), b"onnx-payload"
             )
@@ -225,7 +225,12 @@ class ExportTests(unittest.TestCase):
             import numpy as np
         except ImportError:
             self.skipTest("Joblib test dependencies are unavailable")
-        from foamnordic.execution.resident import _joblib_evaluator
+        from foamnordic.execution.resident import (
+            _EmbeddedPayload,
+            _joblib_evaluator,
+            _load_joblib,
+            _payload,
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -240,6 +245,7 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(metadata["schema_version"], 2)
             self.assertEqual(metadata["runtime"], "sklearn")
             self.assertTrue(metadata["bundled"])
+            self.assertIsInstance(_payload(manifest, metadata), BytesIO)
             payload = BytesIO(fno._native.read_model_payload(str(manifest)))
             loaded = joblib.load(payload)
             np.testing.assert_allclose(loaded.weights, [2.0, 1.0])
@@ -247,6 +253,26 @@ class ExportTests(unittest.TestCase):
             evaluator = _joblib_evaluator(payload, (("prediction", 1),))
             result = evaluator(memoryview(values), 2, 2, "float64", 0, 0.0)
             np.testing.assert_allclose(result, [[5.0], [8.0]])
+
+            large_model = _LinearPrediction()
+            large_model.padding = np.zeros(4 * 1024 * 1024, dtype=np.float64)
+            large_manifest = fno.export.joblib(
+                large_model,
+                path=root / "large.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+            )
+            large_metadata = fno._native.read_model_manifest(str(large_manifest))
+            embedded = _payload(large_manifest, large_metadata)
+            self.assertIsInstance(embedded, _EmbeddedPayload)
+            mapped, storage, mode = _load_joblib(embedded, joblib)
+            self.assertIsInstance(mapped.padding, np.memmap)
+            self.assertIn(mode, {"direct", "staged"})
+            self.assertEqual(embedded.offset % 64, 0)
+            if mode == "direct":
+                self.assertIsNone(storage)
+            else:
+                self.assertIsNotNone(storage)
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_equinox_model_exports_tree_metadata_and_evaluates(self) -> None:

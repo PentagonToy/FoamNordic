@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch
 import foamnordic as fno
 from foamnordic._case import (
     PreparedProgram,
-    _expression_width,
+    _expression_layout,
     _mesh_commands,
     _package_function,
     _prepare_decomposition,
@@ -30,7 +30,7 @@ from foamnordic._case import (
     validate_case,
 )
 from foamnordic.core.native_plan import available as native_available
-from foamnordic.execution.launch import _host_command
+from foamnordic.execution.launch import _host_command, _host_group_command
 
 
 def write_mesh(case: Path) -> None:
@@ -82,6 +82,32 @@ def example_longship() -> fno.Longship:
 
 
 class PlanTests(unittest.TestCase):
+    def test_local_model_cpu_budget_is_detected_automatically(self) -> None:
+        example = example_longship()
+        local = fno.Longship(
+            case=example.case,
+            closures=example.closures,
+        )
+        with patch(
+            "foamnordic.core.native_plan.local_cpu_budget",
+            return_value=7,
+        ):
+            value = local.compile().as_dict()
+        self.assertEqual(value["placement"]["closure_cpus_per_node"], "auto")
+        self.assertEqual(value["runtime"]["host_cpus_per_task"], 7)
+
+    def test_local_model_cpu_budget_can_be_overridden(self) -> None:
+        example = example_longship()
+        local = fno.Longship(
+            case=example.case,
+            closures=example.closures,
+            placement=fno.Attached(closure_cpus_per_node=3),
+        )
+        self.assertEqual(
+            local.compile().as_dict()["runtime"]["host_cpus_per_task"],
+            3,
+        )
+
     def test_missing_mesh_has_actionable_initialization_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -563,10 +589,25 @@ class PlanTests(unittest.TestCase):
         )
         longship = Mock(case=case)
 
-        self.assertEqual(_expression_width(longship, fno.Field("k")), 1)
-        self.assertEqual(_expression_width(longship, fno.Field.grad("U")), 9)
-        self.assertEqual(_expression_width(longship, fno.Field.delta()), 1)
-        self.assertEqual(_expression_width(longship, fno.Field.coordinate("z")), 1)
+        self.assertEqual(
+            _expression_layout(longship, fno.Field("k")).transport_width,
+            1,
+        )
+        self.assertEqual(
+            _expression_layout(longship, fno.Field.grad("U")).transport_width,
+            9,
+        )
+        self.assertEqual(
+            _expression_layout(longship, fno.Field.delta()).transport_width,
+            1,
+        )
+        self.assertEqual(
+            _expression_layout(
+                longship,
+                fno.Field.coordinate("z"),
+            ).transport_width,
+            1,
+        )
 
         closure = fno.Closure(
             name="kEqnFjord",
@@ -811,11 +852,13 @@ class PlanTests(unittest.TestCase):
                     Path("/tmp/program.sock"),
                     None,
                 ),
+                model_threads=6,
             )
         rendered = " ".join(command)
         self.assertIn(sys.executable, rendered)
         self.assertIn("foamnordic.execution.resident", rendered)
         self.assertIn(f"--connections {longship.case.ranks}", rendered)
+        self.assertIn("--threads 6", rendered)
         key_index = command.index("--key")
         self.assertEqual(
             command[key_index + 1],
@@ -853,6 +896,42 @@ class PlanTests(unittest.TestCase):
             command[key_index + 1],
             '{"entropy":[42,0],"path":[],"scope":"global"}',
         )
+
+    def test_multiple_programs_share_the_model_cpu_budget(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="joblibClosure",
+            artifact="model.fnom",
+            inputs={"features": fno.field("U")},
+            outputs={"prediction": fno.field("nut")},
+        )
+        longship = fno.Longship(case=example.case, closures=(closure,))
+        prepared = tuple(
+            PreparedProgram(
+                closure,
+                Path(f"/tmp/ready-{index}"),
+                Path(f"/tmp/program-{index}.sock"),
+                None,
+            )
+            for index in range(2)
+        )
+        budgets = []
+
+        def command(_longship, _prepared, model_threads=1):
+            budgets.append(model_threads)
+            return ("worker", str(model_threads))
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "foamnordic.execution.launch._host_command",
+            side_effect=command,
+        ):
+            _host_group_command(longship, prepared, Path(directory), host_cpus=5)
+        self.assertEqual(budgets, [3, 2])
+
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(
+            ValueError, "at least the number"
+        ):
+            _host_group_command(longship, prepared, Path(directory), host_cpus=1)
 
     def test_ml_expression_schemes_are_planned_without_overriding_defaults(self) -> None:
         example = example_longship()

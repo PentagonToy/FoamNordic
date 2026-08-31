@@ -170,7 +170,10 @@ def _artifact_metadata(path: Path) -> dict[str, object]:
 def _host_command(
     longship: Longship,
     prepared: PreparedProgram,
+    model_threads: int = 1,
 ) -> tuple[str, ...]:
+    if model_threads < 1:
+        raise ValueError("model_threads must be positive")
     program = prepared.program
     if program.artifact is None and prepared.artifact is None:
         raise RuntimeError("a model-backed field program is required")
@@ -204,6 +207,8 @@ def _host_command(
         artifact,
         "--connections",
         str(longship.case.ranks),
+        "--threads",
+        str(model_threads),
         "--ready-file",
         prepared.ready,
     ]
@@ -223,8 +228,22 @@ def _host_group_command(
     longship: Longship,
     prepared: tuple[PreparedProgram, ...],
     work_dir: Path,
+    host_cpus: int,
 ) -> tuple[tuple[str, ...], tuple[Path, ...]]:
-    commands = [_host_command(longship, item) for item in prepared]
+    if host_cpus < 1:
+        raise ValueError("host_cpus must be positive")
+    if host_cpus < len(prepared):
+        raise ValueError(
+            "model cpus_per_task must be at least the number of field programs"
+        )
+    quotient, remainder = divmod(host_cpus, max(1, len(prepared)))
+    thread_budgets = tuple(
+        quotient + (index < remainder) for index in range(len(prepared))
+    )
+    commands = [
+        _host_command(longship, item, threads)
+        for item, threads in zip(prepared, thread_budgets, strict=True)
+    ]
     if len(commands) == 1:
         return commands[0], (prepared[0].ready,)
     aggregate = _internal_path(work_dir, "programs.ready")
@@ -259,6 +278,7 @@ def launch(
         raise ValueError("lifecycle timeouts must be positive")
     validate_case(longship)
     plan = longship.compile()
+    runtime = plan.as_dict()["runtime"]
     integration_library = (
         _openfoam_library(longship) if _programs(longship) else None
     )
@@ -276,7 +296,12 @@ def launch(
         openfoam_library=integration_library,
     )
     host, ready_files = (
-        _host_group_command(longship, prepared, work_dir)
+        _host_group_command(
+            longship,
+            prepared,
+            work_dir,
+            int(runtime["host_cpus_per_task"]),
+        )
         if prepared
         else (None, ())
     )
@@ -312,7 +337,6 @@ def launch(
     for command in ("sbatch", "squeue", "sacct", "scancel"):
         if shutil.which(command) is None:
             raise RuntimeError(f"Slurm command is unavailable: {command}")
-    runtime = plan.as_dict()["runtime"]
     batch = write_batch(
         longship,
         runtime,

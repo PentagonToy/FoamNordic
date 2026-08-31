@@ -24,6 +24,49 @@ void require(bool condition, const std::string& message) {
     }
 }
 
+template <class Operation>
+void require_throws(Operation&& operation, const std::string& message) {
+    bool rejected = false;
+    try {
+        operation();
+    } catch (const std::exception&) {
+        rejected = true;
+    }
+    require(rejected, message);
+}
+
+std::vector<std::byte> read_bytes(const std::filesystem::path& path) {
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    require(stream.good(), "Could not open temporary bundle.");
+    const auto count = stream.tellg();
+    require(count >= 0, "Temporary bundle size was invalid.");
+    stream.seekg(0);
+    std::vector<std::byte> bytes(static_cast<std::size_t>(count));
+    stream.read(
+        reinterpret_cast<char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+    require(stream.good(), "Could not read temporary bundle.");
+    return bytes;
+}
+
+void write_bytes(
+    const std::filesystem::path& path,
+    const std::vector<std::byte>& bytes) {
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    require(stream.good(), "Could not create malformed temporary bundle.");
+    stream.write(
+        reinterpret_cast<const char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+    require(stream.good(), "Could not write malformed temporary bundle.");
+}
+
+void write_u64(std::vector<std::byte>& bytes, std::size_t offset, std::uint64_t value) {
+    require(offset + sizeof(value) <= bytes.size(), "Bundle test offset was invalid.");
+    for (unsigned shift = 0; shift < 64; shift += 8) {
+        bytes[offset++] = static_cast<std::byte>((value >> shift) & 0xffU);
+    }
+}
+
 template <class Value>
 foamnordic::fjord::MutableTensorView matrix_view(
     std::vector<Value>& values,
@@ -382,8 +425,10 @@ void test_self_contained_bundle_round_trip() {
     const auto root = std::filesystem::temp_directory_path();
     const auto payload_path = root / ("foamnordic-payload-" + nonce + ".bin");
     const auto bundle_path = root / ("foamnordic-bundle-" + nonce + ".fnom");
-    const std::vector<std::byte> expected{
-        std::byte{0x01}, std::byte{0x02}, std::byte{0x00}, std::byte{0xff}};
+    std::vector<std::byte> expected(8 * 1024 * 1024 + 17);
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+        expected[index] = static_cast<std::byte>(index % 251);
+    }
     {
         std::ofstream payload(payload_path, std::ios::binary);
         payload.write(
@@ -411,9 +456,97 @@ void test_self_contained_bundle_round_trip() {
     require(
         foamnordic::closure::read_bundle_payload(bundle_path) == expected,
         "Embedded FNOM payload did not round-trip exactly.");
+    const auto region = foamnordic::closure::bundle_payload_region(bundle_path);
+    require(
+        region.offset % 64 == 0 && region.size == expected.size(),
+        "FNOM payload region is not aligned for direct memory mapping.");
+    const auto extracted_path = root / ("foamnordic-extracted-" + nonce + ".bin");
+    foamnordic::closure::extract_bundle_payload(bundle_path, extracted_path);
+    require(
+        read_bytes(extracted_path) == expected,
+        "Streamed FNOM payload did not round-trip exactly.");
+
+    const auto complete = read_bytes(bundle_path);
+    const auto malformed_path = root / ("foamnordic-malformed-" + nonce + ".fnom");
+    auto malformed = complete;
+    malformed.resize(31);
+    write_bytes(malformed_path, malformed);
+    require_throws(
+        [&] { static_cast<void>(foamnordic::closure::read_manifest(malformed_path)); },
+        "FNOM bundle accepted a truncated header.");
+
+    malformed = complete;
+    malformed.pop_back();
+    write_bytes(malformed_path, malformed);
+    require_throws(
+        [&] {
+            static_cast<void>(foamnordic::closure::read_bundle_payload(malformed_path));
+        },
+        "FNOM bundle accepted a truncated payload.");
+
+    malformed = complete;
+    write_u64(malformed, 8, 0);
+    write_bytes(malformed_path, malformed);
+    require_throws(
+        [&] { static_cast<void>(foamnordic::closure::read_manifest(malformed_path)); },
+        "FNOM bundle accepted a zero manifest length.");
+
+    malformed = complete;
+    write_u64(malformed, 24, expected.size() + 1);
+    write_bytes(malformed_path, malformed);
+    require_throws(
+        [&] {
+            static_cast<void>(foamnordic::closure::read_bundle_payload(malformed_path));
+        },
+        "FNOM bundle accepted an incorrect payload length.");
+
+    malformed = complete;
+    write_u64(malformed, 16, 32);
+    write_bytes(malformed_path, malformed);
+    require_throws(
+        [&] {
+            static_cast<void>(foamnordic::closure::bundle_payload_region(
+                malformed_path));
+        },
+        "FNOM bundle accepted an overlapping payload region.");
+
+    malformed = complete;
+    malformed.push_back(std::byte{0});
+    write_bytes(malformed_path, malformed);
+    require_throws(
+        [&] {
+            static_cast<void>(foamnordic::closure::read_bundle_payload(malformed_path));
+        },
+        "FNOM bundle accepted trailing bytes.");
+    require_throws(
+        [&] {
+            foamnordic::closure::extract_bundle_payload(
+                malformed_path, extracted_path);
+        },
+        "FNOM extraction accepted trailing bytes.");
+
+    const auto legacy_path = root / ("foamnordic-legacy-" + nonce + ".fnom");
+    const auto encoded_manifest = foamnordic::closure::encode_manifest(artifact);
+    std::vector<std::byte> legacy(24);
+    constexpr char legacy_magic[] = "FNOBND1";
+    for (std::size_t index = 0; index < 7; ++index) {
+        legacy[index] = static_cast<std::byte>(legacy_magic[index]);
+    }
+    write_u64(legacy, 8, encoded_manifest.size());
+    write_u64(legacy, 16, expected.size());
+    legacy.insert(legacy.end(), encoded_manifest.begin(), encoded_manifest.end());
+    legacy.insert(legacy.end(), expected.begin(), expected.end());
+    write_bytes(legacy_path, legacy);
+    require(
+        foamnordic::closure::read_bundle_payload(legacy_path) == expected,
+        "Legacy FNOBND1 payload compatibility failed.");
+
     std::error_code ignored;
     std::filesystem::remove(payload_path, ignored);
     std::filesystem::remove(bundle_path, ignored);
+    std::filesystem::remove(malformed_path, ignored);
+    std::filesystem::remove(extracted_path, ignored);
+    std::filesystem::remove(legacy_path, ignored);
 }
 
 }  // namespace

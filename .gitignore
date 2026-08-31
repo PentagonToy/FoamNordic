@@ -12,4 +12,5 @@ Testing/
 *.log
 tutorials/openfoam_tutorials/**/constant/polyMesh/
 __pycache__/
+.pytest_cache/
 *.py[cod]

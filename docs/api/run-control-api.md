@@ -100,6 +100,21 @@ the same Fjord transport and native packing boundary. Callable JAX-to-ONNX
 lowering remains an exporter concern. Every export function is quiet by
 default; `verbose=True` displays an Onsaemiro artifact summary.
 
+The model CPU declaration is an active runtime budget, not scheduler metadata
+only. Under Slurm, `Slurm.model(cpus_per_task=N)` reserves and passes `N` CPUs
+to ClosureHost. A local Longship automatically uses the CPUs granted to its
+process (Linux affinity/cpuset when available, otherwise the machine's logical
+CPU count); no placement declaration is required. An explicit
+`Attached(closure_cpus_per_node=N)` remains available to cap that local budget.
+ONNX Runtime uses the selected budget for
+intra-operator work while retaining one inter-operator scheduler; Joblib caps
+native BLAS/OpenMP pools and propagates the value to fitted estimators exposing
+`n_jobs`; Equinox/JAX configures its CPU runtime before JAX is imported. When
+several field programs share one ClosureHost allocation, Longship divides the
+budget between their resident processes and rejects a declaration smaller
+than the program count. This prevents hidden oversubscription on both laptops
+and Slurm nodes.
+
 `x_scaler` and `y_scaler` accept fitted scikit-learn `StandardScaler`,
 `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or affine
 `FunctionTransformer` instances. Export converts

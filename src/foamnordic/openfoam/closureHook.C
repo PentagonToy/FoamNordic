@@ -14,11 +14,7 @@
 #include "fieldBridge.H"
 #include "operations/frame.H"
 
-#include <algorithm>
 #include <chrono>
-#include <cstdlib>
-#include <iomanip>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -102,11 +98,7 @@ ClosureHook::ClosureHook(const dictionary& dict)
     : inputs_(readInputs(dict)),
       outputs_(readOutputs(dict)),
       session_(dict, contract(inputs_, outputs_)),
-      observation_(ClosureObservation::create(dict)),
-      profileEnabled_([] {
-          const char* value = std::getenv("FOAMNORDIC_PROFILE_RESIDENT");
-          return value != nullptr && std::string(value) == "1";
-      }()) {}
+      observation_(ClosureObservation::create(dict)) {}
 
 ClosureHook::~ClosureHook() noexcept {
     try {
@@ -142,11 +134,6 @@ std::uint64_t ClosureHook::invoke(
     const auto exchangeIndex = invocation.commit();
     const auto closureWait = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - closureStarted).count();
-    if (profileEnabled_) {
-        ++profileCalls_;
-        profileWait_ += closureWait;
-        profileMaximumWait_ = std::max(profileMaximumWait_, closureWait);
-    }
     for (const auto& output : outputs_) {
         correctFieldBoundary(mesh, output.field);
     }
@@ -157,17 +144,6 @@ std::uint64_t ClosureHook::invoke(
 }
 
 void ClosureHook::shutdown() {
-    if (profileEnabled_ && !profileReported_ && profileCalls_ != 0) {
-        profileReported_ = true;
-        std::ostringstream message;
-        message << std::fixed << std::setprecision(6)
-                << "Closure profile: calls=" << profileCalls_
-                << " wait=" << profileWait_ << "s/"
-                << std::setprecision(3)
-                << (profileWait_ * 1000.0 / static_cast<double>(profileCalls_))
-                << "ms max=" << (profileMaximumWait_ * 1000.0) << "ms";
-        Info << "[FoamNordic] " << message.str().c_str() << nl;
-    }
     if (observation_) {
         observation_->shutdown();
         observation_.reset();

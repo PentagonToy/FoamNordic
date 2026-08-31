@@ -950,7 +950,7 @@ def _launch_local(
     name: str = "foamnordic",
     observation_sources: int = 1,
 ) -> Run:
-    """Internal lifecycle primitive used by the future plan renderer."""
+    """Launch one local host-and-solver plan under the native supervisor."""
 
     if not host or not solver or not ready_files:
         raise ValueError("host, solver, and ready_files must not be empty")

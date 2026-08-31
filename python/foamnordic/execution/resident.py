@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from io import BytesIO
 import inspect
 import json
 import os
 from pathlib import Path
 import sys
-import time
+import tempfile
 
 from ..random import Key, invocation, key as random_key
 from ..core.layout import FieldLayout
@@ -22,12 +22,108 @@ except ImportError:
     _native = None
 
 
+_MODEL_THREAD_ENVIRONMENT = (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "BLIS_NUM_THREADS",
+)
+_JOBLIB_MMAP_THRESHOLD = 16 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class _EmbeddedPayload:
+    path: Path
+    offset: int
+    size: int
+
+
+def _configure_model_threads(threads: int) -> int:
+    """Apply one bounded CPU budget before importing model runtimes."""
+
+    threads = int(threads)
+    if threads < 1:
+        raise ValueError("model threads must be positive")
+    for name in _MODEL_THREAD_ENVIRONMENT:
+        os.environ[name] = str(threads)
+    preserved_xla_flags = tuple(
+        value
+        for value in os.environ.get("XLA_FLAGS", "").split()
+        if "xla_cpu_multi_thread_eigen" not in value
+        and "intra_op_parallelism_threads" not in value
+    )
+    os.environ["XLA_FLAGS"] = " ".join(
+        (
+            *preserved_xla_flags,
+            "--xla_cpu_multi_thread_eigen=true",
+            f"intra_op_parallelism_threads={threads}",
+        )
+    )
+    return threads
+
+
+def _configure_estimator_threads(model, threads: int) -> None:
+    """Set n_jobs throughout an already-fitted scikit-learn model graph."""
+
+    pending = [model]
+    visited: set[int] = set()
+    while pending:
+        estimator = pending.pop()
+        if estimator is None or isinstance(estimator, (str, bytes)):
+            continue
+        identity = id(estimator)
+        if identity in visited:
+            continue
+        visited.add(identity)
+        if hasattr(estimator, "n_jobs"):
+            try:
+                setattr(estimator, "n_jobs", threads)
+            except (AttributeError, TypeError):
+                pass
+        for name in (
+            "estimators_",
+            "estimators",
+            "named_estimators_",
+            "estimator_",
+            "estimator",
+            "steps",
+            "named_steps",
+            "transformers_",
+            "transformers",
+        ):
+            children = getattr(estimator, name, None)
+            if children is None:
+                continue
+            if isinstance(children, Mapping):
+                pending.extend(children.values())
+            elif isinstance(children, Sequence) and not isinstance(
+                children, (str, bytes)
+            ):
+                for child in children:
+                    pending.append(
+                        child[1]
+                        if isinstance(child, tuple) and len(child) == 2
+                        else child
+                    )
+            else:
+                pending.append(children)
+
+
 def _manifest(path: Path) -> dict[str, object]:
     return dict(_native.read_model_manifest(str(path)))
 
 
 def _payload(manifest_path: Path, manifest: Mapping[str, object]):
     if bool(manifest.get("bundled", False)):
+        if (
+            str(manifest.get("format")) == "joblib"
+            and os.name == "posix"
+            and manifest_path.stat().st_size >= _JOBLIB_MMAP_THRESHOLD
+        ):
+            offset, size = _native.read_model_payload_region(str(manifest_path))
+            return _EmbeddedPayload(manifest_path, int(offset), int(size))
         return BytesIO(_native.read_model_payload(str(manifest_path)))
     value = Path(str(manifest["artifact_path"]))
     return value if value.is_absolute() else manifest_path.parent / value
@@ -71,36 +167,117 @@ def _activate_joblib_runtime(runtime: str) -> None:
     patch_sklearn(verbose=False)
 
 
-def _joblib_evaluator(path: Path, outputs, runtime: str = "sklearn"):
+def _fd_payload_path(stream, offset: int) -> str | None:
+    """Return a descriptor path only when reopening preserves its offset."""
+
+    candidates = (
+        (f"/proc/self/fd/{stream.fileno()}", f"/dev/fd/{stream.fileno()}")
+        if sys.platform.startswith("linux")
+        else (f"/dev/fd/{stream.fileno()}", f"/proc/self/fd/{stream.fileno()}")
+    )
+    for candidate in candidates:
+        try:
+            stream.seek(offset)
+            descriptor = os.open(candidate, os.O_RDONLY)
+            try:
+                reopened_offset = os.lseek(descriptor, 0, os.SEEK_CUR)
+            finally:
+                os.close(descriptor)
+            stream.seek(offset)
+        except OSError:
+            continue
+        if reopened_offset == offset:
+            return candidate
+    return None
+
+
+def _staged_joblib(path: _EmbeddedPayload, joblib):
+    storage = tempfile.TemporaryDirectory(prefix="foamnordic-joblib-")
+    load_path = Path(storage.name) / "model.joblib"
+    _native.extract_model_payload(str(path.path), str(load_path))
+    try:
+        model = joblib.load(load_path, mmap_mode="r")
+    except ValueError:
+        # Dynamically packaged callables are ordinary cloudpickle streams and
+        # do not provide a memory-mappable array payload.
+        model = joblib.load(load_path)
+    return model, storage, "staged"
+
+
+def _load_joblib(path, joblib):
+    if not isinstance(path, _EmbeddedPayload):
+        if isinstance(path, Path):
+            try:
+                return joblib.load(path, mmap_mode="r"), None, "file"
+            except ValueError:
+                return joblib.load(path), None, "file"
+        return joblib.load(path), None, "buffered"
+
+    # FNOBND2 places the standalone Joblib stream at a 64-byte boundary.  Keep
+    # the bundle descriptor open while Joblib follows its descriptor path so
+    # NumPy can map array pages directly from the single FNOM file.
+    if path.offset % 64 == 0:
+        with path.path.open("rb") as stream:
+            descriptor_path = _fd_payload_path(stream, path.offset)
+            if descriptor_path is not None:
+                stream.seek(path.offset)
+                try:
+                    return joblib.load(descriptor_path, mmap_mode="r"), None, "direct"
+                except Exception:
+                    # Descriptor reopening differs across kernels and filesystems.
+                    # The streamed fallback preserves correctness and mmap use.
+                    pass
+    return _staged_joblib(path, joblib)
+
+
+def _joblib_evaluator(
+    path: Path,
+    outputs,
+    runtime: str = "sklearn",
+    threads: int = 1,
+):
+    threads = _configure_model_threads(threads)
     _activate_joblib_runtime(runtime)
     try:
         import joblib
         import numpy as np
     except ImportError as error:
         raise ImportError("Joblib is missing from this FoamNordic installation") from error
-    try:
-        model = (
-            joblib.load(path, mmap_mode="r")
-            if isinstance(path, Path)
-            else joblib.load(path)
-        )
-    except ValueError:
-        # Dynamically packaged callables are ordinary cloudpickle streams and
-        # do not provide a memory-mappable array payload.
-        model = joblib.load(path)
+    model, payload_storage, payload_mode = _load_joblib(path, joblib)
     if isinstance(model, dict) and model.get("schema") == "foamnordic.function/v1":
         return _function_evaluator(model, outputs)
+    _configure_estimator_threads(model, threads)
+    try:
+        from threadpoolctl import threadpool_limits
+
+        threadpool_limiter = threadpool_limits(limits=threads)
+    except ImportError:
+        threadpool_limiter = None
     predict = getattr(model, "predict", None)
     function = predict if callable(predict) else model
     if not callable(function):
         raise TypeError("Joblib payload must define predict() or be callable")
 
     def evaluate(
-        buffer, rows, columns, dtype, _exchange_index, _physical_time, _rank=0
+        buffer,
+        rows,
+        columns,
+        dtype,
+        _exchange_index,
+        _physical_time,
+        _rank=0,
+        _threadpool_limiter=threadpool_limiter,
+        _payload_storage=payload_storage,
+        _payload_mode=payload_mode,
     ):
+        # Retain the process-wide threadpoolctl limiter for the evaluator's
+        # lifetime.  Native BLAS/OpenMP pools may already have been loaded by
+        # the embedding Python process before this module starts.
+        del _threadpool_limiter, _payload_storage, _payload_mode
         features = np.frombuffer(buffer, dtype=dtype).reshape(rows, columns)
         return _packed_result(function(features), outputs, rows, dtype)
 
+    evaluate.foamnordic_payload_mode = payload_mode
     return evaluate
 
 
@@ -173,45 +350,9 @@ def _function_evaluator(package, outputs):
         else random_key(int(package.get("seed", 42)))
     )
     program = str(package.get("program", "function"))
-    profile_enabled = os.environ.get("FOAMNORDIC_PROFILE_RESIDENT") == "1"
-    profile = {
-        "calls": 0,
-        "decode": 0.0,
-        "optional": 0.0,
-        "function": 0.0,
-        "encode": 0.0,
-        "total": 0.0,
-        "maximum": 0.0,
-    }
-
-    def report_profile() -> None:
-        calls = int(profile["calls"])
-        if not profile_enabled or calls == 0:
-            return
-        milliseconds = 1000.0 / calls
-        print(
-            "[FoamNordic] Resident profile: "
-            f"calls={calls} "
-            f"decode={profile['decode']:.6f}s/"
-            f"{profile['decode'] * milliseconds:.3f}ms "
-            f"optional={profile['optional']:.6f}s/"
-            f"{profile['optional'] * milliseconds:.3f}ms "
-            f"function={profile['function']:.6f}s/"
-            f"{profile['function'] * milliseconds:.3f}ms "
-            f"encode={profile['encode']:.6f}s/"
-            f"{profile['encode'] * milliseconds:.3f}ms "
-            f"total={profile['total']:.6f}s/"
-            f"{profile['total'] * milliseconds:.3f}ms "
-            f"max={profile['maximum'] * 1000.0:.3f}ms",
-            flush=True,
-        )
-
-    atexit.register(report_profile)
-
     def evaluate(
         buffer, rows, columns, dtype, exchange_index, physical_time, rank=0
     ):
-        profile_start = time.perf_counter() if profile_enabled else 0.0
         features = np.frombuffer(buffer, dtype=dtype).reshape(rows, columns)
         if columns != input_columns:
             raise ValueError("Operator.function input widths do not match the buffer")
@@ -226,7 +367,6 @@ def _function_evaluator(package, outputs):
                 else value
             )
 
-        decode_end = time.perf_counter() if profile_enabled else 0.0
         exchange_index = int(exchange_index)
         rank = int(rank)
         if accepts_seed:
@@ -248,9 +388,7 @@ def _function_evaluator(package, outputs):
                 )
             if accepts_key:
                 arguments["key"] = call_key
-        optional_end = time.perf_counter() if profile_enabled else 0.0
         result = function(**arguments)
-        function_end = time.perf_counter() if profile_enabled else 0.0
         if output_layouts is None:
             packed = _packed_result(result, outputs, rows, dtype)
         else:
@@ -278,16 +416,6 @@ def _function_evaluator(package, outputs):
                 np.concatenate(pieces, axis=1),
                 dtype=dtype,
             )
-        if profile_enabled:
-            encode_end = time.perf_counter()
-            elapsed = encode_end - profile_start
-            profile["calls"] += 1
-            profile["decode"] += decode_end - profile_start
-            profile["optional"] += optional_end - decode_end
-            profile["function"] += function_end - optional_end
-            profile["encode"] += encode_end - function_end
-            profile["total"] += elapsed
-            profile["maximum"] = max(profile["maximum"], elapsed)
         return packed
 
     return evaluate
@@ -301,7 +429,9 @@ def _equinox_evaluator(
     program: str = "model",
     *,
     seed: int | None = None,
+    threads: int = 1,
 ):
+    _configure_model_threads(threads)
     try:
         import cloudpickle
         import jax
@@ -382,6 +512,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("address")
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--connections", type=int, default=1)
+    parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--ready-file", default="")
     parser.add_argument("--key", default=Key((42, 0)).to_json())
     parser.add_argument("--program", default="model")
@@ -395,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
             "the managed resident requires a FoamNordic binary wheel"
         )
     arguments = _parser().parse_args(argv)
+    model_threads = _configure_model_threads(arguments.threads)
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
     model_format = str(manifest["format"])
@@ -403,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     dtype = str(manifest["inputs"][0][2])
     if model_format == "joblib":
         runtime = str(manifest.get("runtime") or "sklearn")
-        evaluator = _joblib_evaluator(payload, outputs, runtime)
+        evaluator = _joblib_evaluator(payload, outputs, runtime, model_threads)
     elif model_format == "equinox":
         evaluator = _equinox_evaluator(
             payload,
@@ -411,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
             dtype,
             Key.from_plan(json.loads(arguments.key)),
             arguments.program,
+            threads=model_threads,
         )
     else:
         raise ValueError(f"managed Python worker does not support {model_format!r}")
@@ -422,6 +555,7 @@ def main(argv: list[str] | None = None) -> int:
         f"[FoamNordic] {model_format.title()} model{runtime_label} loaded once: "
         f"{payload_label}"
     )
+    print(f"[FoamNordic] Model CPU budget: {model_threads}")
     _native.run_python_worker(
         arguments.address,
         str(manifest_path),

@@ -723,12 +723,6 @@ def _expression_layout(
     )
 
 
-def _expression_width(longship: Longship, expression: FieldExpression) -> int:
-    """Return the packed width retained by the native model contract."""
-
-    return _expression_layout(longship, expression).transport_width
-
-
 def _output_layout(
     longship: Longship,
     program: Closure | Transform,

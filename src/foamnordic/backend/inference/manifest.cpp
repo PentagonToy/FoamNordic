@@ -28,11 +28,17 @@ constexpr std::array<std::byte, 8> magic{
     std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'M'},
     std::byte{'A'}, std::byte{'N'}, std::byte{'1'}, std::byte{0},
 };
-constexpr std::array<std::byte, 8> bundle_magic{
+constexpr std::array<std::byte, 8> legacy_bundle_magic{
     std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'},
     std::byte{'N'}, std::byte{'D'}, std::byte{'1'}, std::byte{0},
 };
-constexpr std::uint64_t bundle_header_bytes = 24;
+constexpr std::array<std::byte, 8> bundle_magic{
+    std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'},
+    std::byte{'N'}, std::byte{'D'}, std::byte{'2'}, std::byte{0},
+};
+constexpr std::uint64_t legacy_bundle_header_bytes = 24;
+constexpr std::uint64_t bundle_header_bytes = 32;
+constexpr std::uint64_t bundle_payload_alignment = 64;
 constexpr std::uint32_t maximum_entries = 65536;
 constexpr std::uint32_t maximum_string_bytes = 1024 * 1024;
 constexpr std::uint64_t maximum_manifest_bytes = 64ULL * 1024ULL * 1024ULL;
@@ -126,6 +132,81 @@ private:
     std::span<const std::byte> bytes_;
     std::size_t offset_{0};
 };
+
+struct BundleLayout {
+    std::uint64_t header_bytes;
+    std::uint64_t manifest_bytes;
+    std::uint64_t payload_offset;
+    std::uint64_t payload_bytes;
+};
+
+std::uint64_t align_up(std::uint64_t value, std::uint64_t alignment) {
+    const auto remainder = value % alignment;
+    if (remainder == 0) {
+        return value;
+    }
+    const auto increment = alignment - remainder;
+    if (value > std::numeric_limits<std::uint64_t>::max() - increment) {
+        throw std::runtime_error("FNOM bundle size overflowed.");
+    }
+    return value + increment;
+}
+
+BundleLayout read_bundle_layout(
+    std::ifstream& stream,
+    const std::filesystem::path& path,
+    std::uint64_t file_bytes) {
+    stream.clear();
+    stream.seekg(0);
+    std::array<std::byte, bundle_header_bytes> header{};
+    const auto count = static_cast<std::streamsize>(
+        std::min<std::uint64_t>(file_bytes, header.size()));
+    stream.read(reinterpret_cast<char*>(header.data()), count);
+    if (stream.gcount() < static_cast<std::streamsize>(legacy_bundle_magic.size())) {
+        throw std::runtime_error("FNOM bundle is truncated: " + path.string());
+    }
+
+    const auto prefix = std::span<const std::byte>(header).first(8);
+    const bool legacy = std::ranges::equal(prefix, legacy_bundle_magic);
+    const bool current = std::ranges::equal(prefix, bundle_magic);
+    if (!legacy && !current) {
+        throw std::invalid_argument("FNOM file does not contain an embedded payload.");
+    }
+
+    const auto required_header = legacy
+                                     ? legacy_bundle_header_bytes
+                                     : bundle_header_bytes;
+    if (file_bytes < required_header
+        || stream.gcount() < static_cast<std::streamsize>(required_header)) {
+        throw std::runtime_error("FNOM bundle is truncated: " + path.string());
+    }
+
+    Reader values(std::span<const std::byte>(header).subspan(
+        8, static_cast<std::size_t>(required_header - 8)));
+    const auto manifest_bytes = values.u64();
+    auto payload_offset = legacy ? 0 : values.u64();
+    const auto payload_bytes = values.u64();
+
+    if (manifest_bytes == 0 || manifest_bytes > maximum_manifest_bytes
+        || payload_bytes == 0 || required_header > file_bytes
+        || manifest_bytes > file_bytes - required_header) {
+        throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
+    }
+    const auto manifest_end = required_header + manifest_bytes;
+    if (legacy) {
+        payload_offset = manifest_end;
+    }
+    if (payload_offset < manifest_end || payload_offset > file_bytes
+        || payload_bytes != file_bytes - payload_offset) {
+        throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
+    }
+    if (!legacy
+        && payload_offset != align_up(manifest_end, bundle_payload_alignment)) {
+        throw std::runtime_error("FNOM bundle payload alignment is invalid: " + path.string());
+    }
+    stream.clear();
+    return {required_header, manifest_bytes, payload_offset, payload_bytes};
+}
 
 std::uint8_t encode_element(fjord::Element element) {
     if (fjord::element_size(element) == 0) {
@@ -401,22 +482,10 @@ ModelArtifact read_manifest(const std::filesystem::path& path) {
         throw std::runtime_error("Could not read manifest: " + path.string());
     }
     std::uint64_t manifest_bytes = file_bytes;
-    if (prefix == bundle_magic) {
-        std::array<std::byte, 16> sizes{};
-        stream.read(reinterpret_cast<char*>(sizes.data()), sizes.size());
-        if (!stream) {
-            throw std::runtime_error("Could not read FNOM bundle header: " + path.string());
-        }
-        Reader header(sizes);
-        manifest_bytes = header.u64();
-        const auto payload_bytes = header.u64();
-        if (manifest_bytes == 0 || manifest_bytes > maximum_manifest_bytes
-            || payload_bytes == 0
-            || bundle_header_bytes + manifest_bytes > file_bytes
-            || payload_bytes != file_bytes - bundle_header_bytes - manifest_bytes) {
-            throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
-        }
-        stream.seekg(static_cast<std::streamoff>(bundle_header_bytes));
+    if (prefix == legacy_bundle_magic || prefix == bundle_magic) {
+        const auto layout = read_bundle_layout(stream, path, file_bytes);
+        manifest_bytes = layout.manifest_bytes;
+        stream.seekg(static_cast<std::streamoff>(layout.header_bytes));
     } else {
         if (file_bytes > maximum_manifest_bytes) {
             throw std::runtime_error("Manifest file size is invalid: " + path.string());
@@ -440,37 +509,31 @@ bool is_bundle(const std::filesystem::path& path) {
     }
     std::array<std::byte, 8> prefix{};
     stream.read(reinterpret_cast<char*>(prefix.data()), prefix.size());
-    return stream && prefix == bundle_magic;
+    return stream && (prefix == legacy_bundle_magic || prefix == bundle_magic);
 }
 
-std::vector<std::byte> read_bundle_payload(const std::filesystem::path& path) {
+BundlePayloadRegion bundle_payload_region(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
     if (!stream) {
         throw std::runtime_error("Could not open FNOM bundle: " + path.string());
     }
     const auto end = stream.tellg();
-    if (end < static_cast<std::streamoff>(bundle_header_bytes)) {
+    if (end < 0) {
         throw std::runtime_error("FNOM bundle is truncated: " + path.string());
     }
-    stream.seekg(0);
-    std::array<std::byte, 24> header_bytes{};
-    stream.read(reinterpret_cast<char*>(header_bytes.data()), header_bytes.size());
-    if (!stream || !std::ranges::equal(
-                       std::span(header_bytes).first(bundle_magic.size()), bundle_magic)) {
-        throw std::invalid_argument("FNOM file does not contain an embedded payload.");
+    const auto layout = read_bundle_layout(
+        stream, path, static_cast<std::uint64_t>(end));
+    return {layout.payload_offset, layout.payload_bytes};
+}
+
+std::vector<std::byte> read_bundle_payload(const std::filesystem::path& path) {
+    const auto region = bundle_payload_region(path);
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Could not open FNOM bundle: " + path.string());
     }
-    Reader header(std::span(header_bytes).subspan(bundle_magic.size()));
-    const auto manifest_bytes = header.u64();
-    const auto payload_bytes = header.u64();
-    const auto file_bytes = static_cast<std::uint64_t>(end);
-    if (manifest_bytes == 0 || manifest_bytes > maximum_manifest_bytes
-        || payload_bytes == 0
-        || bundle_header_bytes + manifest_bytes > file_bytes
-        || payload_bytes != file_bytes - bundle_header_bytes - manifest_bytes) {
-        throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
-    }
-    stream.seekg(static_cast<std::streamoff>(bundle_header_bytes + manifest_bytes));
-    std::vector<std::byte> payload(static_cast<std::size_t>(payload_bytes));
+    stream.seekg(static_cast<std::streamoff>(region.offset));
+    std::vector<std::byte> payload(static_cast<std::size_t>(region.size));
     stream.read(
         reinterpret_cast<char*>(payload.data()),
         static_cast<std::streamsize>(payload.size()));
@@ -478,6 +541,38 @@ std::vector<std::byte> read_bundle_payload(const std::filesystem::path& path) {
         throw std::runtime_error("Could not read FNOM payload: " + path.string());
     }
     return payload;
+}
+
+void extract_bundle_payload(
+    const std::filesystem::path& path,
+    const std::filesystem::path& destination) {
+    const auto region = bundle_payload_region(path);
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Could not open FNOM bundle: " + path.string());
+    }
+    stream.seekg(static_cast<std::streamoff>(region.offset));
+    std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error(
+            "Could not create extracted FNOM payload: " + destination.string());
+    }
+    std::vector<char> buffer(8 * 1024 * 1024);
+    auto remaining = region.size;
+    while (remaining > 0) {
+        const auto count = static_cast<std::streamsize>(
+            std::min<std::uint64_t>(remaining, buffer.size()));
+        stream.read(buffer.data(), count);
+        if (stream.gcount() != count) {
+            throw std::runtime_error("Could not read FNOM payload: " + path.string());
+        }
+        output.write(buffer.data(), count);
+        if (!output) {
+            throw std::runtime_error(
+                "Could not extract FNOM payload: " + destination.string());
+        }
+        remaining -= static_cast<std::uint64_t>(count);
+    }
 }
 
 void write_bundle(
@@ -503,10 +598,21 @@ void write_bundle(
     Writer header;
     header.raw(bundle_magic);
     header.u64(manifest.size());
+    const auto payload_offset = align_up(
+        bundle_header_bytes + manifest.size(), bundle_payload_alignment);
+    header.u64(payload_offset);
     header.u64(static_cast<std::uint64_t>(payload_end));
     const auto prefix = std::move(header).finish();
     output.write(reinterpret_cast<const char*>(prefix.data()), prefix.size());
     output.write(reinterpret_cast<const char*>(manifest.data()), manifest.size());
+    std::array<char, bundle_payload_alignment> padding{};
+    auto padding_bytes = payload_offset - bundle_header_bytes - manifest.size();
+    while (padding_bytes > 0) {
+        const auto count = static_cast<std::streamsize>(
+            std::min<std::uint64_t>(padding_bytes, padding.size()));
+        output.write(padding.data(), count);
+        padding_bytes -= static_cast<std::uint64_t>(count);
+    }
     std::vector<char> buffer(8 * 1024 * 1024);
     while (payload) {
         payload.read(buffer.data(), buffer.size());

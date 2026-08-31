@@ -11,6 +11,7 @@
 
 #include "foamnordic/backend/inference/load.hpp"
 
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -59,13 +60,25 @@ std::filesystem::path resolve_artifact(
 
 }  // namespace
 
-LoadedModel load_model(const std::filesystem::path& manifest_path) {
+void ModelLoadOptions::validate() const {
+    if (threads == 0
+        || threads > static_cast<std::uint32_t>(
+                          std::numeric_limits<std::int32_t>::max())) {
+        throw std::invalid_argument("Model thread count must be positive.");
+    }
+}
+
+LoadedModel load_model(
+    const std::filesystem::path& manifest_path,
+    ModelLoadOptions options) {
+    options.validate();
     auto artifact = read_manifest(manifest_path);
     std::unique_ptr<PackedModelKernel> packed;
 #ifdef FOAMNORDIC_HAS_ONNXRUNTIME
     if (artifact.format == ModelFormat::onnx && is_bundle(manifest_path)) {
         packed = std::make_unique<OnnxPackedKernel>(
-            read_bundle_payload(manifest_path));
+            read_bundle_payload(manifest_path),
+            OnnxOptions{static_cast<std::int32_t>(options.threads), 1});
     } else
 #endif
     {

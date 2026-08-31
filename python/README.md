@@ -201,7 +201,10 @@ Onsaemiro tables. See the
 into Python memory while exporting, which is important for large ensembles.
 The resulting `.fnom` is one uncompressed, self-contained model bundle.
 `fno.Export.joblib(...)` embeds its trusted Joblib stream in the same way and
-loads it once at worker startup.
+loads it once at worker startup. Linux and macOS workers directly memory-map
+large aligned payloads from the `.fnom` container when descriptor reopening
+preserves the payload offset, with automatic private-storage fallback on other
+kernels, filesystems, and legacy bundles.
 `fno.Export.equinox(...)` records the PyTree leaves in FNOM and reconstructs
 and JIT-compiles the trusted model once. Joblib and Equinox are selected by
 the artifact rather than by separate installation profiles.

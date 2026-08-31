@@ -107,7 +107,7 @@ class Manifold:
             bounds=bounds,
         )
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *_args, **_kwargs):
         raise TypeError("Manifold is a factory namespace; use Manifold.beta_fdf()")
 
     @classmethod

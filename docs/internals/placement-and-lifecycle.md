@@ -34,6 +34,13 @@ For one-node jobs this is simply OpenFOAM plus one native ClosureHost on the
 same node. For multi-node jobs it avoids gathering all rank fields through one
 remote service.
 
+For a local launch, the default ClosureHost CPU budget is the process affinity
+mask on Linux and the logical CPU count on platforms without an affinity API.
+`Attached(closure_cpus_per_node=N)` is only an optional cap. Scheduled runs do
+not infer resources from the login process: an explicit `Slurm.model()` value
+is authoritative, while an omitted model declaration reserves one CPU per
+field program for backward-compatible lightweight jobs.
+
 Before submission, `plan_longship` validates that solver ranks divide evenly
 across nodes and reserves, per node,
 
@@ -48,11 +55,11 @@ attached placement; central GPU placement must use an explicit later plan and
 will never be silently folded into the attached policy.
 
 The canonical Slurm skeleton is
-`src/foamnordic/template/slurm/longship.sbatch.in`. It reserves the complete
-per-node CPU budget in one allocation, starts separate exclusive host and
-solver steps, waits for host readiness, and couples their termination. Template
-substitution and submission will belong to the later orchestration API; the
-native resource arithmetic remains the authoritative validation layer.
+`src/foamnordic/template/slurm/longship.sbatch.in`. The Python launch path
+renders and submits it after the native planner validates the resource
+arithmetic. It reserves the complete per-node CPU budget in one allocation,
+starts separate exclusive host and solver steps, waits for host readiness, and
+couples their termination.
 
 `sail_longship` is the native process supervisor beneath that template. It
 starts host and solver commands in separate process groups, removes stale

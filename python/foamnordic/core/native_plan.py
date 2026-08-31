@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 try:
@@ -14,6 +15,18 @@ def available() -> bool:
     """Return whether the compiled native planning facade is importable."""
 
     return _native is not None
+
+
+def local_cpu_budget() -> int:
+    """Return CPUs granted to this process, respecting Linux affinity."""
+
+    affinity = getattr(os, "sched_getaffinity", None)
+    if affinity is not None:
+        try:
+            return max(1, len(affinity(0)))
+        except OSError:
+            pass
+    return max(1, os.cpu_count() or 1)
 
 
 def compile_runtime_plan(longship: Any) -> dict[str, object]:
@@ -55,15 +68,13 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
     request.solver_tasks = solver_tasks
     request.solver_cpus_per_task = solver_cpus_per_task
     program_count = len(longship.closure_programs) + len(longship.transforms)
-    request.host_cpus_per_node = (
-        scheduler.model_resources.cpus_per_task
-        if (
-            scheduler is not None
-            and scheduler.has_model_resources
-            and program_count
-        )
-        else longship.placement.closure_cpus_per_node * max(1, program_count)
-    )
+    declared_host_cpus = longship.placement.closure_cpus_per_node
+    if scheduler is not None and scheduler.has_model_resources and program_count:
+        request.host_cpus_per_node = scheduler.model_resources.cpus_per_task
+    elif scheduler is None:
+        request.host_cpus_per_node = declared_host_cpus or local_cpu_budget()
+    else:
+        request.host_cpus_per_node = declared_host_cpus or max(1, program_count)
     request.use_closure_host = bool(longship.field_programs)
     request.placement = placement
 

@@ -308,18 +308,23 @@ class Observe:
 class Attached:
     """Place one native ClosureHost beside each solver node."""
 
-    closure_cpus_per_node: int = 1
+    closure_cpus_per_node: int | None = None
     data_path: str = "auto"
 
     def __post_init__(self) -> None:
-        require_positive(self.closure_cpus_per_node, "closure_cpus_per_node")
+        if self.closure_cpus_per_node is not None:
+            require_positive(self.closure_cpus_per_node, "closure_cpus_per_node")
         if self.data_path not in {"auto", "shm", "uds", "ucx", "tcp"}:
             raise ValueError("data_path must be auto, shm, uds, ucx, or tcp")
 
     def to_plan(self) -> dict[str, object]:
         return {
             "kind": "attached",
-            "closure_cpus_per_node": self.closure_cpus_per_node,
+            "closure_cpus_per_node": (
+                "auto"
+                if self.closure_cpus_per_node is None
+                else self.closure_cpus_per_node
+            ),
             "data_path": self.data_path,
         }
 

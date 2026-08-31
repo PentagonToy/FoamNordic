@@ -18,7 +18,9 @@ artifact path, ordered input/output contracts, affine scaler coefficients, and
 optional Equinox leaf table. The C++ loader places explicit limits on file,
 string, field, feature, rank, and leaf counts; it rejects truncation, invalid
 enum values, malformed scaler flags, and trailing bytes before a worker starts.
-The original model bytes follow that manifest in the same file.
+The original model bytes follow that manifest in the same file. New bundles
+use the `FNOBND2` container header and begin the payload at a 64-byte boundary;
+the reader remains compatible with legacy `FNOBND1` bundles.
 
 `.fnom` is deliberately not compressed. The bounded manifest remains at most
 64 MiB, while the embedded payload may be much larger. Native C++ validates
@@ -83,7 +85,9 @@ JAX executable can consume the same manifest without changing the bundle.
 
 The embedded Equinox payload contains a cloudpickled reconstructable PyTree
 and a `batched` call policy. It is loaded once and wrapped with
-`jax.jit`; the default policy applies `jax.vmap` over active cells. This is
+`jax.jit`; the default policy applies `jax.vmap` over active cells. The
+ClosureHost CPU budget configures the XLA CPU runtime before JAX is imported.
+This is
 less portable than ONNX and must only be used with trusted payloads and a
 compatible Python/JAX/Equinox environment.
 
@@ -97,9 +101,23 @@ scaling, request ordering, output inverse scaling, bypass merge, and shutdown.
 This isolates Python overhead to model evaluation and prevents the earlier
 design from moving full OpenFOAM fields through Python for every operation.
 The embedded `.joblib` stream is uncompressed and loaded once when the managed
-worker starts. It is never decoded or copied in an exchange. Joblib payloads
-are pickle-based and must be trusted. Legacy split artifacts retain their
-`mmap_mode="r"` startup path.
+worker starts. On Linux and macOS, an aligned `FNOBND2` payload is opened
+through the process descriptor namespace and its arrays use `mmap_mode="r"`
+directly against the single `.fnom` file. FoamNordic verifies that reopening
+the descriptor preserves the payload offset before enabling this path. Kernels,
+filesystems, or legacy bundles that do not provide that behavior automatically
+fall back to streaming the payload into private temporary storage and mapping
+that file. Both paths avoid retaining a complete embedded byte stream plus a
+decoded copy. Staging, when required, is a one-time startup operation outside
+the exchange loop and follows the cluster's normal `TMPDIR` policy.
+Joblib payloads are pickle-based and must be trusted. Legacy split artifacts
+retain their direct `mmap_mode="r"` startup path.
+
+At startup the managed worker applies its Longship CPU budget to fitted
+estimators exposing `n_jobs`, including fitted children of voting and pipeline
+models, and bounds common OpenMP, BLAS, and NumExpr thread pools. Estimators
+without a parallel prediction implementation remain single-threaded by their
+own design; allocating additional CPUs cannot make such a kernel parallel.
 
 `pip install foamnordic` installs the Joblib/scikit-learn and JAX/Equinox
 runtimes together. Backend selection is a model-artifact decision rather than
@@ -129,8 +147,8 @@ model.
 
 ## ONNX boundary
 
-ONNX is the preferred fully native deployment format. An ONNX Runtime adapter
-will implement `ModelKernel`, while the same native scaler and closure runner
+ONNX is the preferred fully native deployment format. The ONNX Runtime adapter
+implements `ModelKernel`, while the same native scaler and closure runner
 remain outside the graph. Keeping preprocessing in FoamNordic avoids generating
 different ONNX graphs for every supported scikit-learn scaler.
 
@@ -142,9 +160,10 @@ systems can select an unpacked distribution with
 `FOAMNORDIC_ONNX_RUNTIME_ROOT`; `--without-onnx` explicitly omits this path.
 The adapter uses only the stable session and
 tensor API, not the experimental Model Package API. It requires one packed
-rank-two input and one packed rank-two output, accepts float32 or float64, and
-defaults both ORT thread pools to one thread with sequential execution to avoid
-oversubscribing OpenFOAM or Slurm allocations. ONNX Runtime is not embedded in
+rank-two input and one packed rank-two output and accepts float32 or float64.
+The session uses Longship's per-program CPU budget as its intra-operator thread
+count, keeps the inter-operator pool at one, and retains sequential graph
+execution. The default budget is one CPU. ONNX Runtime is not embedded in
 the Python wheel because the native host must match the selected platform and
 OpenFOAM runtime.
 
