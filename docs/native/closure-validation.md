@@ -142,7 +142,7 @@ ClosureHost immediately and finalized in one second instead of consuming the
 
 A 2026-08-23 Linux/OpenFOAM.com v2512 experiment used the analytical
 Smagorinsky result as a reference for learned closures on the 12,225-cell
-`pitzDaily` case. All five serial trajectories used
+`pitzDaily` case. All five single-rank OpenFOAM trajectories used
 `pimpleFoam`, `cubeRootVol`, `Ck=0.0265463553`, `Ce=1.048`,
 `deltaT=1e-5`, and 2,000 steps from `t=0` to `t=0.02`. `blockMesh`
 produced the same strict mesh for every comparison and `checkMesh` reported
@@ -263,7 +263,9 @@ solver.
 
 The stock run used a login node, so it is a numerical reference and only an
 indicative timing reference. The four FoamNordic runs used the same compute
-node and are directly comparable. Relative to mathematical `nutFjord`, Voting
+node inside a one-task, 32-CPU interactive allocation and are directly
+comparable. Joblib used `n_jobs=-1`; OpenFOAM remained single-rank. Relative
+to mathematical `nutFjord`, Voting
 added 610 seconds of OpenFOAM wall time over 2,000 exchanges, approximately
 305 ms per exchange. Extra Trees added 50 seconds, approximately 25 ms per
 exchange. The Equinox MLP added one second at the log's whole-second
