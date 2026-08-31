@@ -18,7 +18,7 @@ except ImportError:
     _native = None
 
 
-__all__ = ["Tensor", "equinox", "joblib", "onnx"]
+__all__ = ["Tensor", "equinox", "onnx", "sklearn"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +197,7 @@ def _copy_path_payload(model: object, destination: Path, label: str) -> bool:
     return True
 
 
-def joblib(
+def _joblib(
     model: object,
     *,
     path: PathInput,
@@ -250,6 +250,105 @@ def joblib(
         )
     payload.unlink()
     return manifest
+
+
+def _compiled(
+    model: object,
+    *,
+    path: PathInput,
+    inputs: Mapping[str, Tensor],
+    outputs: Mapping[str, Tensor],
+    name: str | None = None,
+    x_scaler: object | None = None,
+    y_scaler: object | None = None,
+    verbose: bool = False,
+) -> Path:
+    """Export a supported estimator as portable C++ in one FNOM artifact.
+
+    The source is compiled once for the target machine and retained in the
+    FoamNordic cache. Supported v1 estimators are linear regressors, fitted
+    scikit-learn forests, KNN and gradient boosting, XGBoost, LightGBM, and
+    VotingRegressor compositions of supported models.
+    """
+
+    if not isinstance(verbose, bool):
+        raise TypeError("verbose must be a boolean")
+    from .models.compiled import generate_source
+
+    manifest, payload, default_name = _destination(path, ".cpp")
+    model_name = require_nonempty(name or default_name, "model name")
+    input_contract = _contracts(inputs, "inputs")
+    output_contract = _contracts(outputs, "outputs")
+    dtypes = {tensor.dtype for tensor in (*inputs.values(), *outputs.values())}
+    if dtypes != {"float64"}:
+        raise ValueError("compiled v1 artifacts currently require float64 tensors")
+    input_width = sum(width for _, width in input_contract)
+    output_width = sum(width for _, width in output_contract)
+    source = generate_source(model, input_width=input_width, output_width=output_width)
+    temporary = _temporary_for(payload)
+    try:
+        temporary.write_text(source, encoding="utf-8")
+        temporary.replace(payload)
+        dtype = _manifest_contract(
+            manifest,
+            payload,
+            model_name,
+            "compiled",
+            inputs,
+            outputs,
+            x_scaler=x_scaler,
+            y_scaler=y_scaler,
+            runtime="cpp-v1",
+        )
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    if verbose:
+        _display_export(
+            manifest, payload, model_name, inputs, outputs, dtype, format_name="Compiled"
+        )
+    payload.unlink()
+    return manifest
+
+
+def sklearn(
+    model: object,
+    *,
+    path: PathInput,
+    inputs: Mapping[str, Tensor],
+    outputs: Mapping[str, Tensor],
+    name: str | None = None,
+    x_scaler: object | None = None,
+    y_scaler: object | None = None,
+    backend: str = "auto",
+    runtime: str = "sklearn",
+    verbose: bool = False,
+) -> Path:
+    """Export a fitted sklearn-compatible estimator into one FNOM artifact."""
+
+    if backend not in {"auto", "compiled", "joblib"}:
+        raise ValueError("sklearn backend must be 'auto', 'compiled', or 'joblib'")
+    if runtime not in {"sklearn", "sklearnex"}:
+        raise ValueError("sklearn Joblib runtime must be 'sklearn' or 'sklearnex'")
+    from .models.compiled import supports
+
+    selected = "compiled" if backend == "auto" and supports(model) else backend
+    if selected == "auto":
+        selected = "joblib"
+    arguments = {
+        "path": path,
+        "inputs": inputs,
+        "outputs": outputs,
+        "name": name,
+        "x_scaler": x_scaler,
+        "y_scaler": y_scaler,
+        "verbose": verbose,
+    }
+    if selected == "compiled":
+        if runtime != "sklearn":
+            raise ValueError("runtime applies only when the sklearn backend is joblib")
+        return _compiled(model, **arguments)
+    return _joblib(model, runtime=runtime, **arguments)
 
 
 def _equinox_leaves(model: object) -> list[tuple[str, str, list[int], int, int]]:

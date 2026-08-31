@@ -22,6 +22,7 @@
 namespace foamnordic::closure {
 
 enum class ModelFormat {
+    compiled,
     equinox,
     joblib,
     onnx,

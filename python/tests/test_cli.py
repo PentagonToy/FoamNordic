@@ -83,6 +83,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("build", output.getvalue())
         self.assertIn("inspect", output.getvalue())
         self.assertIn("validate", output.getvalue())
+        self.assertIn("compile", output.getvalue())
         self.assertIn("clobber", output.getvalue())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
@@ -107,6 +108,28 @@ class CliTests(unittest.TestCase):
             with redirect_stdout(output):
                 self.assertEqual(main(["validate", str(path)]), 0)
             self.assertIn("Valid FNOM", output.getvalue())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_fnom_compile_warms_target_cache(self) -> None:
+        from sklearn.linear_model import Ridge
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = Ridge().fit([[0.0], [1.0]], [0.0, 1.0])
+            path = fno.export.sklearn(
+                model,
+                path=Path(directory) / "linear.fnom",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+            )
+            library = Path(directory) / "model.dylib"
+            with patch(
+                "foamnordic.build.compiler.compile_source",
+                return_value=(library, False, 0.125),
+            ):
+                output = StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(main(["compile", str(path)]), 0)
+            self.assertIn("Compile time: 0.125 s", output.getvalue())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_fnom_validate_rejects_corrupt_container(self) -> None:

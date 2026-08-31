@@ -399,6 +399,24 @@ void test_manifest_round_trip_and_corruption_rejection() {
             && accelerated_round_trip.runtime == "sklearnex",
         "Manifest did not round-trip the Joblib execution runtime.");
 
+    foamnordic::closure::ModelArtifact compiled{
+        2,
+        foamnordic::closure::ModelFormat::compiled,
+        "models/closure.cpp",
+        contract(),
+        {},
+        std::nullopt,
+        std::nullopt,
+        "cpp-v1",
+    };
+    const auto compiled_round_trip = foamnordic::closure::decode_manifest(
+        foamnordic::closure::encode_manifest(compiled));
+    require(
+        compiled_round_trip.format
+                == foamnordic::closure::ModelFormat::compiled
+            && compiled_round_trip.runtime == "cpp-v1",
+        "Manifest did not round-trip the compiled execution runtime.");
+
     auto corrupted = encoded;
     corrupted.front() = std::byte{0};
     bool bad_magic_rejected = false;

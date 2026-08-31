@@ -50,8 +50,8 @@ def _program_key(value: Key | int | None, seed: int | None, label: str) -> Key:
 class Operator:
     """Evaluation implementation used by a field program.
 
-    ``model()`` accepts one FNOM manifest.  The manifest selects ONNX,
-    Joblib, or Equinox internally, so backend names do not leak into the
+    ``model()`` accepts one FNOM manifest.  The manifest selects compiled C++,
+    ONNX, Joblib, or Equinox internally, so backend names do not leak into the
     orchestration API. ``function()`` packages a callable into the isolated
     run directory and evaluates it in a resident Python worker.
     """
@@ -73,7 +73,7 @@ class Operator:
 
     @classmethod
     def model(cls, path: PathInput) -> "Operator":
-        """Load an ONNX, Joblib, or Equinox backend through one FNOM manifest."""
+        """Load any supported model backend through one FNOM manifest."""
 
         return cls("model", path)
 

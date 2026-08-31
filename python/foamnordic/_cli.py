@@ -652,6 +652,24 @@ def _validate_fnom(args: argparse.Namespace, stream: TextIO) -> int:
     return 0
 
 
+def _compile_fnom(args: argparse.Namespace, stream: TextIO) -> int:
+    from . import _native
+    from .build.compiler import compile_source
+    from .models import load
+
+    artifact = load(args.artifact)
+    if artifact.backend != "compiled" or artifact.runtime != "cpp-v1":
+        raise ValueError("foamnordic compile requires a compiled cpp-v1 FNOM artifact")
+    source = bytes(_native.read_model_payload(str(artifact.path)))
+    library, cache_hit, seconds = compile_source(source)
+    action = "Reused" if cache_hit else "Compiled"
+    print(f"{action} FNOM: {artifact.path}", file=stream)
+    print(f"Native library: {library}", file=stream)
+    if not cache_hit:
+        print(f"Compile time: {seconds:.3f} s", file=stream)
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     from . import __version__
 
@@ -707,6 +725,15 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     validate_artifact.add_argument("artifact", type=Path, metavar="MODEL.fnom")
+    compile_artifact = subcommands.add_parser(
+        "compile",
+        help="warm the target-native cache for a compiled FNOM artifact",
+        description=(
+            "Compile a portable cpp-v1 FNOM payload for this target and retain "
+            "the shared library in FoamNordic's content-addressed cache."
+        ),
+    )
+    compile_artifact.add_argument("artifact", type=Path, metavar="MODEL.fnom")
     clobber = subcommands.add_parser(
         "clobber",
         help="remove only marker-owned build and run assets",
@@ -759,6 +786,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             return _validate_fnom(args, sys.stdout)
         except (OSError, RuntimeError, ValueError) as error:
+            print(f"foamnordic: error: {error}", file=sys.stderr)
+            return 1
+    if args.command == "compile":
+        try:
+            return _compile_fnom(args, sys.stdout)
+        except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
             print(f"foamnordic: error: {error}", file=sys.stderr)
             return 1
     if args.command == "clobber":

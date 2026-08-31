@@ -1,7 +1,7 @@
 """Model contracts and exporters.
 
-ONNX uses the fully native connector. Joblib and Equinox use managed resident
-workers while sharing the same FNOM tensor contract and native exchange path.
+ONNX uses the fully native connector. Scikit-learn and Equinox artifacts share
+the same FNOM tensor contract and native exchange path.
 """
 
 from .. import export

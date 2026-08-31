@@ -341,6 +341,8 @@ std::optional<AffineScaler> read_scaler(Reader& reader) {
 
 std::uint8_t encode_format(ModelFormat format) {
     switch (format) {
+        case ModelFormat::compiled:
+            return 4;
         case ModelFormat::equinox:
             return 1;
         case ModelFormat::joblib:
@@ -353,6 +355,8 @@ std::uint8_t encode_format(ModelFormat format) {
 
 ModelFormat decode_format(std::uint8_t value) {
     switch (value) {
+        case 4:
+            return ModelFormat::compiled;
         case 1:
             return ModelFormat::equinox;
         case 2:

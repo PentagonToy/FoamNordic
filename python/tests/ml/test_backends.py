@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -13,6 +14,211 @@ from foamnordic.core.native_plan import available as native_available
 
 @unittest.skipUnless(native_available(), "nanobind extension is not installed")
 class ModelBackendTests(unittest.TestCase):
+    def _compiled_prediction(self, model, features, root: Path, *, threads: int = 2):
+        from foamnordic.execution.resident import _compiled_evaluator
+
+        artifact = fno.export.sklearn(
+            model,
+            path=root / "model.fnom",
+            inputs={"features": fno.Tensor.vector(components=features.shape[1])},
+            outputs={"prediction": fno.Tensor.scalar()},
+        )
+        with patch.dict(
+            "os.environ", {"FOAMNORDIC_COMPILED_CACHE": str(root / "cache")}
+        ):
+            evaluator = _compiled_evaluator(
+                BytesIO(fno._native.read_model_payload(str(artifact))),
+                (("prediction", 1),),
+                "float64",
+                threads=threads,
+            )
+        return evaluator(
+            memoryview(features), len(features), features.shape[1], "float64", 0, 0.0
+        )[:, 0]
+
+    def test_sklearn_knn_compiled_round_trip(self) -> None:
+        from sklearn.neighbors import KNeighborsRegressor
+
+        rng = np.random.default_rng(40)
+        training = rng.normal(size=(128, 4))
+        targets = np.sin(training[:, 0]) + training[:, 1]
+        features = np.ascontiguousarray(rng.normal(size=(512, 4)))
+        for weights in ("uniform", "distance"):
+            model = KNeighborsRegressor(
+                n_neighbors=5, weights=weights, p=2
+            ).fit(training, targets)
+            with tempfile.TemporaryDirectory() as directory:
+                actual = self._compiled_prediction(model, features, Path(directory))
+            np.testing.assert_allclose(
+                actual, model.predict(features), rtol=1.0e-14, atol=1.0e-14
+            )
+
+    def test_sklearn_gradient_boosting_compiled_round_trip(self) -> None:
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        rng = np.random.default_rng(41)
+        training = rng.normal(size=(256, 4))
+        targets = np.sin(training[:, 0]) + 0.25 * training[:, 1]
+        features = np.ascontiguousarray(rng.normal(size=(512, 4)))
+        model = GradientBoostingRegressor(
+            n_estimators=12, max_depth=3, random_state=41
+        ).fit(training, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            actual = self._compiled_prediction(model, features, Path(directory))
+        np.testing.assert_allclose(
+            actual, model.predict(features), rtol=1.0e-14, atol=1.0e-14
+        )
+
+    def test_sklearn_extra_trees_knn_voting_compiled_round_trip(self) -> None:
+        from sklearn.ensemble import ExtraTreesRegressor, VotingRegressor
+        from sklearn.neighbors import KNeighborsRegressor
+
+        rng = np.random.default_rng(42)
+        training = rng.normal(size=(256, 4))
+        targets = np.sin(training[:, 0]) + 0.25 * training[:, 1]
+        features = np.ascontiguousarray(rng.normal(size=(512, 4)))
+        model = VotingRegressor(
+            estimators=[
+                ("trees", ExtraTreesRegressor(n_estimators=8, random_state=42)),
+                ("neighbors", KNeighborsRegressor(n_neighbors=5, weights="distance")),
+            ],
+            weights=[0.5, 0.5],
+        ).fit(training, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            actual = self._compiled_prediction(model, features, Path(directory))
+        np.testing.assert_allclose(
+            actual, model.predict(features), rtol=1.0e-14, atol=1.0e-14
+        )
+
+    def test_xgboost_compiled_round_trip(self) -> None:
+        try:
+            from xgboost import XGBRegressor
+        except (ImportError, OSError):
+            self.skipTest("XGBoost is not installed")
+
+        rng = np.random.default_rng(44)
+        training = rng.normal(size=(256, 4))
+        targets = np.sin(training[:, 0]) + 0.25 * training[:, 1]
+        features = np.ascontiguousarray(rng.normal(size=(512, 4)))
+        features[0, 0] = np.nan
+        model = XGBRegressor(
+            n_estimators=12, max_depth=3, n_jobs=1, random_state=44, verbosity=0
+        ).fit(training, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            actual = self._compiled_prediction(model, features, Path(directory))
+        np.testing.assert_allclose(
+            actual, model.predict(features), rtol=2.0e-6, atol=2.0e-6
+        )
+
+    def test_lightgbm_compiled_round_trip(self) -> None:
+        try:
+            from lightgbm import LGBMRegressor
+        except (ImportError, OSError):
+            self.skipTest("LightGBM is not installed")
+
+        rng = np.random.default_rng(45)
+        training = rng.normal(size=(256, 4))
+        targets = np.sin(training[:, 0]) + 0.25 * training[:, 1]
+        features = np.ascontiguousarray(rng.normal(size=(512, 4)))
+        features[0, 0] = np.nan
+        model = LGBMRegressor(
+            n_estimators=12, max_depth=3, n_jobs=1, random_state=45, verbosity=-1
+        ).fit(training, targets)
+        with tempfile.TemporaryDirectory() as directory:
+            actual = self._compiled_prediction(model, features, Path(directory))
+        np.testing.assert_allclose(
+            actual, model.predict(features), rtol=1.0e-12, atol=1.0e-12
+        )
+
+    def test_sklearn_extra_trees_compiled_round_trip(self) -> None:
+        from sklearn.ensemble import ExtraTreesRegressor
+
+        from foamnordic.execution.resident import _compiled_evaluator
+
+        rng = np.random.default_rng(42)
+        features = rng.normal(size=(512, 4))
+        targets = np.sin(features[:, 0]) + 0.25 * features[:, 1]
+        model = ExtraTreesRegressor(
+            n_estimators=8, max_depth=8, random_state=42
+        ).fit(features, targets)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = fno.export.sklearn(
+                model,
+                path=root / "trees.fnom",
+                inputs={"features": fno.Tensor.vector(components=4)},
+                outputs={"prediction": fno.Tensor.scalar()},
+            )
+            metadata = fno._native.read_model_manifest(str(artifact))
+            self.assertEqual(metadata["format"], "compiled")
+            self.assertEqual(metadata["runtime"], "cpp-v1")
+            with patch.dict(
+                "os.environ", {"FOAMNORDIC_COMPILED_CACHE": str(root / "cache")}
+            ):
+                first = _compiled_evaluator(
+                    BytesIO(fno._native.read_model_payload(str(artifact))),
+                    (("prediction", 1),),
+                    "float64",
+                    threads=2,
+                )
+                second = _compiled_evaluator(
+                    BytesIO(fno._native.read_model_payload(str(artifact))),
+                    (("prediction", 1),),
+                    "float64",
+                    threads=2,
+                )
+            actual = second(
+                memoryview(np.ascontiguousarray(features)),
+                len(features),
+                features.shape[1],
+                "float64",
+                0,
+                0.0,
+            )
+            self.assertFalse(first.foamnordic_cache_hit)
+            self.assertTrue(second.foamnordic_cache_hit)
+            np.testing.assert_allclose(
+                actual[:, 0], model.predict(features), rtol=1.0e-14, atol=1.0e-14
+            )
+
+    def test_sklearn_extra_trees_compiled_large_batch(self) -> None:
+        from sklearn.ensemble import ExtraTreesRegressor
+
+        from foamnordic.execution.resident import _compiled_evaluator
+
+        rng = np.random.default_rng(43)
+        training = rng.normal(size=(512, 4))
+        targets = np.sin(training[:, 0]) + 0.25 * training[:, 1]
+        model = ExtraTreesRegressor(
+            n_estimators=8, max_depth=8, random_state=43
+        ).fit(training, targets)
+        features = np.ascontiguousarray(rng.normal(size=(32768, 4)))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = fno.export.sklearn(
+                model,
+                path=root / "trees.fnom",
+                inputs={"features": fno.Tensor.vector(components=4)},
+                outputs={"prediction": fno.Tensor.scalar()},
+            )
+            with patch.dict(
+                "os.environ", {"FOAMNORDIC_COMPILED_CACHE": str(root / "cache")}
+            ):
+                evaluator = _compiled_evaluator(
+                    BytesIO(fno._native.read_model_payload(str(artifact))),
+                    (("prediction", 1),),
+                    "float64",
+                    threads=2,
+                )
+            actual = evaluator(
+                memoryview(features), len(features), 4, "float64", 0, 0.0
+            )
+            np.testing.assert_allclose(
+                actual[:, 0], model.predict(features), rtol=1.0e-14, atol=1.0e-14
+            )
+
     def test_sklearn_voting_regressor_joblib_round_trip(self) -> None:
         from sklearn.ensemble import ExtraTreesRegressor, VotingRegressor
         from sklearn.neighbors import KNeighborsRegressor
@@ -36,12 +242,13 @@ class ModelBackendTests(unittest.TestCase):
         from foamnordic.execution.resident import _joblib_evaluator
 
         with tempfile.TemporaryDirectory() as directory:
-            manifest = fno.export.joblib(
+            manifest = fno.export.sklearn(
                 model,
                 path=Path(directory) / "voting.fnom",
                 inputs={"features": fno.Tensor.vector(components=2)},
                 outputs={"nut": fno.Tensor.scalar()},
                 x_scaler=scaler,
+                backend="joblib",
             )
             metadata = fno._native.read_model_manifest(str(manifest))
             self.assertEqual(metadata["input_scaler"]["kind"], "standard")

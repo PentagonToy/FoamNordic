@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+import ctypes
 from dataclasses import dataclass
 from io import BytesIO
 import inspect
@@ -279,6 +281,125 @@ def _joblib_evaluator(
     return evaluate
 
 
+def _compiled_evaluator(path, outputs, dtype: str, threads: int = 1):
+    """Compile one portable FNOM source payload once and call its stable ABI."""
+
+    import numpy as np
+
+    from ..build.compiler import compile_source
+
+    if dtype != "float64":
+        raise ValueError("compiled v1 artifacts require float64 tensors")
+    if sum(width for _, width in outputs) != 1:
+        raise ValueError("compiled v1 artifacts require one scalar output")
+    if isinstance(path, BytesIO):
+        source = path.getvalue()
+    elif isinstance(path, Path):
+        source = path.read_bytes()
+    elif isinstance(path, _EmbeddedPayload):
+        source = _native.read_model_payload(str(path.path))
+    else:
+        source = bytes(path)
+    library_path, cache_hit, compile_seconds = compile_source(source)
+    library = ctypes.CDLL(str(library_path))
+    input_width = library.foamnordic_input_width
+    input_width.argtypes = []
+    input_width.restype = ctypes.c_size_t
+    output_width = library.foamnordic_output_width
+    output_width.argtypes = []
+    output_width.restype = ctypes.c_size_t
+    predict = library.foamnordic_predict
+    predict.argtypes = [
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_size_t,
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_size_t,
+    ]
+    predict.restype = ctypes.c_int
+    expected_inputs = int(input_width())
+    expected_outputs = int(output_width())
+    try:
+        predict_parallel = library.foamnordic_predict_parallel
+    except AttributeError:
+        predict_parallel = None
+    if predict_parallel is not None:
+        predict_parallel.argtypes = [*predict.argtypes, ctypes.c_size_t]
+        predict_parallel.restype = ctypes.c_int
+    pool = (
+        ThreadPoolExecutor(max_workers=threads)
+        if threads > 1 and predict_parallel is None
+        else None
+    )
+
+    def call(features, result, row_start: int, row_stop: int) -> None:
+        count = row_stop - row_start
+        input_address = features.ctypes.data + row_start * features.strides[0]
+        output_address = result.ctypes.data + row_start * result.strides[0]
+        status = predict(
+            ctypes.cast(input_address, ctypes.POINTER(ctypes.c_double)),
+            count,
+            expected_inputs,
+            ctypes.cast(output_address, ctypes.POINTER(ctypes.c_double)),
+            expected_outputs,
+        )
+        if status != 0:
+            raise RuntimeError(f"compiled FNOM inference failed with status {status}")
+
+    def evaluate(
+        buffer,
+        rows,
+        columns,
+        value_dtype,
+        _exchange_index,
+        _physical_time,
+        _rank=0,
+        _library=library,
+        _pool=pool,
+    ):
+        del _library
+        if value_dtype != "float64" or columns != expected_inputs:
+            raise ValueError("compiled FNOM input does not match its native ABI")
+        features = np.frombuffer(buffer, dtype=np.float64).reshape(rows, columns)
+        if not features.flags.c_contiguous:
+            features = np.ascontiguousarray(features)
+        result = np.empty((rows, expected_outputs), dtype=np.float64)
+        workers = min(threads, rows)
+        if predict_parallel is not None:
+            status = predict_parallel(
+                features.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                rows,
+                columns,
+                result.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                expected_outputs,
+                workers,
+            )
+            if status != 0:
+                raise RuntimeError(
+                    f"compiled FNOM inference failed with status {status}"
+                )
+        elif _pool is None or workers <= 1:
+            call(features, result, 0, rows)
+        else:
+            quotient, remainder = divmod(rows, workers)
+            futures = []
+            start = 0
+            for worker in range(workers):
+                stop = start + quotient + (worker < remainder)
+                futures.append(_pool.submit(call, features, result, start, stop))
+                start = stop
+            for future in futures:
+                future.result()
+        return result
+
+    evaluate.foamnordic_cache_hit = cache_hit
+    evaluate.foamnordic_compile_seconds = compile_seconds
+    evaluate.foamnordic_library = library_path
+    evaluate.foamnordic_threads = threads
+    evaluate.foamnordic_parallel = "native" if predict_parallel is not None else "python"
+    return evaluate
+
+
 def _function_evaluator(package, outputs):
     """Build a deterministic logical-port evaluator for Operator.function."""
 
@@ -505,7 +626,7 @@ def _equinox_evaluator(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m foamnordic.execution.resident",
-        description="Run a Joblib or Equinox model behind native Fjord transport.",
+        description="Run a compiled, Joblib, or Equinox model behind native Fjord transport.",
     )
     parser.add_argument("address")
     parser.add_argument("manifest", type=Path)
@@ -543,6 +664,8 @@ def main(argv: list[str] | None = None) -> int:
             arguments.program,
             threads=model_threads,
         )
+    elif model_format == "compiled":
+        evaluator = _compiled_evaluator(payload, outputs, dtype, model_threads)
     else:
         raise ValueError(f"managed Python worker does not support {model_format!r}")
     runtime_label = (

@@ -204,6 +204,9 @@ foamnordic::fjord::Element element(const std::string& dtype) {
 }
 
 foamnordic::closure::ModelFormat format(const std::string& value) {
+    if (value == "compiled") {
+        return foamnordic::closure::ModelFormat::compiled;
+    }
     if (value == "equinox") {
         return foamnordic::closure::ModelFormat::equinox;
     }
@@ -214,7 +217,7 @@ foamnordic::closure::ModelFormat format(const std::string& value) {
         return foamnordic::closure::ModelFormat::onnx;
     }
     throw std::invalid_argument(
-        "model format must be equinox, joblib, or onnx");
+        "model format must be compiled, equinox, joblib, or onnx");
 }
 
 std::vector<foamnordic::closure::FieldContract> fields(

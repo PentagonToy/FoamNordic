@@ -42,10 +42,15 @@ void ModelArtifact::validate() const {
     if (schema_version == 1 && !runtime.empty()) {
         throw std::invalid_argument("FNOM v1 artifacts cannot define a runtime.");
     }
-    if (!runtime.empty()
-        && (format != ModelFormat::joblib
-            || (runtime != "sklearn" && runtime != "sklearnex"))) {
-        throw std::invalid_argument("Joblib artifact runtime is invalid.");
+    if (format == ModelFormat::compiled && runtime != "cpp-v1") {
+        throw std::invalid_argument("Compiled artifact runtime is invalid.");
+    }
+    if (!runtime.empty() && format != ModelFormat::compiled) {
+        const auto valid_joblib = format == ModelFormat::joblib
+                                  && (runtime == "sklearn" || runtime == "sklearnex");
+        if (!valid_joblib) {
+            throw std::invalid_argument("Model artifact runtime is invalid.");
+        }
     }
     contract.validate();
     const auto feature_count = [](const std::vector<FieldContract>& fields) {
@@ -84,6 +89,8 @@ void ModelArtifact::validate() const {
 
 const char* name(ModelFormat format) noexcept {
     switch (format) {
+        case ModelFormat::compiled:
+            return "compiled";
         case ModelFormat::equinox:
             return "equinox";
         case ModelFormat::joblib:

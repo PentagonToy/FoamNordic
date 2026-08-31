@@ -24,8 +24,17 @@ class _LinearPrediction:
 
 
 class ExportTests(unittest.TestCase):
+    def test_export_namespace_exposes_three_exporters(self) -> None:
+        self.assertEqual(
+            dir(fno.Export), ["Tensor", "equinox", "onnx", "sklearn"]
+        )
+        self.assertFalse(hasattr(fno.Export, "compiled"))
+        self.assertFalse(hasattr(fno.Export, "joblib"))
+
     def test_export_help_is_backend_discoverable(self) -> None:
-        self.assertEqual(dir(fno.export), ["Tensor", "equinox", "joblib", "onnx"])
+        self.assertEqual(
+            dir(fno.export), ["Tensor", "equinox", "onnx", "sklearn"]
+        )
 
     def test_verbose_must_be_boolean(self) -> None:
         with self.assertRaisesRegex(TypeError, "boolean"):
@@ -38,14 +47,34 @@ class ExportTests(unittest.TestCase):
             )
 
     def test_scalers_default_to_none_for_every_exporter(self) -> None:
-        for exporter in (fno.export.onnx, fno.export.joblib, fno.export.equinox):
+        for exporter in (
+            fno.export.onnx,
+            fno.export.sklearn,
+            fno.export.equinox,
+        ):
             parameters = inspect.signature(exporter).parameters
             self.assertIsNone(parameters["x_scaler"].default)
             self.assertIsNone(parameters["y_scaler"].default)
 
+    def test_compiled_rejects_unsupported_estimators_before_writing(self) -> None:
+        from sklearn.gaussian_process import GaussianProcessRegressor
+
+        model = GaussianProcessRegressor().fit([[0.0], [1.0]], [0.0, 1.0])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gpr.fnom"
+            with self.assertRaisesRegex(TypeError, "does not support GaussianProcessRegressor"):
+                fno.export.sklearn(
+                    model,
+                    path=path,
+                    inputs={"x": fno.Tensor.scalar()},
+                    outputs={"y": fno.Tensor.scalar()},
+                    backend="compiled",
+                )
+            self.assertFalse(path.exists())
+
     def test_joblib_runtime_is_strict(self) -> None:
         with self.assertRaisesRegex(ValueError, "'sklearn' or 'sklearnex'"):
-            fno.export.joblib(
+            fno.export.sklearn(
                 _LinearPrediction(),
                 path="model.fnom",
                 inputs={"features": fno.Tensor.vector(components=2)},
@@ -65,7 +94,7 @@ class ExportTests(unittest.TestCase):
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_sklearnex_runtime_is_stored_in_fnom(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            manifest = fno.export.joblib(
+            manifest = fno.export.sklearn(
                 _LinearPrediction(),
                 path=Path(directory) / "accelerated.fnom",
                 inputs={"features": fno.Tensor.vector(components=2)},
@@ -259,7 +288,7 @@ class ExportTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            manifest = fno.export.joblib(
+            manifest = fno.export.sklearn(
                 _LinearPrediction(),
                 path=root / "voting.fnom",
                 inputs={"features": fno.Tensor.vector(components=2)},
@@ -281,7 +310,7 @@ class ExportTests(unittest.TestCase):
 
             large_model = _LinearPrediction()
             large_model.padding = np.zeros(4 * 1024 * 1024, dtype=np.float64)
-            large_manifest = fno.export.joblib(
+            large_manifest = fno.export.sklearn(
                 large_model,
                 path=root / "large.fnom",
                 inputs={"features": fno.Tensor.vector(components=2)},

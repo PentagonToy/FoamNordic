@@ -865,6 +865,36 @@ class PlanTests(unittest.TestCase):
             '{"entropy":[42,0],"path":[],"scope":"global"}',
         )
 
+    def test_compiled_artifact_selects_managed_resident_automatically(self) -> None:
+        example = example_longship()
+        closure = fno.Closure(
+            name="compiledClosure",
+            artifact="model.fnom",
+            inputs={"features": fno.field("U")},
+            outputs={"prediction": fno.field("nut")},
+        )
+        longship = fno.Longship(case=example.case, closures=(closure,))
+        metadata = {
+            "format": "compiled",
+            "inputs": [("features", 3, "float64")],
+            "outputs": [("prediction", 1, "float64")],
+        }
+        with patch("foamnordic.execution.launch._artifact_metadata", return_value=metadata):
+            command = _host_command(
+                longship,
+                PreparedProgram(
+                    closure,
+                    Path("/tmp/ready"),
+                    Path("/tmp/program.sock"),
+                    None,
+                ),
+                model_threads=4,
+            )
+        rendered = " ".join(command)
+        self.assertIn("foamnordic.execution.resident", rendered)
+        self.assertIn("--threads 4", rendered)
+        self.assertNotIn("--key", command)
+
     def test_transform_selects_the_same_managed_resident(self) -> None:
         example = example_longship()
         transform = fno.Transform(

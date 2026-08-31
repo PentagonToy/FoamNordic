@@ -197,7 +197,7 @@ def _host_command(
     executable: list[object]
     if model_format == "onnx":
         executable = [_worker(longship)]
-    elif model_format in {"joblib", "equinox"}:
+    elif model_format in {"compiled", "joblib", "equinox"}:
         executable = [sys.executable, "-m", "foamnordic.execution.resident"]
     else:
         raise ValueError(f"unsupported field-program artifact format: {model_format}")
