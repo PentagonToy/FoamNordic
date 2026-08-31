@@ -127,7 +127,7 @@ runtime even when the parent Jupyter kernel did not inherit `WM_*` variables.
 
 `fno.Math` supplies backend-neutral scalar, array, and physical tensor
 operations for NumPy and JAX closure functions. See the
-[Math API](../docs/python/math-api.md).
+[Math API](../docs/api/math-api.md).
 
 The binary wheel also owns the native Longship supervisor used by `Run`.
 For Slurm, `launch()` waits for `RUNNING`, reports the Job ID and actual Slurm
@@ -195,7 +195,7 @@ metrics = fno.Postprocess.compare(
 `time_idx` and `physical_time` are mutually exclusive. Statistics and
 comparison return plain numerical dictionaries; `verbose=True` adds compact
 Onsaemiro tables. See the
-[Postprocess API](../docs/python/postprocess-api.md).
+[Postprocess API](../docs/api/postprocess-api.md).
 
 `fno.Export.onnx(...)` accepts a path without loading the entire ONNX payload
 into Python memory, which is important for large ensembles. FNOM v1 remains a

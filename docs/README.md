@@ -1,17 +1,16 @@
 # FoamNordic documentation
 
-The documentation is split by implementation boundary:
+The documentation is organized by the question a reader is trying to answer:
 
 | Area | Contents |
 | --- | --- |
-| [Architecture](architecture/README.md) | Execution topologies, control/data planes, and model placement |
-| [Native C++](native/README.md) | Transport, atomic exchange, inference, OpenFOAM integration, and placement |
-| [Python API](python/README.md) | Current API status and the intended orchestration boundary |
-| [Math API](python/math-api.md) | Backend-neutral NumPy/JAX and physical tensor operations |
-| [Postprocess API](python/postprocess-api.md) | Durable OpenFOAM fields, statistics, and baseline/ML comparison |
+| [Architecture](architecture/README.md) | Why FoamNordic is structured this way and how its processes are placed |
+| [Python API](api/README.md) | How users declare cases, closures, schedules, observations, and postprocessing |
+| [Native internals](internals/README.md) | How transport, inference, field exchange, and OpenFOAM integration work |
+| [Benchmarks and validation](benchmarks/README.md) | What has been measured, on which platform, and which gates remain |
 
-FoamNordic ships its native C++ foundation and an installable Python control
-plane. The run-control guide is executable API documentation; architecture
-documents also record planned extensions where they are explicitly labelled.
+FoamNordic ships a native C++ data path and an installable Python control
+plane. Architecture describes contracts, API documents describe public use,
+internals describe implementation, and benchmark documents contain evidence.
 
 Return to the [project README](../README.md).

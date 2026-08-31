@@ -13,4 +13,5 @@ and solver integration.
 - [Combustion API](combustion-api.md)
 - [Reproducible random keys](random-api.md)
 - [Wheel publishing](publishing.md)
-- [Native C++ documentation](../native/README.md)
+- [Native implementation details](../internals/README.md)
+- [Benchmarks and validation](../benchmarks/README.md)

@@ -72,6 +72,52 @@ about 76.6 times faster in this pair of validation runs. That observed ratio is
 not a general performance guarantee and does not replace the OpenFOAM release
 gate below.
 
+## 2026-08-28: NACA4412 16-rank a-posteriori closure
+
+An incompressible NACA4412 LES was run to physical time `1` with OpenFOAM
+v2512 on the CSC Roihu `small` partition. Both runs used one node, 16 MPI
+ranks, the same 89,728-cell mesh, `deltaT=0.0025`, numerical schemes, solution
+controls, and output policy. The baseline used the stock `kEqn` model. The
+coupled run used `kEqnFjord` with the same `Ck=0.094` and `Ce=1.048`
+coefficients and evaluated the closure on every model invocation.
+
+The two allocations had the same shape but ran on different physical nodes,
+so this is a development record rather than a controlled hardware benchmark.
+All 16 coupled ranks selected rank-local SHM. No TCP or UCX payload path was
+used.
+
+| Run | OpenFOAM execution time | OpenFOAM wall time | Longship total |
+|---|---:|---:|---:|
+| Stock `kEqn` | 47.84 s | 50 s | not applicable |
+| FoamNordic `kEqnFjord` | 55.39 s | 71 s | 85 s |
+| Coupled / stock | 1.158 | 1.420 | 1.700 |
+
+The solver wall-time ratio is 1.420 and passes the 1.5 release gate below.
+Longship spent 14 seconds outside the OpenFOAM solver interval on preparation,
+startup, and shutdown. That fixed orchestration interval is reported
+separately and is not hidden inside the solver comparison.
+
+### Reconstructed final-field comparison
+
+Both decomposed cases were reconstructed before comparison. The binary
+OpenFOAM `internalField` arrays at physical time `1` were decoded as float64
+values in mesh order. The relative L2 metric is
+`norm(FoamNordic - stock) / norm(stock)`.
+
+| Field | Compared values | Maximum absolute difference | Relative L2 difference |
+|---|---:|---:|---:|
+| `U` | 269,184 | 5.245674e-02 | 2.267362e-03 |
+| `p` | 89,728 | 1.299158e-02 | 1.390809e-02 |
+| `k` | 89,728 | 2.225951e-03 | 1.476984e-04 |
+| `nut` | 89,728 | 2.722755e-06 | 9.023704e-04 |
+
+The reconstructed fields are not bitwise identical. The table records the
+observed accumulated difference between the native OpenFOAM implementation
+and the blocking external function closure; it does not declare scientific
+equivalence. A case-specific validation tolerance must be agreed before these
+numbers can become a numerical pass/fail gate. Both runs completed normally at
+the requested final time without closure, transport, or solver failure.
+
 ## Release performance gate
 
 The microbenchmarks detect transport regressions. The scientific release gate

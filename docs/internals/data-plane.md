@@ -288,4 +288,4 @@ processes on different nodes.
 The current implementation and site-validation matrix, including an example
 CSC Roihu UCX 1.20.0 environment and the distinction between an available runtime and an
 implemented Fjord channel, is recorded in
-[HPC transport status and site notes](hpc-transport-status.md).
+[HPC transport status and site notes](../benchmarks/hpc-transport.md).

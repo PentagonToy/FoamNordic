@@ -58,7 +58,7 @@ deliberately produces the ordered native tensor contract before workers start.
 
 The first beta-FDF contract accepts a pre-integrated `.fnom` table only.
 Runtime Python quadrature is deliberately excluded from the native hot path.
-See the [native combustion contract](../native/combustion-contract.md) for
+See the [native combustion contract](../internals/combustion-contract.md) for
 equation ordering, dimensions, parallel identity, and acceptance requirements.
 
 ## Native progress-variable coordinator

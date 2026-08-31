@@ -213,10 +213,10 @@ Stock OpenFOAM applications
 support the exact `time_step_start` and `time_step_end` boundaries; inner
 corrector stages remain available to solver-native integrations.
 
-See the [run-control API](docs/python/run-control-api.md) for closure,
+See the [run-control API](docs/api/run-control-api.md) for closure,
 observation, Slurm, and pure-OpenFOAM examples.
 Stored fields and baseline/ML comparisons are covered by the
-[postprocess API](docs/python/postprocess-api.md).
+[postprocess API](docs/api/postprocess-api.md).
 
 ## Native C++ build
 
@@ -269,8 +269,8 @@ native prerequisites.
 
 - [Documentation index](docs/README.md)
 - [Python package guide](python/README.md)
-- [Backend-neutral mathematics](docs/python/math-api.md)
-- [Reproducible random keys](docs/python/random-api.md)
+- [Backend-neutral mathematics](docs/api/math-api.md)
+- [Reproducible random keys](docs/api/random-api.md)
 - [PyPI README](others/README.pypi.md)
 - [Maintainer assets and wheel preparation](others/README.md)
 
@@ -283,27 +283,41 @@ native prerequisites.
 - [Model execution](docs/architecture/model-execution.md)
 - [Observations and retention](docs/architecture/observations-and-retention.md)
 
-### Native C++ and OpenFOAM
+### Python API
 
-- [Native documentation index](docs/native/README.md)
-- [Benchmarks](docs/native/benchmarks.md)
-- [Closure engine](docs/native/closure-engine.md)
-- [Data plane](docs/native/data-plane.md)
-- [Field pipeline](docs/native/field-pipeline.md)
-- [HPC transport status](docs/native/hpc-transport-status.md)
-- [Model artifacts](docs/native/model-artifacts.md)
-- [OpenFOAM adapter](docs/native/openfoam-adapter.md)
-- [Placement and lifecycle](docs/native/placement-and-lifecycle.md)
+- [Python API index](docs/api/README.md)
+- [API design](docs/api/design.md)
+- [Run control](docs/api/run-control-api.md)
+- [Postprocessing](docs/api/postprocess-api.md)
+- [Combustion](docs/api/combustion-api.md)
+- [Mathematics](docs/api/math-api.md)
+- [Random keys](docs/api/random-api.md)
 
-### Python
+### Native internals
 
-- [Python documentation index](docs/python/README.md)
-- [Python design](docs/python/design.md)
-- [Run-control API](docs/python/run-control-api.md)
-- [Postprocess API](docs/python/postprocess-api.md)
-- [Random API](docs/python/random-api.md)
+- [Native documentation index](docs/internals/README.md)
+- [Closure engine](docs/internals/closure-engine.md)
+- [Data plane](docs/internals/data-plane.md)
+- [Field pipeline](docs/internals/field-pipeline.md)
+- [Model artifacts](docs/internals/model-artifacts.md)
+- [OpenFOAM adapter](docs/internals/openfoam-adapter.md)
+- [Placement and lifecycle](docs/internals/placement-and-lifecycle.md)
+
+### Benchmarks and validation
+
+- [Benchmark index](docs/benchmarks/README.md)
+- [Transport and performance](docs/benchmarks/transport-and-performance.md)
+- [HPC transport](docs/benchmarks/hpc-transport.md)
+- [OpenFOAM cases](docs/benchmarks/openfoam-cases.md)
+- [Closure validation](docs/benchmarks/closure-validation.md)
+- [Remaining validation gates](docs/benchmarks/validation-gates.md)
 
 ## License
 
 FoamNordic is distributed under the
 [GNU General Public License v3.0](LICENSE).
+
+---
+
+Developed by **Hanseul Kang** at the Aalto University Energy and Mechanical
+Engineering Department. Project supervision by **Shervin Karimkashi**.

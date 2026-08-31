@@ -2,7 +2,7 @@
 
 This page records equation-level validation of mathematical and learned LES
 closures. General copied-case compatibility evidence remains in
-[OpenFOAM case validation](openfoam-case-validation.md). These gates distinguish
+[OpenFOAM case validation](openfoam-cases.md). These gates distinguish
 software-path parity from the scientific accuracy and runtime suitability of a
 fitted model.
 

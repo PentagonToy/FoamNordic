@@ -33,7 +33,7 @@ application, bypass, and inference remain in the native core.
 The distinction between generic field programs and equation-level adapters is
 also recorded beside the implementations in
 `src/foamnordic/openfoam/models/README.md`. Copied-case laminar, RAS, and LES
-evidence is recorded in [OpenFOAM case validation](openfoam-case-validation.md).
+evidence is recorded in [OpenFOAM case validation](../benchmarks/openfoam-cases.md).
 
 `Foam::foamNordic::ClosureSession` is the reusable solver hook. It owns one
 rank-local connection and one `ClosurePort`; `begin(Time)` creates a fresh
@@ -182,6 +182,12 @@ closure boundary before k-equation and combustion adapters are added. A model
 adapter may bind solver-owned fields that are not registered in the mesh, but
 duplicate or empty binding names fail before publication.
 
+FoamNordic registers the same templated adapter separately in OpenFOAM's
+incompressible `turbulentTransportModels` and compressible
+`turbulentFluidThermoModels` selection tables. Compressible solvers such as
+`rhoPimpleFoam` still receive kinematic `nut`; OpenFOAM owns the density-based
+conversion to dynamic turbulent viscosity and thermal diffusivity.
+
 For native integration tests, `foamnordic_openfoam_echo` can map one input
 tensor onto a differently named output without entering Python. For example,
 the following publishes a zero-valued `nut` field with the shape of
@@ -235,6 +241,12 @@ the three closure quantities. One blocking exchange is performed during model
 validation, then once before and once after every solved k equation. The model
 contains no transport-specific code and reuses the same `ClosureHook`, atomic
 publication checks, rank-local addressing, and SHM path as `nutFjord`.
+
+Like `nutFjord`, `kEqnFjord` is registered for both incompressible and
+compressible turbulence models. Its FNOM contract remains
+`k, grad(U), delta -> nut, kProduction, kDissipationCoeff`; density,
+dilatation, molecular diffusion, relaxation, and equation sources stay in the
+OpenFOAM-owned k equation.
 
 The canonical coefficient body is
 `src/foamnordic/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this

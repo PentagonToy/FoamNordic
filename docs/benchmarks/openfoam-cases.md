@@ -142,7 +142,7 @@ The local complete-combustion integration now includes a solver-integrated
 beta-FDF artifact fixture, an atomic field trajectory, a stock reacting-solver
 adapter gate, and exact volumetric/specific source probes. The remaining
 software acceptance is the Linux HPC/OpenFOAM v2512 matrix documented in
-`hpc-validation-gates.md`. Boundary conservation, realizability, failure
+`validation-gates.md`. Boundary conservation, realizability, failure
 policy, and a physically representative trained artifact remain scientific
 acceptance work.
 

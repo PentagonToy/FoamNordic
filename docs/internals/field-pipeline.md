@@ -76,7 +76,7 @@ exchanges 1, 501, 1001, and so on publish compact observations. Omitting the
 observation plan constructs no observation buffer and sends no monitoring
 traffic.
 
-See the [Python API design](../python/design.md) for the implemented ownership
+See the [Python API design](../api/design.md) for the implemented ownership
 boundary.
 
 ## Ownership

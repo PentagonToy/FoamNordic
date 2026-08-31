@@ -76,5 +76,5 @@ transport request, or own solver field memory.
 
 The public Python API is packaged with nanobind bindings and API tests. Local
 and Slurm OpenFOAM validation use the same native contracts. The native
-behavior documented under [C++ internals](../native/README.md) remains the
+behavior documented under [C++ internals](../internals/README.md) remains the
 authoritative definition of low-level transport and OpenFOAM ABI behavior.

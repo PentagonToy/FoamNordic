@@ -157,5 +157,5 @@ fall back before the session begins, but a live exchange never switches its
 data path halfway through a batch.
 
 The future orchestration surface that selects these policies is documented
-separately in the [Python API design](../python/design.md). The current source
+separately in the [Python API design](../api/design.md). The current source
 tree implements only the native placement contract.
