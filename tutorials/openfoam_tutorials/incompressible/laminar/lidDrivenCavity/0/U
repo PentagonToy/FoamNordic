@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  2412
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);           // Start stationary (m/s)
+
+boundaryField
+{
+    movingWall      // Top wall (lid)
+    {
+        type            fixedValue;
+        value           uniform (1.0 0 0);  // Lid velocity: 1 m/s rightward
+    }
+    
+    fixedWalls      // Bottom, left, right walls
+    {
+        type            noSlip;             // u = v = 0 m/s
+    }
+    
+    frontAndBack    // 2D simulation
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

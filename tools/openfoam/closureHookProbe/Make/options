@@ -1,0 +1,15 @@
+EXE_INC = \
+    -std=c++20 \
+    -Wno-overloaded-virtual \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(FOAMNORDIC_SOURCE)/src \
+    -I$(FOAMNORDIC_SOURCE)/src/foamnordic/openfoam \
+    -I$(FOAMNORDIC_SOURCE)/src/foamnordic/openfoam/operations \
+    -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
+
+EXE_LIBS = \
+    -L$(FOAMNORDIC_OPENFOAM_LIB) \
+    -lfoamnordicOpenFOAM \
+    -lfiniteVolume \
+    -lmeshTools

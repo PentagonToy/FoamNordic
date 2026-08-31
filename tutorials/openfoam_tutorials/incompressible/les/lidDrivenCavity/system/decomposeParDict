@@ -1,0 +1,27 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield        | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration    | Version:  v2412                                  |
+|   \\  /    A nd          |                                                 |
+|    \\/     M anipulation |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      decomposeParDict;
+}
+numberOfSubdomains 2;
+
+method hierarchical;
+
+hierarchicalCoeffs
+{
+    n           (2 1 1);   // nx ny nz  -> z stays 1 for 2-D
+    delta       0.001;
+    order       xyz;
+}
+
+distributed     no;
+roots           ();

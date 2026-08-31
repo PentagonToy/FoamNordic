@@ -1,0 +1,43 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      combustionProperties;
+}
+
+combustionModel @RUNTIME_COMBUSTION_NAME@;
+
+@RUNTIME_COMBUSTION_NAME@Coeffs
+{
+    contractVersion 1;
+    sourceTreatment lagged;
+    correctionStage outerCorrector;
+
+    reactionRate
+    {
+        @REACTION_RATE_CLOSURE_DICTIONARY@
+    }
+
+    manifold
+    {
+        type            betaFDF;
+        integration     preintegrated;
+        bounds          clip;
+        table           "@FNOM_MANIFOLD_PATH@";
+
+        inputs
+        {
+            progress    @PROGRESS_FIELD@;
+            variance    @VARIANCE_FIELD@;
+            @OPTIONAL_CONDITIONING_FIELDS@
+        }
+
+        outputs
+        {
+            species     "@SPECIES_FIELD_PATTERN@";
+            enthalpy    @ENTHALPY_FIELD@;
+            @OPTIONAL_MANIFOLD_OUTPUTS@
+        }
+    }
+}

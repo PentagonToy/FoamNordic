@@ -1,0 +1,31 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      combustionProperties;
+}
+
+combustionModel progressVariableFjord;
+active          true;
+
+progressVariableFjordCoeffs
+{
+    sourceTreatment       lagged;
+    correctionStage       outerCorrector;
+    progressField         @PROGRESS_FIELD@;
+    reactionRateField     @REACTION_RATE_FIELD@;
+    reactionRateBasis     @REACTION_RATE_BASIS@;
+    reactionRateDimensions @REACTION_RATE_DIMENSIONS@;
+    correctThermo         @CORRECT_THERMO@;
+
+    reactionRateClosure
+    {
+        @REACTION_RATE_CLOSURE@
+    }
+
+    manifoldClosure
+    {
+        @MANIFOLD_CLOSURE@
+    }
+}

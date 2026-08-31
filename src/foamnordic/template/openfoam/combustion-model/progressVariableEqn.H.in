@@ -1,0 +1,21 @@
+#error "FoamNordic combustion scaffold: supply solver-specific transport terms"
+
+// The reaction-rate field is exposed through the ordinary OpenFOAM
+// combustion R(field) interface. The model returns a positive explicit source
+// only when the argument is @PROGRESS_FIELD@; species and unrelated scalars
+// receive a zero matrix. The solver still owns all transport terms.
+
+fvScalarMatrix progressEqn
+(
+    @SOLVER_SPECIFIC_PROGRESS_TRANSPORT_TERMS@
+ ==
+    combustion->R(@PROGRESS_FIELD@)
+  + fvOptions(@SOLVER_SPECIFIC_FVOPTIONS_ARGUMENTS@)
+);
+
+progressEqn.relax();
+fvOptions.constrain(progressEqn);
+progressEqn.solve();
+fvOptions.correct(@PROGRESS_FIELD@);
+
+@BOUND_PROGRESS_TO_ZERO_AND_ONE@

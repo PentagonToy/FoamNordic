@@ -1,0 +1,374 @@
+from __future__ import annotations
+
+from io import BytesIO
+from pathlib import Path
+import inspect
+import sys
+import tempfile
+import types
+import unittest
+from unittest.mock import Mock, patch
+
+import foamnordic as fno
+from foamnordic.core.native_plan import available as native_available
+
+
+class _LinearPrediction:
+    def __init__(self):
+        import numpy as np
+
+        self.weights = np.asarray([2.0, 1.0], dtype=np.float64)
+
+    def predict(self, values):
+        return (values @ self.weights).reshape(-1, 1)
+
+
+class ExportTests(unittest.TestCase):
+    def test_export_namespace_exposes_three_exporters(self) -> None:
+        self.assertEqual(
+            dir(fno.Export), ["Tensor", "equinox", "onnx", "sklearn"]
+        )
+        self.assertFalse(hasattr(fno.Export, "compiled"))
+        self.assertFalse(hasattr(fno.Export, "joblib"))
+
+    def test_export_help_is_backend_discoverable(self) -> None:
+        self.assertEqual(
+            dir(fno.export), ["Tensor", "equinox", "onnx", "sklearn"]
+        )
+
+    def test_verbose_must_be_boolean(self) -> None:
+        with self.assertRaisesRegex(TypeError, "boolean"):
+            fno.export.onnx(
+                b"onnx",
+                path="model.fnom",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+                verbose="yes",
+            )
+
+    def test_scalers_default_to_none_for_every_exporter(self) -> None:
+        for exporter in (
+            fno.export.onnx,
+            fno.export.sklearn,
+            fno.export.equinox,
+        ):
+            parameters = inspect.signature(exporter).parameters
+            self.assertIsNone(parameters["x_scaler"].default)
+            self.assertIsNone(parameters["y_scaler"].default)
+
+    def test_compiled_rejects_unsupported_estimators_before_writing(self) -> None:
+        from sklearn.gaussian_process import GaussianProcessRegressor
+
+        model = GaussianProcessRegressor().fit([[0.0], [1.0]], [0.0, 1.0])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gpr.fnom"
+            with self.assertRaisesRegex(TypeError, "does not support GaussianProcessRegressor"):
+                fno.export.sklearn(
+                    model,
+                    path=path,
+                    inputs={"x": fno.Tensor.scalar()},
+                    outputs={"y": fno.Tensor.scalar()},
+                    backend="compiled",
+                )
+            self.assertFalse(path.exists())
+
+    def test_joblib_runtime_is_strict(self) -> None:
+        with self.assertRaisesRegex(ValueError, "'sklearn' or 'sklearnex'"):
+            fno.export.sklearn(
+                _LinearPrediction(),
+                path="model.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                runtime="automatic",
+            )
+
+    def test_sklearnex_runtime_patches_the_resident_process(self) -> None:
+        from foamnordic.execution.resident import _activate_joblib_runtime
+
+        patch_sklearn = Mock()
+        module = types.SimpleNamespace(patch_sklearn=patch_sklearn)
+        with patch.dict(sys.modules, {"sklearnex": module}):
+            _activate_joblib_runtime("sklearnex")
+        patch_sklearn.assert_called_once_with(verbose=False)
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_sklearnex_runtime_is_stored_in_fnom(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = fno.export.sklearn(
+                _LinearPrediction(),
+                path=Path(directory) / "accelerated.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                runtime="sklearnex",
+            )
+            metadata = fno._native.read_model_manifest(str(manifest))
+        self.assertEqual(metadata["schema_version"], 2)
+        self.assertEqual(metadata["runtime"], "sklearnex")
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_existing_onnx_payload_exports_self_contained_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = fno.export.onnx(
+                b"onnx-payload",
+                path=root / "reaction-rate.fnom",
+                name="reaction-rate",
+                inputs={
+                    "c_tilde": fno.Tensor.scalar(),
+                    "c_var": fno.Tensor.scalar(),
+                    "T_tilde": fno.Tensor.scalar(),
+                },
+                outputs={"omega_c": fno.Tensor.scalar()},
+            )
+            self.assertEqual(manifest.read_bytes()[:8], b"FNOBND2\0")
+            self.assertEqual(
+                fno._native.read_model_payload(str(manifest)), b"onnx-payload"
+            )
+            self.assertFalse((root / "reaction-rate.onnx").exists())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_models_load_exposes_read_only_fnom_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = fno.export.onnx(
+                b"onnx-payload",
+                path=Path(directory) / "reaction-rate.fnom",
+                name="reaction-rate",
+                inputs={"c": fno.Tensor.scalar()},
+                outputs={"omega_c": fno.Tensor.scalar()},
+            )
+            artifact = fno.Models.load(path)
+
+        self.assertEqual(artifact.name, "reaction-rate")
+        self.assertEqual(artifact.container_version, 2)
+        self.assertEqual(artifact.schema_version, 1)
+        self.assertEqual(artifact.backend, "onnx")
+        self.assertEqual(artifact.inputs[0].name, "c")
+        self.assertEqual(artifact.outputs[0].name, "omega_c")
+        self.assertEqual(artifact.payload_size, len(b"onnx-payload"))
+        self.assertIn("FnomArtifact", dir(fno.Models))
+
+    def test_models_load_requires_fnom_extension(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"\.fnom extension"):
+            fno.Models.load("model.onnx")
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_path_backed_payload_is_embedded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "large-voting-regressor.onnx"
+            source.write_bytes(b"model" * 1024)
+            manifest = fno.export.onnx(
+                source,
+                path=root / "voting.fnom",
+                inputs={"features": fno.Tensor.vector(components=3)},
+                outputs={"prediction": fno.Tensor.scalar()},
+            )
+            self.assertEqual(
+                fno._native.read_model_payload(str(manifest)), source.read_bytes()
+            )
+            self.assertFalse(manifest.with_suffix(".onnx").exists())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_verbose_true_displays_export_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "foamnordic.export._display_export"
+        ) as display:
+            fno.export.onnx(
+                b"onnx-payload",
+                path=Path(directory) / "model.fnom",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+                verbose=True,
+            )
+        display.assert_called_once()
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_fitted_sklearn_scalers_are_normalized_into_fnom(self) -> None:
+        try:
+            import numpy as np
+            from sklearn.preprocessing import (
+                FunctionTransformer,
+                MaxAbsScaler,
+                MinMaxScaler,
+                RobustScaler,
+                StandardScaler,
+            )
+        except ImportError:
+            self.skipTest("scikit-learn test dependencies are unavailable")
+
+        features = np.asarray(
+            [[0.0, -2.0], [2.0, 4.0], [4.0, 10.0]], dtype=np.float64
+        )
+        targets = np.asarray([[10.0], [20.0], [30.0]], dtype=np.float64)
+        scalers = (
+            (StandardScaler().fit(features), "standard"),
+            (MinMaxScaler(feature_range=(-1.0, 1.0), clip=True).fit(features), "minmax"),
+            (MaxAbsScaler().fit(features), "maxabs"),
+            (RobustScaler().fit(features), "robust"),
+            (
+                FunctionTransformer(
+                    func=lambda values: values * np.asarray([2.0, -4.0])
+                    + np.asarray([3.0, 5.0]),
+                    inverse_func=lambda values: (values - np.asarray([3.0, 5.0]))
+                    / np.asarray([2.0, -4.0]),
+                ).fit(features),
+                "function",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index, (x_scaler, expected_kind) in enumerate(scalers):
+                manifest = fno.export.onnx(
+                    b"onnx-payload",
+                    path=root / f"scaled-{index}.fnom",
+                    inputs={"features": fno.Tensor.vector(components=2)},
+                    outputs={"prediction": fno.Tensor.scalar()},
+                    x_scaler=x_scaler,
+                    y_scaler=StandardScaler().fit(targets),
+                )
+                metadata = fno._native.read_model_manifest(str(manifest))
+                self.assertEqual(metadata["input_scaler"]["kind"], expected_kind)
+                self.assertEqual(metadata["output_scaler"]["kind"], "standard")
+                self.assertEqual(len(metadata["input_scaler"]["gain"]), 2)
+                self.assertEqual(len(metadata["output_scaler"]["gain"]), 1)
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_nonlinear_function_transformer_is_rejected(self) -> None:
+        try:
+            import numpy as np
+            from sklearn.preprocessing import FunctionTransformer
+        except ImportError:
+            self.skipTest("scikit-learn test dependencies are unavailable")
+        scaler = FunctionTransformer(np.square).fit(
+            np.asarray([[0.0, 1.0], [1.0, 2.0]])
+        )
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(
+            ValueError, "nonlinear"
+        ):
+            fno.export.onnx(
+                b"onnx-payload",
+                path=Path(directory) / "nonlinear.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                x_scaler=scaler,
+            )
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_scaler_feature_mismatch_fails_during_export(self) -> None:
+        try:
+            import numpy as np
+            from sklearn.preprocessing import StandardScaler
+        except ImportError:
+            self.skipTest("scikit-learn test dependencies are unavailable")
+        scaler = StandardScaler().fit(np.asarray([[0.0], [1.0]]))
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(
+            ValueError, "feature"
+        ):
+            fno.export.onnx(
+                b"onnx-payload",
+                path=Path(directory) / "mismatch.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                x_scaler=scaler,
+            )
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_joblib_model_is_embedded_and_loadable(self) -> None:
+        try:
+            import joblib
+            import numpy as np
+        except ImportError:
+            self.skipTest("Joblib test dependencies are unavailable")
+        from foamnordic.execution.resident import (
+            _EmbeddedPayload,
+            _joblib_evaluator,
+            _load_joblib,
+            _payload,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = fno.export.sklearn(
+                _LinearPrediction(),
+                path=root / "voting.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+            )
+            metadata = fno._native.read_model_manifest(str(manifest))
+            self.assertEqual(metadata["format"], "joblib")
+            self.assertEqual(metadata["schema_version"], 2)
+            self.assertEqual(metadata["runtime"], "sklearn")
+            self.assertTrue(metadata["bundled"])
+            self.assertIsInstance(_payload(manifest, metadata), BytesIO)
+            payload = BytesIO(fno._native.read_model_payload(str(manifest)))
+            loaded = joblib.load(payload)
+            np.testing.assert_allclose(loaded.weights, [2.0, 1.0])
+            values = np.asarray([[1.0, 3.0], [2.0, 4.0]], dtype=np.float64)
+            evaluator = _joblib_evaluator(payload, (("prediction", 1),))
+            result = evaluator(memoryview(values), 2, 2, "float64", 0, 0.0)
+            np.testing.assert_allclose(result, [[5.0], [8.0]])
+
+            large_model = _LinearPrediction()
+            large_model.padding = np.zeros(4 * 1024 * 1024, dtype=np.float64)
+            large_manifest = fno.export.sklearn(
+                large_model,
+                path=root / "large.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+            )
+            large_metadata = fno._native.read_model_manifest(str(large_manifest))
+            embedded = _payload(large_manifest, large_metadata)
+            self.assertIsInstance(embedded, _EmbeddedPayload)
+            mapped, storage, mode = _load_joblib(embedded, joblib)
+            self.assertIsInstance(mapped.padding, np.memmap)
+            self.assertEqual(mode, "direct")
+            self.assertEqual(embedded.offset % 64, 0)
+            self.assertIsNone(storage)
+            self.assertTrue(Path(mapped.padding.filename).samefile(large_manifest))
+            self.assertGreaterEqual(mapped.padding.offset, embedded.offset)
+
+            with patch(
+                "foamnordic.execution.resident.inspect.signature",
+                return_value=inspect.Signature(),
+            ):
+                staged, staged_storage, staged_mode = _load_joblib(
+                    embedded, joblib
+                )
+            self.assertEqual(staged_mode, "staged")
+            self.assertIsNotNone(staged_storage)
+            self.assertIsInstance(staged.padding, np.memmap)
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_equinox_model_exports_tree_metadata_and_evaluates(self) -> None:
+        try:
+            import equinox as eqx
+            import jax
+            import jax.numpy as jnp
+            import numpy as np
+        except ImportError:
+            self.skipTest("Equinox test dependencies are unavailable")
+        from foamnordic.execution.resident import _equinox_evaluator
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = eqx.nn.Linear(2, 1, key=jax.random.PRNGKey(42))
+            manifest = fno.export.equinox(
+                model,
+                path=root / "closure.fnom",
+                inputs={"features": fno.Tensor.vector(components=2, dtype="float32")},
+                outputs={"prediction": fno.Tensor.scalar(dtype="float32")},
+            )
+            metadata = fno._native.read_model_manifest(str(manifest))
+            self.assertEqual(metadata["format"], "equinox")
+            payload = BytesIO(fno._native.read_model_payload(str(manifest)))
+            evaluator = _equinox_evaluator(
+                payload, (("prediction", 1),), "float32"
+            )
+            values = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+            result = evaluator(memoryview(values), 2, 2, "float32", 0, 0.0)
+            expected = jax.vmap(model)(jnp.asarray(values))
+            np.testing.assert_allclose(result, expected, rtol=1e-6)
+
+
+if __name__ == "__main__":
+    unittest.main()

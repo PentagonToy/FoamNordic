@@ -1,0 +1,17 @@
+# FoamNordic runtime environment
+
+@OPENFOAM_ENVIRONMENT@
+
+export FOAM_USER_DIR=@FOAM_USER_DIR@
+export FOAM_USER_APPBIN="$FOAM_USER_DIR/platforms/$WM_OPTIONS/bin"
+export FOAM_USER_LIBBIN="$FOAM_USER_DIR/platforms/$WM_OPTIONS/lib"
+
+export PATH="$FOAM_USER_APPBIN${PATH:+:$PATH}"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    export DYLD_LIBRARY_PATH="$FOAM_USER_LIBBIN${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+else
+    export LD_LIBRARY_PATH="$FOAM_USER_LIBBIN${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+@EXTRA_ENVIRONMENT@

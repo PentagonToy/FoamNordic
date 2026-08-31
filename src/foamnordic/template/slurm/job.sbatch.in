@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --job-name=@JOB_NAME@              # Job name
+#SBATCH --account=@ACCOUNT@                # Billing project
+#SBATCH --partition=@PARTITION@            # Job partition (queue)
+#SBATCH --time=@TIME_LIMIT@                 # Maximum job duration
+#SBATCH --nodes=@NODES@                     # Number of allocated nodes
+#SBATCH --ntasks=@TASKS@                    # Number of allocated tasks
+#SBATCH --cpus-per-task=@CPUS_PER_TASK@     # CPU cores allocated per task
+#SBATCH --mem-per-cpu=@MEMORY_PER_CPU@      # Memory reserved per CPU core
+#SBATCH --output=@OUTPUT_PATH@              # Standard output and error
+##SBATCH --mail-type=BEGIN                  # Uncomment to enable mail
+
+set -Eeuo pipefail
+
+@BANNER@
+
+@ENVIRONMENT@
+
+@COMMAND@

@@ -1,0 +1,57 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "constant";
+    object          turbulenceProperties;
+}
+
+simulationType  LES;
+
+LES
+{
+    LESModel        kEqnFjord;
+    turbulence      on;
+    printCoeffs     on;
+    delta           cubeRootVol;
+
+    cubeRootVolCoeffs
+    {
+        deltaCoeff      1;
+    }
+
+    kEqnFjordCoeffs
+    {
+        Ck              0.094;
+        Ce              1.048;
+
+        foamNordicClosure
+        {
+            address          "@FOAMNORDIC_ADDRESS@";
+            sessionId        @FOAMNORDIC_SESSION_ID@;
+            sharedMemory     false;
+            ucx              true;
+
+            inputs
+            (
+                k
+                velocity_grad
+                filter_width
+            );
+
+            inputExpressions
+            (
+                k
+                "grad(U)"
+                delta
+            );
+
+            outputs
+            (
+                nut
+                kProduction
+                kDissipationCoeff
+            );
+        }
+    }
+}

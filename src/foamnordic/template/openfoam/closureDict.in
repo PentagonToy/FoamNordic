@@ -1,0 +1,38 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      foamnordicClosureDict;
+}
+
+address          "@FOAMNORDIC_ADDRESS@";
+sessionId        @FOAMNORDIC_SESSION_ID@;
+sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+ucx              @FOAMNORDIC_UCX@;
+
+// Transport keys consumed by the closure artifact.
+inputs
+(
+    @FOAMNORDIC_INPUT_KEYS@
+);
+
+// OpenFOAM fields or operations evaluated at every native closure call.
+inputExpressions
+(
+    @FOAMNORDIC_INPUT_EXPRESSIONS@
+);
+
+// Solver-owned fields replaced only after a complete atomic response.
+outputs
+(
+    @FOAMNORDIC_OUTPUT_FIELDS@
+);
+
+// Development probe reference; production model adapters ignore these keys.
+probeExpression  "@FOAMNORDIC_PROBE_EXPRESSION@";
+probeOutput      @FOAMNORDIC_PROBE_OUTPUT@;
+probeScale       @FOAMNORDIC_PROBE_SCALE@;
+probeSeed        @FOAMNORDIC_PROBE_SEED@;
+probeExpectFailure @FOAMNORDIC_PROBE_EXPECT_FAILURE@;

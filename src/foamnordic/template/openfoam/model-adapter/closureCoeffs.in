@@ -1,0 +1,11 @@
+foamNordicClosure
+{
+    address          "@FOAMNORDIC_ADDRESS@";
+    sessionId        @FOAMNORDIC_SESSION_ID@;
+    sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+    ucx              @FOAMNORDIC_UCX@;
+
+    inputs           (@INPUT_KEYS@);
+    inputExpressions (@OPENFOAM_INPUT_EXPRESSIONS@);
+    outputs          (@OUTPUT_FIELDS@);
+}

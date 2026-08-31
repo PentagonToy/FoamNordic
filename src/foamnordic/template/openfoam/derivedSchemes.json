@@ -1,0 +1,18 @@
+{
+  "grad": {
+    "section": "gradSchemes",
+    "scheme": "Gauss linear"
+  },
+  "curl": {
+    "section": "gradSchemes",
+    "scheme": "Gauss linear"
+  },
+  "div": {
+    "section": "divSchemes",
+    "scheme": "Gauss linear"
+  },
+  "laplacian": {
+    "section": "laplacianSchemes",
+    "scheme": "Gauss linear corrected"
+  }
+}

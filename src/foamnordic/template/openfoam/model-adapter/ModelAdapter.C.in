@@ -1,0 +1,18 @@
+#error "FoamNordic model-adapter scaffold: define the equation contract before building"
+
+#include "@MODEL_CLASS@.H"
+
+namespace Foam::@MODEL_NAMESPACE@ {
+
+@DEFINE_CONSTRUCTOR_AND_INITIALIZE_CLOSURE_HOOK@
+
+@DEFINE_REQUIRED_OPENFOAM_OVERRIDES@
+
+@DEFINE_NATIVE_ENTRY_POINT@
+{
+    @BIND_SOLVER_OWNED_FIELDS@
+    @INVOKE_CLOSURE_AT_MODEL_SITE@
+    @CORRECT_RETURNED_FIELD_BOUNDARIES@
+}
+
+}  // namespace Foam::@MODEL_NAMESPACE@

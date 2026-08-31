@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+@BANNER@
+
+@ENVIRONMENT@
+
+cd @WORKING_DIRECTORY@
+
+@COMMAND@
