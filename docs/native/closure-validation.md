@@ -8,13 +8,21 @@ fitted model.
 
 ## Analytical LES parity
 
-A separate 2026-08-22 gate compared stock OpenFOAM LES models against
-mathematically equivalent float64 Equinox models executed through FoamNordic.
-This is a closure-path parity test rather than a learned-model accuracy test:
-there is no fitting error, and both runs use the same mesh, initial fields,
-time scheme, pressure-velocity algorithm, filter width, and coefficients.
+These gates compare stock OpenFOAM LES models with the same equations executed
+through FoamNordic. They test the closure path rather than learned-model
+accuracy: there is no fitting error, and each pair preserves its mesh, initial
+fields, numerical schemes, pressure-velocity algorithm, filter width, and
+coefficients.
 
-The Smagorinsky artifact implements the OpenFOAM.com relation
+### Adapter contracts and equations
+
+`nutFjord` is not a turbulence equation of its own. It is the general
+OpenFOAM adapter for algebraic LES closures with the contract
+`grad(U)[9], delta[1] -> nut[1]`. Mathematical Smagorinsky and WALE both use
+this adapter by supplying a different `Operator.function()` while OpenFOAM
+continues to own boundary correction and momentum-equation coupling.
+
+The Smagorinsky function implements the OpenFOAM.com relation
 
 ```text
 D = symm(grad(U))
@@ -25,8 +33,22 @@ k = ((-b + sqrt(b^2 + 4ac))/(2a))^2
 nut = Ck delta sqrt(k)
 ```
 
-The k-equation artifact returns the three algebraic terms consumed by
-`kEqnFjord`:
+The WALE function uses
+
+```text
+G   = grad(U)
+S   = symm(G)
+Sd  = dev(symm(G G))
+sd2 = Sd : Sd
+s2  = S : S
+nut = (Cw delta)^2 sd2^(3/2) / (s2^(5/2) + sd2^(5/4))
+```
+
+When the denominator is zero, the WALE function returns its analytical limit,
+`nut=0`, without introducing an arbitrary absolute epsilon.
+
+`kEqnFjord` has a different contract because OpenFOAM transports `k`. Its
+function returns the three algebraic terms consumed by that equation:
 
 ```text
 nut               = Ck delta sqrt(k)
@@ -35,8 +57,14 @@ kDissipationCoeff = Ce sqrt(k)/delta
 ```
 
 The transported k equation, discretization, relaxation, bounds, boundary
-correction, and `fvOptions` remain in OpenFOAM. Both models use `Ck=0.094`,
-`Ce=1.048`, and `cubeRootVol` filter width.
+correction, and `fvOptions` remain in OpenFOAM. The Smagorinsky and k-equation
+gates use `Ck=0.094`, `Ce=1.048`, and `cubeRootVol` filter width.
+
+### Apple lid-driven-cavity parity
+
+The 2026-08-22 gate compared stock Smagorinsky and k-equation models against
+mathematically equivalent float64 Equinox artifacts executed through
+FoamNordic.
 
 The test used the 16,384-cell lid-driven cavity for 100 steps from `t=0` to
 `t=0.1` with `deltaT=0.001`, serial OpenFOAM.com v2606 on Apple Silicon, and
@@ -73,10 +101,48 @@ The gate is reproducible with
 It creates only isolated copies and writes a machine-readable
 `analytical-les-parity.json` report.
 
-## Linux pitzDaily function and learned closure
+### Linux pitzDaily WALE parity
 
-A 2026-08-23 Linux/OpenFOAM.com v2512 experiment extended the analytical LES
-check to the 12,225-cell `pitzDaily` case. All five serial trajectories used
+A 2026-08-24 serial OpenFOAM.com v2512 comparison exercised WALE through the
+same general `nutFjord` contract used by the mathematical Smagorinsky closure.
+Both paths used the 12,225-cell `pitzDailyWALE` mesh, `pimpleFoam`,
+`cubeRootVol`, `Cw=0.325`, `deltaT=1e-5`, and 2,000 steps from `t=0` to
+`t=0.02`. The stock path selected OpenFOAM `WALE`; the FoamNordic path used a
+resident `Operator.function()` with the contract `grad(U)[9], delta[1] ->
+nut[1]`.
+
+The zero-denominator policy defined above keeps the result independent of
+floating-point precision, field scale, and MPI decomposition.
+
+The final fields at `t=0.02` were compared over every cell:
+
+| Field | MAE | RMSE | Max absolute difference | Relative L2 |
+| --- | ---: | ---: | ---: | ---: |
+| `U` | 0 | 0 | 0 | 0 |
+| `p` | 0 | 0 | 0 | 0 |
+| `nut` | 2.456e-16 | 2.652e-14 | 2.932e-12 | 2.398e-9 |
+
+The velocity and pressure files therefore agree exactly at their retained
+precision. The eddy-viscosity difference remains below `2.4e-9` in relative
+L2 and is consistent with evaluation-order roundoff across the native WALE
+and resident function implementations.
+
+| Path | Started (Europe/Helsinki) | Host | OpenFOAM ExecutionTime [s] | OpenFOAM ClockTime [s] | FoamNordic total [s] | Orchestration [s] |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| Stock WALE | 18:14:28 | `roihu-cpu-login1` | 47.17 | 49 | n/a | n/a |
+| Mathematical WALE through `nutFjord` | 18:28:26 | `rc5283` | 52.21 | 56 | 57 | 1 |
+
+The hosts differ, so the seven-second solver wall-time difference is only
+indicative. The FoamNordic timing does verify the corrected normal-shutdown
+lifecycle: after OpenFOAM completed, Longship signalled the resident
+ClosureHost immediately and finalized in one second instead of consuming the
+30-second termination grace period before sending the signal.
+
+## Linux pitzDaily learned closure
+
+A 2026-08-23 Linux/OpenFOAM.com v2512 experiment used the analytical
+Smagorinsky result as a reference for learned closures on the 12,225-cell
+`pitzDaily` case. All five serial trajectories used
 `pimpleFoam`, `cubeRootVol`, `Ck=0.0265463553`, `Ce=1.048`,
 `deltaT=1e-5`, and 2,000 steps from `t=0` to `t=0.02`. `blockMesh`
 produced the same strict mesh for every comparison and `checkMesh` reported
