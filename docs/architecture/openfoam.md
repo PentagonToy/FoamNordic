@@ -372,6 +372,10 @@ than the allocated CPU count.
 
 ## Dictionary
 
+Longship appends the ABI-specific FoamNordic integration library to an existing
+top-level `controlDict/libs` list. Libraries required by a custom solver or its
+run-time-selected models are preserved.
+
 ```foam
 fjordClosure
 {

@@ -1045,8 +1045,13 @@ def prepare_case(
         library_value = str(openfoam_library.resolve()).replace('"', '\\"')
         libraries = quote_command((f'("{library_value}")',))
         commands.append(
-            f"if foamDictionary {control_path} -entry libs >/dev/null 2>&1; "
-            f"then foamDictionary {control_path} -entry libs -set {libraries}; "
+            f"existing_libraries=$(foamDictionary {control_path} -entry libs "
+            "-value 2>/dev/null || true); "
+            "if [ -n \"$existing_libraries\" ]; then "
+            "existing_libraries=$(printf '%s' \"$existing_libraries\" | "
+            "sed 's/^[(][[:space:]]*//; s/[[:space:]]*[)]$//'); "
+            f'libraries="(${{existing_libraries}} \\"{library_value}\\")"; '
+            f"foamDictionary {control_path} -entry libs -set \"$libraries\"; "
             f"else foamDictionary {control_path} -entry libs -add {libraries}; fi"
         )
     if longship.case.ranks > 1:
