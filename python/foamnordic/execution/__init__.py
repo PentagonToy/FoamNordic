@@ -1,1 +1,1 @@
-"""Longship launch, lifecycle, scheduling, and resident execution internals."""
+"""Case preparation, launch, scheduling, lifecycle, and resident execution."""

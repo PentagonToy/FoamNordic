@@ -1,4 +1,4 @@
-# Native closure engine
+# Native runtime
 
 FoamNordic treats a learned closure as a field contract, not as a particular
 ML framework. Each exchange declares named input and output fields, element
@@ -27,7 +27,7 @@ solver-owned output field is modified.
 Progress-variable combustion can use:
 
 ```text
-inputs:  c_tilde, c_var, T_tilde
+inputs:  c, c_var, T
 output:  omega_c
 ```
 
@@ -83,7 +83,7 @@ during a partial batch is an error rather than an implicit incomplete result.
 `ModelKernel` is deliberately smaller than a framework API. It receives the
 validated input map, the sorted active-cell indices, exchange index, and
 physical time, and returns named prediction tensors. Native ONNX, a compiled
-closure, or a later Python worker may implement that boundary without changing
+closure, or a managed Python worker may implement that boundary without changing
 OpenFOAM coupling, bypass rules, or Rune/Fjord transport.
 
 An input and output may intentionally share a field name, such as `U -> U`.
@@ -105,7 +105,7 @@ wait for a missing completion marker or apply a partial prediction.
 This error boundary is exercised over both the socket-backed channel and the
 native SHM ring used after a same-node upgrade.
 
-The current end-to-end native test sends `c_tilde`, `c_var`, and `T_tilde`
+The current end-to-end native test sends `c`, `c_var`, and `T`
 through a real Fjord socket channel. It evaluates only cells selected by
 `c_var`, reconstructs the full `omega_c` field, and verifies the matching
 completion marker.
@@ -135,10 +135,9 @@ and physics kernel rather than the transport state machine.
 
 ## Language boundary
 
-C++ owns field views, exchange state, memory, and communication. Fortran is
-reserved for dense numerical policies or tabulation kernels where it improves
-clarity or performance. A later stable C ABI lets C++, Fortran
-`ISO_C_BINDING`, and Python bindings use the same state machine.
+C++ owns field views, exchange state, memory, and communication. Managed
+Python workers receive validated dense arrays only at the model boundary;
+they do not own OpenFOAM fields or lifecycle state.
 
 Native diagnostic lines use this form:
 

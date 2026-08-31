@@ -10,9 +10,9 @@ reaction_rate = fno.Closure(
     name="reactionRate",
     operator=fno.Operator.model(MODEL_DIR / "reaction-rate.fnom"),
     inputs={
-        "progress": fno.field("c_tilde"),
+        "progress": fno.field("c"),
         "variance": fno.field("c_var"),
-        "temperature": fno.field("T_tilde"),
+        "temperature": fno.field("T"),
     },
     outputs={
         "reaction_rate": fno.field("omega_c"),
@@ -21,7 +21,7 @@ reaction_rate = fno.Closure(
 
 manifold = fno.Combustion.Manifold.beta_fdf(
     table=MODEL_DIR / "flamelet.fnom",
-    progress=fno.field("c_tilde"),
+    progress=fno.field("c"),
     variance=fno.field("c_var"),
     outputs={
         "species": fno.fields("Y_*"),
@@ -42,7 +42,7 @@ longship = fno.Longship(
 ```
 
 `progress`, `variance`, `temperature`, and `reaction_rate` are semantic port
-names. `c_tilde`, `c_var`, `T_tilde`, and `omega_c` are case bindings and may
+names. `c`, `c_var`, `T`, and `omega_c` are case bindings and may
 differ between solver families. The reaction-rate closure and manifold must
 bind the same progress and variance fields.
 
@@ -58,7 +58,7 @@ deliberately produces the ordered native tensor contract before workers start.
 
 The first beta-FDF contract accepts a pre-integrated `.fnom` table only.
 Runtime Python quadrature is deliberately excluded from the native hot path.
-See the [native combustion contract](../internals/combustion-contract.md) for
+See the [native combustion contract](../architecture/combustion.md) for
 equation ordering, dimensions, parallel identity, and acceptance requirements.
 
 ## Native progress-variable coordinator

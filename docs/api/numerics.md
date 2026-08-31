@@ -1,4 +1,4 @@
-# Math API
+# Numerical APIs
 
 `fno.Math` is the backend-neutral numerical vocabulary used by closure and
 transform functions. `fno.Field` separately declares OpenFOAM fields, geometry,
@@ -98,3 +98,32 @@ This matters particularly for conservative expressions such as
 This separation lets the same numerical function run with NumPy for a small
 test and with JAX for tracing or export without silently replacing OpenFOAM's
 finite-volume operators.
+
+## Random keys
+
+FoamNordic uses immutable, backend-neutral keys for stochastic closures and
+field transforms:
+
+```python
+key = fno.Random.key(42, scope="global")
+
+def perturb(velocity, *, key):
+    scale_key, noise_key = fno.Random.split(key, 2)
+    scale = fno.Random.uniform(scale_key, low=0.995, high=1.005)
+    noise = fno.Random.normal(noise_key, shape=velocity.shape, std=1.0e-6)
+    return {"velocity": velocity * scale + noise}
+```
+
+Keys are never consumed. Reusing a key repeats a draw; split it when one
+function needs independent draws. The public distributions are `uniform`,
+`normal`, `integers`, and `bernoulli`.
+
+At execution time FoamNordic folds the stable program identity and exchange
+index into the root key. `scope="global"` gives every solver rank the same
+invocation key. `scope="rank"` additionally folds in the negotiated rank.
+`fno.Random.to_jax(key)` materializes a JAX typed key; Equinox residents do so
+automatically. NumPy and JAX are reproducible within their backend but do not
+promise bit-identical samples across backends.
+
+The `seed=` declaration and `rng`/`seed` function injections remain available
+for source compatibility. New code should pass `key=`.

@@ -4,193 +4,92 @@
 
 # FoamNordic
 
-FNOM (FoamNordic Model) is FoamNordic's self-contained, backend-neutral
-execution artifact. It binds a backend payload to the tensor contract,
-preprocessing metadata, runtime requirements, and compatibility rules needed
-by coupled simulations.
+FoamNordic couples OpenFOAM fields to mathematical and machine-learning
+operators without making Python part of the solver loop. The same `Longship`
+interface runs an unchanged OpenFOAM case, a field transform, an equation-level
+closure, or a progress-variable combustion model.
 
-FoamNordic is a native C++ and Python framework for running ordinary OpenFOAM
-cases and machine-learning closure cases through the same reproducible
-pipeline. Closure exchange stays outside Python: Fjord carries atomic fields
-over SHM, UDS, UCX, or TCP, while Longship owns placement, launch, lifecycle,
-logs, observations, and results.
+FNOM is FoamNordic's self-contained model artifact. It stores the executable
+payload together with tensor contracts, scaling, runtime requirements, and
+compatibility metadata. Fjord moves fields over shared memory, Unix sockets,
+UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
 
-FoamNordic is active research software. The current stable package version is
-`1.0.4`.
+Current release: `1.0.4` (Python 3.11–3.12).
 
 ## Install
-
-The PyPI installation is intentionally simple:
 
 ```console
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install foamnordic
-
-foamnordic --version
-foamnordic --help
-foamnordic dir
+python -m pip install foamnordic
 ```
 
-The same installation includes ONNX packaging, compiled and Joblib/scikit-learn
-models, and JAX/Equinox resident models. No backend-specific install command is
-needed.
-
-Binary wheels include the native Python control runtime and a compact source
-build kit for the OpenFOAM ABI selected on the machine:
+Wheels include the Python API and native control runtime. Build the small
+OpenFOAM integration for each compiler/ABI used on the machine:
 
 ```console
-# HPC
+# Linux/HPC
 module load openfoam/2512
 foamnordic build
 
-# Apple Silicon: run inside the OpenFOAM.app shell
+# Apple Silicon with OpenFOAM.app
 openfoam
 foamnordic build
 ```
 
-The same command works after PyPI, GitHub, or editable installation. It builds
-the integration library, reference progress-variable solver, and native ONNX
-ClosureHost with the active OpenFOAM compiler rather than reusing ABI-unsafe
-generic binaries. The supported platform archive for ONNX Runtime 1.28.0 is
-verified and cached automatically.
+The runtime is installed below
+`~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple
+OpenFOAM ABIs can coexist and are selected from `Case.of_cmd` at launch.
+`FOAMNORDIC_OPENFOAM_LIB` is an advanced override, not a normal setup step.
 
-### Install from this repository
-
-Use Python 3.11 or 3.12. A standalone interpreter, an ordinary writable virtual
-environment, Conda, or an HPC Python module can seed the dedicated FoamNordic
-environment. Non-relocatable read-only container interpreters cannot.
+To use the current source directly:
 
 ```console
 git clone https://github.com/PentagonToy/FoamNordic.git
 cd FoamNordic
 python -m pip install -e ./python
-
-# macOS: enter the OpenFOAM.app shell, then build.
-openfoam
-foamnordic build
-
-# HPC alternative:
 module load openfoam/2512
 foamnordic build
 ```
 
-This is a wheel-free developer installation: changes in the checkout are used
-directly. `foamnordic build` detects the repository or installed build kit, the
-active Python environment, and the loaded OpenFOAM version. Pass `--source`
-only to select a different checkout explicitly.
-The result is installed below
-`~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`, so different
-OpenFOAM versions and compiler ABIs can coexist.
-Each build also writes `runtime.yaml` beside that runtime. The profile records
-the detected operating system, architecture, OpenFOAM ABI, and local MPI
-policy. On macOS, FoamNordic isolates the external MPI launcher from
-OpenFOAM.app's dynamic-library environment and restores OpenFOAM libraries only
-for solver ranks. `FOAMNORDIC_MPIRUN=/path/to/mpirun` remains an explicit
-override; Linux scheduler launches continue to use `srun` unchanged.
-On an offline system, set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX
-Runtime 1.28.0 installation before building. Pure OpenFOAM/Joblib workflows can
-explicitly omit the native ONNX host with `foamnordic build --without-onnx`.
+On macOS, replace the module command with `openfoam`. Offline ONNX builds may
+set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive;
+workflows that do not need native ONNX can use `foamnordic build --without-onnx`.
 
-GitHub can also be installed without keeping a checkout:
-
-```console
-pip install \
-  "git+https://github.com/PentagonToy/FoamNordic.git#subdirectory=python"
-module load openfoam/2512
-foamnordic build
-```
-
-At launch, `Case.of_cmd` is probed in an isolated shell and selects the matching
-runtime automatically. `FOAMNORDIC_OPENFOAM_LIB` is only an advanced override;
-normal notebooks do not set it or inspect `site-packages` paths.
-
-The script selects a usable interpreter and rejects personal non-relocatable
-Tykky-style paths. Site-managed Python modules remain supported even when
-their implementation uses a read-only container internally. Any compatible
-local or virtual interpreter may be selected explicitly with
-`FOAMNORDIC_SEED_PYTHON=/path/to/python3.12`.
-
-On an HPC system, first load a site-provided Python module. Module names vary;
-for example, CSC systems provide `python-data`:
-
-```console
-module load python-data
-bash tools/python/createVirtual.sh
-
-# Repeat the module load before every later activation.
-module load python-data
-source ../Virtual/FoamNordic/bin/activate
-```
-
-When a site Python module is loaded, the installer uses
-`venv --system-site-packages` so the supported module stack remains available
-while FoamNordic additions stay in their own marked environment.
-
-## Python API
-
-Grouped namespaces use PascalCase, classes use PascalCase, and functions use
-snake_case. All filesystem inputs accept strings, `pathlib.Path`, and other
-text `PathLike` objects.
+## Run an OpenFOAM case
 
 ```python
 from pathlib import Path
 import foamnordic as fno
 
 case = fno.OpenFOAM.Case(
-    name="NACA4412",
-    case_dir=Path("cases/NACA4412"),
-    run_dir="output/NACA4412",
+    name="lidDrivenCavity",
+    case_dir=Path("cases/lidDrivenCavity"),
+    run_dir=Path("output"),
     of_cmd="openfoam/2512",
+    application="pimpleFoam",
 )
-case.initialize(ranks=16, mesh=None, validate_mesh=True)
+case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
 
-print(case.fields.keys())
-print(case.field("U").internal_value)
-
-longship = fno.Longship(case=case)
-run = longship.launch()
-run.summary()
-
-# Later, when a terminal result is needed:
-result = run.stop(force=False, timeout=900, progress=True)
+run = fno.Longship(case=case).launch()
+result = run.stop(timeout=900, progress=True)
 result.summary(style="compact")
 
 post = result.postprocess
-statistics = post.statistics(["U", "p"], time_idx=-1, verbose=True)
+post.statistics(["U", "p"], time_idx=-1, verbose=True)
 ```
 
-`0/` is used when present. If a source case contains only `0.orig/`, FoamNordic
-reads it as the initial state and copies it to `0/` only inside the isolated run
-directory. The source case is never modified. OpenFOAM directives such as
-`#calc`, `#include`, and variable references are resolved with
-`foamDictionary -expand` through the declared OpenFOAM environment.
-`of_cmd="openfoam/2512"` is shorthand for loading that environment module;
-provide a complete command such as `source /opt/OpenFOAM/bashrc` for another
-installation, or use `None` when OpenFOAM is already available on `PATH`.
+The source case is copied into an isolated run directory and is never modified.
+`0.orig/` is accepted when `0/` is absent. With no scheduler, rank one runs
+directly and multiple ranks use the MPI launcher from the declared OpenFOAM
+environment.
 
-On Apple Silicon with OpenFOAM.app, its command is used as a wrapper. Local MPI
-therefore needs no separate launcher configuration:
+## Couple a model or function
 
-```python
-case = fno.OpenFOAM.Case(
-    name="lidDrivenCavity",
-    case_dir=case_dir,
-    run_dir=output_dir,
-    of_cmd="openfoam",
-    shell="zsh",
-    application="pimpleFoam",
-    ranks=6,
-)
-run = fno.Longship(case=case).launch()
-```
-
-With no `scheduler`, rank one runs directly and multiple ranks use the MPI
-launcher supplied by the declared OpenFOAM environment.
-
-General model-driven field mutation is kept distinct from turbulence or
-combustion closure semantics:
+`Transform` mutates ordinary registered fields at a solver stage. `Closure`
+enters an equation-specific adapter such as `nutFjord`, `kEqnFjord`, or
+`reactionRateFjord`.
 
 ```python
 transform = fno.Transform(
@@ -199,131 +98,69 @@ transform = fno.Transform(
     inputs={"pressure": fno.Field("p")},
     outputs={"velocity": fno.Field("U")},
     at="time_step_start",
-    key=fno.Random.key(42, scope="global"),
 )
 
 run = fno.Longship(case=case, transforms=(transform,)).launch()
 ```
 
-Several independent transforms may be attached to one run. Each receives its
-own Fjord session and resident worker, while Longship starts, monitors, and
-stops the group as one fail-together workload. Writing the same field at
-different stages is supported; two programs writing the same field at the same
-stage are rejected as ambiguous.
+FNOM selects compiled C++, ONNX, Joblib, or Equinox internally, so model
+loading does not alter the solver-facing API. Stochastic functions use
+`fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
 
-FNOM selects ONNX, compiled C++, Joblib, or Equinox internally. Stochastic field programs
-use the backend-neutral `fno.Random.Key`; the default root key is 42 and each
-program receives an exchange-specific derivation. `scope="global"` shares one
-invocation key across ranks and `scope="rank"` derives independent rank keys.
-Stock OpenFOAM applications
-support the exact `time_step_start` and `time_step_end` boundaries; inner
-corrector stages remain available to solver-native integrations.
+## Slurm resources
 
-See the [run-control API](docs/api/run-control-api.md) for closure,
-observation, Slurm, and pure-OpenFOAM examples.
-Stored fields and baseline/ML comparisons are covered by the
-[postprocess API](docs/api/postprocess-api.md).
+OpenFOAM and the node-local model worker have explicit resource declarations.
+One model worker is placed on every OpenFOAM node only when a coupled program
+is present.
 
-## Native C++ build
+```python
+openfoam_resources = fno.Slurm.openfoam(
+    nodes=2,
+    ntasks=16,
+    cpus_per_task=1,
+    mem_per_cpu="2G",
+)
+model_resources = fno.Slurm.model(
+    cpus_per_task=4,
+    mem_per_cpu="2G",
+)
+scheduler = fno.Slurm(
+    account="<allocation-account>",
+    partition="medium",
+    time="00:15:00",
+    openfoam=openfoam_resources,
+    model=model_resources,
+)
 
-Developers can build the native libraries and tests directly:
+case.initialize(ranks=16, mesh=None, validate_mesh=True)
+run = fno.Longship(case=case, scheduler=scheduler, transforms=(transform,)).launch()
+```
+
+Same-node bulk exchange uses shared memory; multi-node runs place a resident
+worker beside each node's solver ranks. The two-node identity gate has exact
+`U` and `p` parity on OpenFOAM v2512.
+
+## Development
 
 ```console
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFOAMNORDIC_TESTS=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
+python -m unittest discover -s python/tests -v
 ```
 
-Optional native developer backends are selected explicitly, for example with
-`FOAMNORDIC_ONNX_RUNTIME=ON`, `FOAMNORDIC_ONNX_RUNTIME_ROOT=...`, or
-`FOAMNORDIC_UCX=ON`. For the normal source workflow, the compact frontend is
-preferred:
-
-```console
-foamnordic build
-foamnordic dir
-foamnordic clobber --dry-run
-```
-
-`clobber` removes only directories carrying FoamNordic's exact ownership
-marker, including ABI-specific caches and runtimes. Source files and unmarked
-directories are preserved.
-
-## Target platforms
-
-| Target | Architecture | OpenFOAM |
-| --- | --- | --- |
-| Linux | `x86_64` | OpenFOAM v2512; primary HPC validation target |
-| Linux | `aarch64` | Supported wheel and native build target |
-| macOS | Apple Silicon (`arm64`) | Native OpenFOAM v2512/v2606 development target |
-
-The Apple Silicon setup uses
-[OpenFOAM.app](https://github.com/gerlero/openfoam-app), which provides native
-OpenFOAM for macOS. For example:
-
-```console
-brew install gerlero/openfoam/openfoam@2512
-openfoam
-```
-
-OpenFOAM.app documents macOS 14 or later and Apple Silicon as its current
-native prerequisites.
+Supported build targets are Linux `x86_64`, Linux `aarch64`, and Apple Silicon.
+Linux/OpenFOAM v2512 is the primary HPC target; OpenFOAM.app provides the
+native macOS environment.
 
 ## Documentation
 
-### Overview
+- [Python API](docs/api/README.md)
+- [Architecture](docs/architecture/README.md)
+- [Benchmarks and validation](docs/benchmarks/README.md)
+- [Tutorials](tutorials/README.md)
+- [Development and publishing](others/README.md)
 
-- [Documentation index](docs/README.md)
-- [Python package guide](python/README.md)
-- [Backend-neutral mathematics](docs/api/math-api.md)
-- [Reproducible random keys](docs/api/random-api.md)
-- [PyPI README](others/README.pypi.md)
-- [Maintainer assets and wheel preparation](others/README.md)
-
-### Architecture
-
-- [Architecture index](docs/architecture/README.md)
-- [Control and data planes](docs/architecture/control-and-data-planes.md)
-- [Declarative plans](docs/architecture/declarative-plans.md)
-- [Execution topologies](docs/architecture/execution-topologies.md)
-- [Model execution](docs/architecture/model-execution.md)
-- [Observations and retention](docs/architecture/observations-and-retention.md)
-
-### Python API
-
-- [Python API index](docs/api/README.md)
-- [API design](docs/api/design.md)
-- [Run control](docs/api/run-control-api.md)
-- [Postprocessing](docs/api/postprocess-api.md)
-- [Combustion](docs/api/combustion-api.md)
-- [Mathematics](docs/api/math-api.md)
-- [Random keys](docs/api/random-api.md)
-
-### Native internals
-
-- [Native documentation index](docs/internals/README.md)
-- [Closure engine](docs/internals/closure-engine.md)
-- [Data plane](docs/internals/data-plane.md)
-- [Field pipeline](docs/internals/field-pipeline.md)
-- [Model artifacts](docs/internals/model-artifacts.md)
-- [OpenFOAM adapter](docs/internals/openfoam-adapter.md)
-- [Placement and lifecycle](docs/internals/placement-and-lifecycle.md)
-
-### Benchmarks and validation
-
-- [Benchmark index](docs/benchmarks/README.md)
-- [Transport and performance](docs/benchmarks/transport-and-performance.md)
-- [HPC transport](docs/benchmarks/hpc-transport.md)
-- [OpenFOAM cases](docs/benchmarks/openfoam-cases.md)
-- [Closure validation](docs/benchmarks/closure-validation.md)
-- [Remaining validation gates](docs/benchmarks/validation-gates.md)
-
-## License
-
-FoamNordic is distributed under the
-[GNU General Public License v3.0](LICENSE).
-
----
-
-Developed by **Hanseul Kang** at the Aalto University Energy and Mechanical
-Engineering Department. Project supervision by **Shervin Karimkashi**.
+FoamNordic is GPL-3.0 licensed research software. It is developed by
+**Hanseul Kang** at Aalto University under the supervision of
+**Shervin Karimkashi**.

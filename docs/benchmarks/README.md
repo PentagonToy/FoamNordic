@@ -11,7 +11,7 @@ not confused with architectural promises.
 | [OpenFOAM cases](openfoam-cases.md) | Laminar, RAS, LES, combustion, and copied-case compatibility evidence |
 | [Closure validation](closure-validation.md) | Mathematical parity and learned-closure accuracy and timing |
 | [Compiled estimator](compiled-estimator.md) | Compiled C++ versus Joblib startup, memory, parity, and batch-size crossover |
-| [Validation gates](validation-gates.md) | Remaining HPC and combustion acceptance work |
+| [Acceptance status](acceptance.md) | Completed software gates and remaining combustion acceptance work |
 
 Measurements are development records, not portable performance guarantees.
 Each entry must retain its platform, allocation, payload, build, and numerical

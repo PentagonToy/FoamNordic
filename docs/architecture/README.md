@@ -1,18 +1,70 @@
 # FoamNordic architecture
 
-FoamNordic separates orchestration, model execution, and field transport so a
-notebook, a batch script, or a future service can launch the same native
-closure path without becoming part of every solver call.
+FoamNordic separates declarations, lifecycle, transport, inference, and solver
+integration. Python describes a workload and prepares an isolated case; native
+components own every repeated field exchange.
 
-| Document | Contract |
-|---|---|
-| [Execution topologies](execution-topologies.md) | Attached, orchestrated, and central-accelerator layouts |
-| [Control and data planes](control-and-data-planes.md) | What may cross nodes and which transport carries it |
-| [Model execution](model-execution.md) | ONNX, Equinox, Joblib, native operations, and Python fallback |
-| [Declarative plans](declarative-plans.md) | Loop-free orchestration and native execution plans |
-| [Observations and retention](observations-and-retention.md) | Lightweight monitoring without owning solver progress |
+```text
+Python declaration
+    -> immutable execution plan
+    -> Longship lifecycle
+    -> OpenFOAM adapter <-> Fjord transport <-> ClosureHost
+    -> Result and observations
+```
 
-The authoritative default is **node-local inference**: one ClosureHost is
-attached to every OpenFOAM solver node inside one Longship allocation. This is
-the only topology allowed to become implicit. More expensive topologies must
-be requested explicitly and report their selected data path.
+## Ownership
+
+| Layer | Owns | Does not own |
+| --- | --- | --- |
+| Python API | declarations, validation, case preparation | solver loops and repeated field copies |
+| Longship | placement, startup, readiness, shutdown, logs | equations and model semantics |
+| OpenFOAM adapter | field selection, equation hook, result commit | model loading and scheduling |
+| Fjord | versioned tensor transport | OpenFOAM or ML objects |
+| ClosureHost | FNOM loading and inference | solver state |
+| Solver/model adapter | equations, correction order, thermodynamics | orchestration |
+
+This boundary also applies to combustion. A solver transports progress,
+variance, enthalpy, or mixture-fraction fields; FoamNordic evaluates a declared
+source or manifold; a thin solver adapter validates and commits the result.
+
+## Control and data planes
+
+The control plane may use Python, Slurm, files, and process supervision. The
+data plane carries packed numeric tensors through UDS, SHM, TCP, or UCX. A
+field exchange never passes through a notebook, scheduler command, database,
+or serialized Python object.
+
+Declarations compile before launch. The native plan fixes program order,
+ports, tensor layouts, stages, keys, placement, and observation schedules.
+Runtime code follows that plan and cannot invent fields or reorder closures.
+
+## Placement
+
+Node-local inference is the public placement: one ClosureHost is started per
+solver node and serves the ranks on that node. This keeps model payloads and
+shared memory local while preserving one fail-together Slurm allocation. Local
+runs use the same lifecycle without a scheduler. TCP and UCX remain native
+transport capabilities and validation tools, not a second public placement API.
+
+## Model execution
+
+FNOM is the sole deployed model contract. It contains the tensor contract,
+preprocessing, backend metadata, and payload required at runtime. ONNX and
+compiled estimators execute natively; Joblib and Equinox use a managed Python
+resident. Backend selection remains inside FNOM, so `Operator.model(...)` is
+backend-neutral.
+
+## Documents
+
+| Document | Contents |
+| --- | --- |
+| [Native runtime](runtime.md) | Exchanges, resident execution, bypass, and failures |
+| [Native transport](transport.md) | Rune, Fjord, Harbor, UDS, SHM, TCP, UCX, and MPI layout |
+| [FNOM](fnom.md) | Artifact encoding, compatibility, preprocessing, and trust |
+| [OpenFOAM integration](openfoam.md) | Field bridge, equation adapters, and native build contract |
+| [Combustion](combustion.md) | Progress-variable and manifold ownership and acceptance gates |
+| [Lifecycle](lifecycle.md) | Node-local placement, resource plans, startup, and shutdown |
+| [Observations](observations-and-retention.md) | Monitoring, reduction, retention, and backpressure |
+
+Measured behavior belongs in [benchmarks and validation](../benchmarks/README.md),
+not in architecture promises.

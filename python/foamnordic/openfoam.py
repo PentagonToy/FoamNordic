@@ -8,7 +8,7 @@ import shlex
 from types import MappingProxyType
 from typing import Mapping
 
-from ._openfoam_reader import Field, read_case_fields
+from .core.openfoam_reader import Field, read_case_fields
 from .core.paths import PathInput, path_from
 from .core.validation import require_nonempty, require_positive
 

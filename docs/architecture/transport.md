@@ -1,4 +1,4 @@
-# FoamNordic native data plane
+# Native transport
 
 FoamNordic separates orchestration from field movement. Python may configure
 an experiment, but it must not copy, concatenate, poll, or serialize every
@@ -147,7 +147,7 @@ modify an OpenFOAM field until it acquires and validates that commit record.
 An incomplete batch, mismatched index, or mismatched tensor count fails the
 exchange rather than exposing partial state.
 
-`AtomicFieldExchange` is the transport-independent boundary used by the future
+`AtomicFieldExchange` is the transport-independent boundary used by the
 OpenFOAM adapter. It publishes every configured input field as one batch and
 buffers returned tensors in native memory. Output sizes, types, shapes, names,
 exchange identity, and the final tensor count are all validated before the
@@ -192,7 +192,6 @@ The runtime owns selection; channel classes do not inspect Slurm variables or
 guess topology.
 
 ```text
-same process                          direct view (future)
 same node, SHM negotiated             SHM with UDS control
 same node, no SHM                     UDS
 different node, UCX negotiated        UCX with TCP control
@@ -219,7 +218,7 @@ per rank, one channel per node, or UCX multi-rail operation.
 - Received `Tensor` storage is owned by Harbor until moved to its consumer.
 - SHM slots return to the producer only after the consumer advances its
   sequence counter.
-- Python bindings expose NumPy views only while the native owner remains alive.
+- Managed Python workers receive owned arrays at the inference boundary.
 
 ## Test layout
 

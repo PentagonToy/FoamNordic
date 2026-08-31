@@ -44,11 +44,8 @@ The default `FOAMNORDIC_PURE_END_TIME=1` matches the stock adapter gates. Set
 another end time explicitly for a longer trajectory.
 
 The run writes one immutable result directory and creates `PASS` only after all
-five gates succeed. A cross-node central-host campaign remains a separate
-sixth gate. On sites with one-node development partitions, the preferred
-topology is an existing `interactive` host allocation plus a submitted
-one-node `small` solver allocation, with the host node excluded from the
-client request. It does not require one two-node allocation.
+five combustion gates succeed. Cross-node placement is covered separately by
+the two-node identity gate below.
 
 After the four serial gates have passed, rerun only the MPI gate with:
 
@@ -68,14 +65,15 @@ using an identity field exchange. Use a shared scratch path for the output:
 ```bash
 export FOAMNORDIC_SLURM_ACCOUNT=<allocation-account>
 export FOAMNORDIC_TEST_ROOT=/scratch/<allocation-account>/<user>/Tests/foamnordic-multinode
-export FOAMNORDIC_SLURM_PARTITION=small
+export FOAMNORDIC_SLURM_PARTITION=medium
 
 module load openfoam/2512
 python "$FOAMNORDIC_REPO/tools/hpc/testMultiNodeLongship.py"
 ```
 
 The script requests two nodes and two OpenFOAM tasks, places one ClosureHost
-beside each task, and prints `Two-node Longship gate: PASS` only after final
-`U` and `p` parity succeeds. macOS can exercise the MPI and node-wrapper unit
-paths, but it cannot reproduce separate node-local shared-memory namespaces;
-the real two-node Slurm run is the acceptance gate.
+on each node, and prints `Two-node Longship gate: PASS` only after final `U`
+and `p` parity succeeds. This gate passed on Roihu's full-node `medium`
+partition with exact field parity. Use `test` when two nodes are available;
+`small` accepts only one node. macOS exercises MPI and node-wrapper unit paths
+but cannot reproduce separate node-local shared-memory namespaces.

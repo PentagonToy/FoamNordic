@@ -80,8 +80,8 @@ OpenFOAM releases as Apple Silicon applications and Homebrew packages.
 
 - [Project repository](https://github.com/PentagonToy/FoamNordic)
 - [Installation and build guide](https://github.com/PentagonToy/FoamNordic#install)
-- [Python run-control API](https://github.com/PentagonToy/FoamNordic/blob/main/docs/python/run-control-api.md)
-- [Postprocess API](https://github.com/PentagonToy/FoamNordic/blob/main/docs/python/postprocess-api.md)
-- [Native C++ documentation](https://github.com/PentagonToy/FoamNordic/tree/main/docs/native)
+- [Python run-control API](https://github.com/PentagonToy/FoamNordic/blob/main/docs/api/run-control-api.md)
+- [Postprocess API](https://github.com/PentagonToy/FoamNordic/blob/main/docs/api/postprocess-api.md)
+- [Native architecture](https://github.com/PentagonToy/FoamNordic/tree/main/docs/architecture)
 - [Architecture](https://github.com/PentagonToy/FoamNordic/tree/main/docs/architecture)
 - [License](https://github.com/PentagonToy/FoamNordic/blob/main/LICENSE)

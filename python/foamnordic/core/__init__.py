@@ -1,1 +1,1 @@
-"""Stable declarations, expressions, plans, and validation primitives."""
+"""Stable declarations, field metadata, plans, and validation primitives."""

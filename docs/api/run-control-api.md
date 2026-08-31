@@ -288,7 +288,7 @@ copying an entire vector field through Python.
 The public reproducibility input is `fno.Random.Key`, defaulting to
 `fno.Random.key(42)`. Equinox materializes it as a JAX key internally.
 `scope="global"` gives every rank the same invocation key; `scope="rank"`
-derives independent rank-local keys. See the [Random API](random-api.md).
+derives independent rank-local keys. See the [numerical APIs](numerics.md).
 
 The generic OpenFOAM function-object path guarantees `at="time_step_start"`
 and `at="time_step_end"`. `outer_corrector` and `pressure_corrected` are

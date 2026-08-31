@@ -1,4 +1,4 @@
-# Progress-variable combustion contract
+# Combustion contract
 
 This document defines the native boundary for FoamNordic progress-variable
 combustion. The reaction-rate source adapter, two-program coordinator,
@@ -20,6 +20,23 @@ replaceable closures:
 
 Semantic ports are stable; case field names are bindings. A solver may bind
 `progress` to `c_tilde`, `Chi`, or another scalar without changing the runtime.
+
+Surveyed OpenFOAM combustion implementations consistently reinforce this
+boundary:
+
+- progress, mixture-fraction, variance, enthalpy, and scalar-dissipation
+  equations remain solver responsibilities;
+- reaction-rate models expose narrow correction, equation-source, and heat
+  release entry points;
+- one manifold coordinate is reused for species and thermophysical outputs;
+- boundary lookup and thermodynamic correction belong to the solver adapter,
+  not the table backend;
+- spatially uneven detailed chemistry may require work redistribution, but
+  that scheduling remains separate from the closure contract.
+
+FoamNordic therefore does not copy an FGM, FPV, flamelet, or detailed-chemistry
+solver. It preserves their stable coupling pattern while leaving equations and
+thermodynamic state in the target application.
 
 ## Initial numerical policy
 
@@ -205,8 +222,8 @@ sampling or runtime Python quadrature.
 The frozen fixture at
 `python/tests/fixtures/combustion/beta_fdf_single_cell.json` covers both
 endpoints, a delta state, a uniform beta distribution, and the maximum-variance
-limit. This oracle is the first comparison target for a future native/FNOM
-manifold backend; it must not be called from an OpenFOAM cell loop.
+limit. This oracle validates generated manifold artifacts offline; it must not
+be called from an OpenFOAM cell loop.
 
 The call-order oracle is frozen separately at
 `python/tests/fixtures/combustion/progress_variable_trajectory.json`. It fixes
@@ -226,8 +243,8 @@ sole `rho*omega` conversion in native OpenFOAM code.
 
 Its beta-FDF notebook uses the normalized variance coordinate
 `g = c_var/(c_tilde*(1-c_tilde))`, including explicit delta and endpoint
-limits. That coordinate transformation belongs in artifact metadata or a
-future native manifold preprocessor, not as an implicit field rename. The
+limits. That coordinate transformation belongs in the artifact builder and
+metadata, not as an implicit field rename. The
 operating condition (for example equivalence ratio and pressure), progress
 variable definition, species convention, and training-domain distance also
 need durable metadata. Distance/region diagnostics should be observations;

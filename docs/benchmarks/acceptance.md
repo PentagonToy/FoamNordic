@@ -1,4 +1,4 @@
-# Remaining HPC validation gates
+# Acceptance status
 
 The transport and turbulence foundation already has Linux HPC evidence for
 cross-node TCP, fabric-backed UCX, central ClosureHost lifecycle, two OpenFOAM
@@ -15,7 +15,9 @@ HPC evidence:
 | Full progress-variable coordinator, volumetric rate | Three-step reaction model, manifold, transport, and thermodynamic ordering | 1 node, 1 rank |
 | Full progress-variable coordinator, specific rate | Same three-step coordinator with `rho*omega` conversion | 1 node, 1 rank |
 | Full progress-variable coordinator, specific rate MPI | Three-step decomposition, rank identity, two resident sessions, and reconstructed postprocessing | 1 node, 2 ranks |
-| Attached multi-node identity parity | One node-local host per solver node, distributed MPI, SHM exchange, and unchanged `U`/`p` | 2 nodes, 2 ranks |
+
+The attached multi-node identity gate is complete and recorded below. It is no
+longer part of the remaining-gates table.
 
 The runnable entry points are in [`tools/hpc/`](../../tools/hpc/). They accept
 site paths, account, partition, and environment through variables rather than
@@ -41,7 +43,8 @@ the two paths ran on different node pairs.
 
 ## Deliberately deferred
 
-A central-host cross-node combustion run remains a higher-level sixth gate.
+Cross-node process placement is validated independently by the two-node
+identity gate below.
 It does not need one two-node allocation: on a site with one-node development
 partitions, the preferred topology is a resident ClosureHost in an existing
 `interactive` allocation and a one-node solver job submitted to `small`,

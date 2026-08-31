@@ -1,16 +1,11 @@
 # FoamNordic documentation
 
-The documentation is organized by the question a reader is trying to answer:
-
-| Area | Contents |
+| Area | Use it for |
 | --- | --- |
-| [Architecture](architecture/README.md) | Why FoamNordic is structured this way and how its processes are placed |
-| [Python API](api/README.md) | How users declare cases, closures, schedules, observations, and postprocessing |
-| [Native internals](internals/README.md) | How transport, inference, field exchange, and OpenFOAM integration work |
-| [Benchmarks and validation](benchmarks/README.md) | What has been measured, on which platform, and which gates remain |
+| [Python API](api/README.md) | Cases, closures, models, Slurm, observations, and postprocessing |
+| [Architecture](architecture/README.md) | Native runtime, transport, FNOM, OpenFOAM, combustion, and lifecycle contracts |
+| [Benchmarks](benchmarks/README.md) | Numerical parity, performance measurements, and remaining validation gates |
 
-FoamNordic ships a native C++ data path and an installable Python control
-plane. Architecture describes contracts, API documents describe public use,
-internals describe implementation, and benchmark documents contain evidence.
-
-Return to the [project README](../README.md).
+The API documents describe supported use, architecture documents explain
+ownership and implementation, and benchmark documents preserve measured
+evidence. Return to the [project README](../README.md).

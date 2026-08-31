@@ -31,7 +31,7 @@ foamnordic inspect reaction-rate.fnom --json
 foamnordic validate reaction-rate.fnom
 ```
 
-See the [FNOM format specification](../internals/fnom-format.md) for binary
+See the [FNOM format specification](../architecture/fnom.md) for binary
 layout, trust boundaries, and compatibility policy.
 
 ## Compiled estimator backend

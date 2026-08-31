@@ -1,4 +1,4 @@
-# ClosureHost placement and lifecycle
+# Placement and lifecycle
 
 FoamNordic does not expose a database as part of its scientific workflow.
 The native service that receives fields, applies bypass rules, evaluates a
@@ -143,26 +143,6 @@ SHM and UDS are implementation choices, not placement flags. Failure to create
 SHM may therefore fall back to UDS without changing scheduler placement or
 scientific exchange semantics.
 
-## Central inference
-
-`central` allows a small number of GPU ClosureHost nodes to serve a larger CPU
-OpenFOAM job. It has a separate node identity and may require a separate
-scheduler allocation or heterogeneous job component, but it remains part of
-the same FoamNordic experiment. Solver completion stops it, host failure fails
-the coupled experiment, and cancellation covers both sides.
-
-Automatic central transport selection is:
-
-```text
-UCX capability and connectivity verified   UCX data + TCP control
-otherwise                                  TCP data and control
-```
-
-SHM and UDS are rejected for central hosts. Explicit UCX is strict: it must
-fail when unavailable rather than silently becoming TCP. Automatic mode may
-fall back before the session begins, but a live exchange never switches its
-data path halfway through a batch.
-
-The future orchestration surface that selects these policies is documented
-separately in the [Python API design](../api/design.md). The current source
-tree implements only the native placement contract.
+The public Python API intentionally exposes only attached placement. Native
+TCP and UCX probes validate cross-node transport independently; they do not
+imply a central-host scheduling API.

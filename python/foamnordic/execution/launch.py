@@ -10,7 +10,7 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
-from .._case import PreparedProgram, prepare_case, validate_case
+from .case import PreparedProgram, prepare_case, validate_case
 from .mpi import discover_mpi_policy
 from .run import Run, _internal_path, _launch_local, _launch_process, _sailing_paths
 from .shell import quote_command, toolchain_shell

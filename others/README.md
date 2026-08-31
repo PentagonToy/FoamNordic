@@ -8,6 +8,7 @@ of the runtime package.
 | `README.pypi.md` | PyPI project description |
 | `icon.png` | PyPI and repository artwork |
 | `wheel-maker` | GitHub Actions wheel preparation frontend |
+| [`publishing.md`](publishing.md) | TestPyPI and PyPI release gate |
 
 ## Prepare release wheels
 

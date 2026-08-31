@@ -5,12 +5,12 @@ import tempfile
 import unittest
 
 import foamnordic as fno
-from foamnordic._case import (
+from foamnordic.execution.case import (
     _dimensions,
     render_combustion_dictionary,
     render_combustion_transport_dictionary,
 )
-from foamnordic._openfoam_reader import Field
+from foamnordic.core.openfoam_reader import Field
 
 
 def reaction_rate(

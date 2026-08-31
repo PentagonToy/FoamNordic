@@ -1,4 +1,4 @@
-# FoamNordic OpenFOAM adapter
+# OpenFOAM integration
 
 The first native OpenFOAM adapter is intentionally thin. It is a
 `fvMeshFunctionObject` named `foamNordicExchange`; scheduling remains an
@@ -163,8 +163,8 @@ that need a live network observation stream.
 `every` and `offset` refer to the monotonic closure exchange index, not the
 OpenFOAM time index. Repeated PIMPLE/PISO corrections at one physical time are
 therefore independently observable. Observation records contain `minimum`,
-`maximum`, `mean`, `l2`, and `count`; full fields remain in OpenFOAM unless
-a future explicit sampled-view product is declared.
+`maximum`, `mean`, `l2`, and `count`; full fields remain in OpenFOAM and are
+read later through postprocessing.
 
 ### First solver-integrated LES model
 

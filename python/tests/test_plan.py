@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import foamnordic as fno
-from foamnordic._case import (
+from foamnordic.execution.case import (
     PreparedProgram,
     _expression_layout,
     _mesh_commands,
@@ -162,7 +162,7 @@ class PlanTests(unittest.TestCase):
             output = io.StringIO()
 
             with (
-                patch("foamnordic._case.subprocess.run", return_value=Mock(returncode=0)),
+                patch("foamnordic.execution.case.subprocess.run", return_value=Mock(returncode=0)),
                 redirect_stdout(output),
             ):
                 prepare_case(longship, longship.compile(), verbose=True)
@@ -215,7 +215,7 @@ class PlanTests(unittest.TestCase):
                 (copied / "processor1").mkdir()
                 return Mock(returncode=0)
 
-            with patch("foamnordic._case.subprocess.run", side_effect=decompose) as run:
+            with patch("foamnordic.execution.case.subprocess.run", side_effect=decompose) as run:
                 _, copied, _ = prepare_case(longship, longship.compile())
 
             dictionary = (copied / "system/decomposeParDict").read_text()
@@ -252,7 +252,7 @@ class PlanTests(unittest.TestCase):
                 return Mock(returncode=0)
 
             with (
-                patch("foamnordic._case.subprocess.run", side_effect=incomplete),
+                patch("foamnordic.execution.case.subprocess.run", side_effect=incomplete),
                 self.assertRaisesRegex(RuntimeError, "does not match Case.ranks"),
             ):
                 prepare_case(longship, longship.compile())

@@ -9,11 +9,11 @@ import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 
-from .core.paths import PathInput, path_from
-from .execution.shell import quote_command, toolchain_shell
+from .paths import PathInput, path_from
+from ..execution.shell import quote_command, toolchain_shell
 
 if TYPE_CHECKING:
-    from .openfoam import _Toolchain
+    from ..openfoam import _Toolchain
 
 
 _NATIVE_DIRECTIVE = re.compile(

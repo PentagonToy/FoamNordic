@@ -14,20 +14,23 @@ import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
-from .contracts import adapter_contract
-from .core.expressions import FieldExpression
-from .core.layout import FieldLayout, field_layout
-from .core.managed import mark_generated
-from .core.plan import CompiledPlan
-from .execution.run import (
+from ..contracts import adapter_contract
+from ..core.expressions import FieldExpression
+from ..core.layout import FieldLayout, field_layout
+from ..core.managed import mark_generated
+from ..core.plan import CompiledPlan
+from .run import (
     _initialize_sailing_log,
     _internal_path,
     _sailing_paths,
 )
-from .execution.shell import quote_command, toolchain_shell
+from .shell import quote_command, toolchain_shell
 
 if TYPE_CHECKING:
-    from .core.spec import Closure, Longship, Transform
+    from ..core.spec import Closure, Longship, Transform
+
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 def validate_case(longship: Longship) -> None:
@@ -139,7 +142,7 @@ def _default_template() -> str:
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8")
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/turbulenceProperties.fjord.in"
     )
     if source.is_file():
@@ -152,7 +155,7 @@ def _observation_template() -> str:
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8")
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/observation.in"
     )
     if source.is_file():
@@ -165,7 +168,7 @@ def _transform_template() -> str:
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8")
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/fjordExchange.in"
     )
     if source.is_file():
@@ -180,7 +183,7 @@ def _decomposition_template() -> str:
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8")
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/decomposeParDict.in"
     )
     if source.is_file():
@@ -223,7 +226,7 @@ def _prepare_decomposition(path: Path, ranks: int) -> bool:
 
 def _combustion_template() -> str:
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/combustion-model"
         / "progressVariableFjordProperties.in"
     )
@@ -241,7 +244,7 @@ def _combustion_template() -> str:
 
 def _combustion_transport_template() -> str:
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/combustion-model"
         / "progressVariableTransportProperties.in"
     )
@@ -264,7 +267,7 @@ def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
         "templates/openfoam/derivedSchemes.json"
     )
     source = (
-        Path(__file__).resolve().parents[2]
+        _REPOSITORY_ROOT
         / "src/foamnordic/template/openfoam/derivedSchemes.json"
     )
     path = packaged if packaged.is_file() else source
@@ -766,7 +769,7 @@ def _package_function(
         return None
     try:
         import cloudpickle
-        from . import _native
+        from .. import _native
     except ImportError as error:
         raise RuntimeError(
             "Operator.function requires cloudpickle and a FoamNordic binary wheel"

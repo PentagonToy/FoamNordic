@@ -10,9 +10,10 @@ The names describe three deliberately small responsibilities:
 - **Harbor** sends and receives tensors over a Fjord channel.
 
 The current channels support an in-process Unix socket pair, a named Unix
-socket for local processes, and TCP for processes on different nodes.
-Shared-memory and UCX channels must implement the same `FjordChannel`
-interface without changing Rune or Harbor.
+socket for local control, shared memory for same-node field payloads, TCP for
+portable cross-node exchange, and UCX when the native build enables it. Every
+channel implements the same `FjordChannel` contract without changing Rune or
+Harbor.
 
 Endpoints use explicit FoamNordic addresses:
 
@@ -21,9 +22,10 @@ unix:///tmp/foamnordic.sock
 tcp://127.0.0.1:2026
 ```
 
-Unix sockets are intended for a workstation or one compute node. TCP is the
-portable baseline between Slurm nodes. A later runtime policy may choose the
-channel, but the communication core never guesses or silently changes it.
+Longship selects the transport from placement and build capabilities: SHM is
+the normal node-local payload path, while TCP is the portable multi-node
+baseline and UCX is an explicit high-performance option. The selected endpoint
+and capability negotiation remain visible in the compiled plan and logs.
 
 ## Rune version 1
 

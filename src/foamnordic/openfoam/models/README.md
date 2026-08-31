@@ -41,10 +41,9 @@ Choose an integration family by the equation entry point, not by the label in
   evaluation and owns the table fields required by that contract.
 
 Introduce category subdirectories only when their native contracts are real
-and distinct. Likely future examples are a RAS adapter that enters a modeled
-transport equation, and combustion adapters that evaluate reaction-rate or
-table-coupled source terms. At that point, move related adapters together and
-update `makeClosureModels.C` and `Make/files` in the same change.
+and distinct. A new RAS, momentum-source, or combustion adapter must enter its
+actual equation boundary; update the registration source and `Make/files` in
+the same change.
 
 Every adapter must remain thin and must have a solver-integrated acceptance
 case. A successful generic `Transform` smoke test is evidence for the shared

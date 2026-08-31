@@ -1,4 +1,4 @@
-# FNOM artifact format
+# FNOM format and model artifacts
 
 **FNOM (FoamNordic Model, pronounced “ef-nom”) is FoamNordic's
 self-contained, backend-neutral execution artifact for deploying analytical
@@ -37,6 +37,20 @@ artifact.validate()
 scalers, tree metadata, and payload layout. It deliberately does not unpickle
 Joblib or Equinox payloads, compile C++ source, or execute an ONNX graph.
 Backend loading remains an execution-time validation performed by ClosureHost.
+
+## Execution boundaries
+
+All backends consume named packed tensors with the same native scaling and
+atomic publication contract. ONNX executes in the native ClosureHost.
+Supported sklearn graphs are lowered to compiled C++; unsupported estimators
+use a persistent Joblib resident. Equinox reconstructs and JIT-compiles its
+trusted PyTree once in a persistent JAX resident. Serialized Python objects are
+never transported during an exchange, and the notebook is never called from
+the solver loop.
+
+Simple declared operations remain native operation plans rather than model
+callbacks. Backend selection does not change OpenFOAM field bindings, scaler
+metadata, placement, or completion semantics.
 
 ## Encoding rules
 
@@ -103,9 +117,8 @@ data.
 
 Compatibility support is never removed in a patch or minor release. Removing
 a documented reader requires a major release, an explicit release note, and a
-deterministic upgrade path. A future `foamnordic upgrade` command will be added
-only when a newer writable format exists; it will preserve the source artifact
-by default and write the replacement atomically.
+deterministic upgrade path. A newer writable format must provide a
+non-destructive upgrade path before an older reader is retired.
 
 New readers must reject unsupported versions instead of guessing their
 meaning. New writers emit only the current container while readers retain the
