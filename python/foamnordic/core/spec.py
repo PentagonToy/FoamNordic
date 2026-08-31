@@ -607,9 +607,11 @@ class Longship:
                 print(f"[FoamNordic] Sailing in background: {self.name}")
             else:
                 def report_pending(job_id: str, estimated: str) -> None:
-                    print(f"[FoamNordic] Sailing submitted with Job ID: {job_id}")
-                    if estimated:
-                        print(f"[FoamNordic] Slurm estimates start at: {estimated}")
+                    suffix = f" (est. start: {estimated})" if estimated else ""
+                    print(
+                        f"[FoamNordic] Sailing submitted with Job ID: "
+                        f"{job_id}{suffix}"
+                    )
 
                 job_id, state = run._wait_for_start(
                     start_timeout,
@@ -625,15 +627,16 @@ class Longship:
                         print(f"[FoamNordic] Sailing started at: {started}")
                     print(f"[FoamNordic] Sailing in background: {self.name}")
                 elif state in {"submitting", "pending", "unknown"}:
-                    print(
-                        f"[FoamNordic] Sailing remains pending with Job ID: {identity}"
+                    estimated = (
+                        run._slurm_start_time(job_id, estimated=True)
+                        if job_id is not None
+                        else ""
                     )
-                    if job_id is not None:
-                        estimated = run._slurm_start_time(job_id, estimated=True)
-                        if estimated:
-                            print(
-                                f"[FoamNordic] Slurm estimates start at: {estimated}"
-                            )
+                    suffix = f" (est. start: {estimated})" if estimated else ""
+                    print(
+                        f"[FoamNordic] Sailing remains pending with Job ID: "
+                        f"{identity}{suffix}"
+                    )
                 else:
                     if job_id is not None:
                         started = run._slurm_start_time(job_id)

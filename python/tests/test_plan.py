@@ -423,15 +423,24 @@ class PlanTests(unittest.TestCase):
 
     def test_pending_launch_reports_slurm_estimated_start(self) -> None:
         expected = Mock()
-        expected._wait_for_start.return_value = ("123456", "pending")
+        def wait_for_start(timeout, pending_callback):
+            pending_callback("123456", "2026-08-22T16:10:00")
+            return "123456", "pending"
+
+        expected._wait_for_start.side_effect = wait_for_start
         expected._slurm_start_time.return_value = "2026-08-22T16:10:00"
         with patch("foamnordic.execution.launch.launch", return_value=expected):
             stream = io.StringIO()
             with redirect_stdout(stream):
                 example_longship().launch(start_timeout=0.1, verbose=True)
-        self.assertIn("remains pending with Job ID: 123456", stream.getvalue())
         self.assertIn(
-            "Slurm estimates start at: 2026-08-22T16:10:00",
+            "Sailing submitted with Job ID: 123456 "
+            "(est. start: 2026-08-22T16:10:00)",
+            stream.getvalue(),
+        )
+        self.assertIn(
+            "Sailing remains pending with Job ID: 123456 "
+            "(est. start: 2026-08-22T16:10:00)",
             stream.getvalue(),
         )
 

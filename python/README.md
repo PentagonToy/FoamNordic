@@ -133,7 +133,8 @@ The binary wheel also owns the native Longship supervisor used by `Run`.
 For Slurm, `launch()` waits for `RUNNING`, reports the Job ID and actual Slurm
 start timestamp, and then returns the background handle. If `start_timeout`
 expires while pending, an available Slurm estimated start is shown without
-cancelling the job. Local launch returns after the process starts. Slurm
+cancelling the job, using `(est. start: TIMESTAMP)` on the submission line.
+Local launch returns after the process starts. Slurm
 submission filters inherited `SLURM_*`, `SBATCH_*`, and `SRUN_*` variables in a
 private environment copy without mutating the Python process. Omitting
 `scheduler` runs on the current machine or current allocation.

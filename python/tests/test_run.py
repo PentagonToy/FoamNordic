@@ -166,6 +166,28 @@ class SlurmMetadataTests(unittest.TestCase):
                 "2026-08-22T16:10:00",
             )
 
+    def test_pending_job_falls_back_to_scontrol_start_time(self) -> None:
+        def executable(name):
+            return f"/usr/bin/{name}"
+
+        results = [
+            Mock(stdout="N/A\n"),
+            Mock(
+                stdout=(
+                    "JobId=783528 JobState=PENDING "
+                    "StartTime=2026-08-22T16:10:00 Reason=Resources\n"
+                )
+            ),
+        ]
+        with (
+            patch("foamnordic.execution.run.shutil.which", side_effect=executable),
+            patch("foamnordic.execution.run.subprocess.run", side_effect=results),
+        ):
+            self.assertEqual(
+                _query_slurm_estimated_start("783528"),
+                "2026-08-22T16:10:00",
+            )
+
 
 @unittest.skipUnless(packaged_longship_available(), "Longship executable is not installed")
 class RunTests(unittest.TestCase):

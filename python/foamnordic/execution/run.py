@@ -854,29 +854,47 @@ def _query_slurm(job_id: str) -> dict[str, str]:
 
 def _query_slurm_estimated_start(job_id: str) -> str:
     squeue = shutil.which("squeue")
-    if squeue is None:
+    if squeue is not None:
+        try:
+            result = subprocess.run(
+                [
+                    squeue,
+                    "--start",
+                    "--noheader",
+                    "--job",
+                    job_id,
+                    "--format=%S",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            pass
+        else:
+            values = result.stdout.strip().splitlines()
+            if values:
+                selected = values[0].strip()
+                if selected not in {"", "N/A", "Unknown", "None", "(null)"}:
+                    return selected
+
+    scontrol = shutil.which("scontrol")
+    if scontrol is None:
         return ""
     try:
         result = subprocess.run(
-            [
-                squeue,
-                "--start",
-                "--noheader",
-                "--job",
-                job_id,
-                "--format=%S",
-            ],
+            [scontrol, "show", "job", "--oneliner", job_id],
             check=False,
             capture_output=True,
             text=True,
         )
     except OSError:
         return ""
-    value = result.stdout.strip().splitlines()
-    if not value:
+    match = re.search(r"(?:^|\s)StartTime=(\S+)", result.stdout)
+    if match is None:
         return ""
-    selected = value[0].strip()
-    return "" if selected in {"N/A", "Unknown", "None"} else selected
+    selected = match.group(1).strip()
+    return "" if selected in {"N/A", "Unknown", "None", "(null)"} else selected
 
 
 def _normalize_slurm_state(state: str) -> str:

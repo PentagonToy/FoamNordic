@@ -315,8 +315,10 @@ run = longship.launch()
 For a scheduled run, `launch()` waits until Slurm reports `RUNNING` and then
 returns the background handle with its Job ID. The default wait is unbounded;
 `launch(start_timeout=900)` returns a still-pending handle after 900 seconds
-without cancelling the queued job. `verbose=False` suppresses the two launch
-messages but keeps the same start barrier.
+without cancelling the queued job. `verbose=False` suppresses launch messages
+but keeps the same start barrier. When Slurm supplies an estimate,
+the submission line appends it as `(est. start: TIMESTAMP)`; the later
+`Sailing started at` line remains the authoritative start time.
 
 `Slurm.openfoam()` deliberately follows the names printed in an `#SBATCH`
 header: `nodes`, `ntasks`, `cpus_per_task`, and `mem_per_cpu`.
