@@ -56,7 +56,13 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
     request.solver_cpus_per_task = solver_cpus_per_task
     program_count = len(longship.closure_programs) + len(longship.transforms)
     request.host_cpus_per_node = (
-        longship.placement.closure_cpus_per_node * max(1, program_count)
+        scheduler.model_resources.cpus_per_task
+        if (
+            scheduler is not None
+            and scheduler.has_model_resources
+            and program_count
+        )
+        else longship.placement.closure_cpus_per_node * max(1, program_count)
     )
     request.use_closure_host = bool(longship.field_programs)
     request.placement = placement

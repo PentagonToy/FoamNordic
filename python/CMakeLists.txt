@@ -65,6 +65,22 @@ install(
     PATTERN "Make" EXCLUDE
     PATTERN "lnInclude" EXCLUDE)
 install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/backend/inference
+    DESTINATION foamnordic/buildkit/src/foamnordic/backend
+    COMPONENT Python
+    PATTERN "Make" EXCLUDE
+    PATTERN "lnInclude" EXCLUDE)
+install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/backend/connectors
+    DESTINATION foamnordic/buildkit/src/foamnordic/backend
+    COMPONENT Python
+    PATTERN "Make" EXCLUDE
+    PATTERN "lnInclude" EXCLUDE)
+install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/resident
+    DESTINATION foamnordic/buildkit/tools
+    COMPONENT Python)
+install(
     DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/openfoam
     DESTINATION foamnordic/buildkit/src/foamnordic
     COMPONENT Python

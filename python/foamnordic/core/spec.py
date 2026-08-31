@@ -325,26 +325,15 @@ class Attached:
 
 
 @dataclass(frozen=True, slots=True)
-class Slurm:
-    """Slurm resources expressed with native ``#SBATCH`` terminology."""
+class SlurmOpenFOAM:
+    """OpenFOAM step resources expressed with ``#SBATCH`` names."""
 
-    account: str
-    partition: str
-    time: str
     nodes: int
     ntasks: int
     cpus_per_task: int = 1
     mem_per_cpu: str | None = None
 
     def __post_init__(self) -> None:
-        for value, label in (
-            (self.account, "account"),
-            (self.partition, "partition"),
-            (self.time, "time"),
-        ):
-            require_nonempty(value, label)
-            if any(character.isspace() for character in value):
-                raise ValueError(f"{label} must not contain whitespace")
         for value, label in (
             (self.nodes, "nodes"),
             (self.ntasks, "ntasks"),
@@ -360,15 +349,142 @@ class Slurm:
 
     def to_plan(self) -> dict[str, object]:
         return {
-            "kind": "slurm",
-            "account": self.account,
-            "partition": self.partition,
-            "time": self.time,
             "nodes": self.nodes,
             "ntasks": self.ntasks,
             "cpus_per_task": self.cpus_per_task,
             "mem_per_cpu": self.mem_per_cpu,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class SlurmModel:
+    """Resources for exactly one ClosureHost task per OpenFOAM node."""
+
+    cpus_per_task: int = 1
+    mem_per_cpu: str | None = None
+
+    def __post_init__(self) -> None:
+        require_positive(self.cpus_per_task, "cpus_per_task")
+        if self.mem_per_cpu is not None:
+            require_nonempty(self.mem_per_cpu, "mem_per_cpu")
+            if any(character.isspace() for character in self.mem_per_cpu):
+                raise ValueError("mem_per_cpu must not contain whitespace")
+
+    def to_plan(self) -> dict[str, object]:
+        return {
+            "cpus_per_task": self.cpus_per_task,
+            "mem_per_cpu": self.mem_per_cpu,
+        }
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class Slurm:
+    """Slurm resources using native ``#SBATCH`` terminology."""
+
+    account: str
+    partition: str
+    time: str
+    _openfoam: SlurmOpenFOAM
+    _model: SlurmModel
+    _explicit_model: bool
+
+    def __init__(
+        self,
+        account: str,
+        partition: str,
+        time: str,
+        *,
+        openfoam: SlurmOpenFOAM,
+        model: SlurmModel | None = None,
+    ) -> None:
+        for value, label in (
+            (account, "account"),
+            (partition, "partition"),
+            (time, "time"),
+        ):
+            require_nonempty(value, label)
+            if any(character.isspace() for character in value):
+                raise ValueError(f"{label} must not contain whitespace")
+        if not isinstance(openfoam, SlurmOpenFOAM):
+            raise TypeError("openfoam must be created by Slurm.openfoam()")
+        if model is not None and not isinstance(model, SlurmModel):
+            raise TypeError("model must be created by Slurm.model()")
+        object.__setattr__(self, "account", account)
+        object.__setattr__(self, "partition", partition)
+        object.__setattr__(self, "time", time)
+        object.__setattr__(self, "_openfoam", openfoam)
+        object.__setattr__(self, "_model", model or SlurmModel())
+        object.__setattr__(self, "_explicit_model", model is not None)
+        if (
+            model is not None
+            and model.mem_per_cpu is not None
+            and openfoam.mem_per_cpu is None
+        ):
+            raise ValueError(
+                "model mem_per_cpu requires OpenFOAM mem_per_cpu"
+            )
+
+    @staticmethod
+    def openfoam(
+        *,
+        nodes: int,
+        ntasks: int,
+        cpus_per_task: int = 1,
+        mem_per_cpu: str | None = None,
+    ) -> SlurmOpenFOAM:
+        """Declare the OpenFOAM Slurm step with standard directive names."""
+
+        return SlurmOpenFOAM(nodes, ntasks, cpus_per_task, mem_per_cpu)
+
+    @staticmethod
+    def model(
+        *,
+        cpus_per_task: int = 1,
+        mem_per_cpu: str | None = None,
+    ) -> SlurmModel:
+        """Declare resources for exactly one ClosureHost task per node."""
+
+        return SlurmModel(cpus_per_task, mem_per_cpu)
+
+    @property
+    def openfoam_resources(self) -> SlurmOpenFOAM:
+        return self._openfoam
+
+    @property
+    def model_resources(self) -> SlurmModel:
+        return self._model
+
+    @property
+    def has_model_resources(self) -> bool:
+        return self._explicit_model
+
+    @property
+    def nodes(self) -> int:
+        return self._openfoam.nodes
+
+    @property
+    def ntasks(self) -> int:
+        return self._openfoam.ntasks
+
+    @property
+    def cpus_per_task(self) -> int:
+        return self._openfoam.cpus_per_task
+
+    @property
+    def mem_per_cpu(self) -> str | None:
+        return self._openfoam.mem_per_cpu
+
+    def to_plan(self) -> dict[str, object]:
+        plan: dict[str, object] = {
+            "kind": "slurm",
+            "account": self.account,
+            "partition": self.partition,
+            "time": self.time,
+            "openfoam": self._openfoam.to_plan(),
+        }
+        if self._explicit_model:
+            plan["model"] = self._model.to_plan()
+        return plan
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,6 +499,7 @@ class Longship:
     scheduler: Slurm | None = None
     name: str | None = None
     combustion: ProgressVariable | None = None
+    verbose: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -393,6 +510,8 @@ class Longship:
         object.__setattr__(self, "closures", tuple(self.closures))
         object.__setattr__(self, "transforms", tuple(self.transforms))
         object.__setattr__(self, "observations", tuple(self.observations))
+        if not isinstance(self.verbose, bool):
+            raise TypeError("verbose must be a boolean")
         if self.combustion is not None:
             from ..combustion.progress_variable import ProgressVariable
 
@@ -421,7 +540,9 @@ class Longship:
                 "at the same solver stage"
             )
         if self.scheduler is not None and self.scheduler.ntasks != self.case.ranks:
-            raise ValueError("case ranks must match scheduler ntasks")
+            raise ValueError("case ranks must match scheduler OpenFOAM ranks")
+        if self.verbose and self.scheduler is not None:
+            self._display_resources()
 
     @property
     def closure_programs(self) -> tuple[Closure, ...]:
@@ -453,29 +574,35 @@ class Longship:
         }
         return CompiledPlan.create(value)
 
+    def _display_resources(self) -> None:
+        from ..execution.resources import display_resources
+
+        display_resources(self)
+
     def launch(
         self,
         *,
         readiness_timeout: float = 120.0,
         termination_grace: float = 30.0,
         start_timeout: float | None = None,
-        verbose: bool = True,
+        verbose: bool | None = None,
     ) -> Run:
         """Prepare an isolated case and return a non-blocking native Run."""
 
         from ..execution.launch import launch
 
-        if not isinstance(verbose, bool):
-            raise TypeError("verbose must be a boolean")
+        if verbose is not None and not isinstance(verbose, bool):
+            raise TypeError("verbose must be a boolean or None")
+        selected_verbose = self.verbose if verbose is None else verbose
         if start_timeout is not None and start_timeout <= 0:
             raise ValueError("start_timeout must be positive")
         run = launch(
             self,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
-            verbose=verbose,
+            verbose=selected_verbose,
         )
-        if verbose:
+        if selected_verbose:
             if self.scheduler is None:
                 print(f"[FoamNordic] Sailing in background: {self.name}")
             else:

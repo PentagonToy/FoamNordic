@@ -162,6 +162,22 @@ class CliTests(unittest.TestCase):
             self.assertFalse(build_dir.exists())
             self.assertFalse(prefix.exists())
 
+    def test_packaged_buildkit_defines_native_closure_worker(self) -> None:
+        repository = Path(__file__).resolve().parents[2]
+        buildkit = (repository / "python/buildkit/CMakeLists.txt").read_text(
+            encoding="utf-8"
+        )
+        packaging = (repository / "python/CMakeLists.txt").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("add_subdirectory(src/foamnordic/backend/inference)", buildkit)
+        self.assertIn("add_subdirectory(tools/resident)", buildkit)
+        self.assertIn("foamnordic_closure", buildkit)
+        self.assertIn("src/foamnordic/backend/inference", packaging)
+        self.assertIn("src/foamnordic/backend/connectors", packaging)
+        self.assertIn("tools/resident", packaging)
+
     def test_build_refreshes_only_marker_owned_cache_from_another_source(self) -> None:
         repository = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as directory:

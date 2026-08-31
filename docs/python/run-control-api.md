@@ -272,10 +272,9 @@ solver-native hook without changing this Python declaration.
 ## Longship and Slurm
 
 There is no user-visible database, client, or `share_nodes` transport switch.
-Attached placement means one ClosureHost per
-solver node. For 16 one-CPU solver ranks on one node, the allocation also
-reserves the declared ClosureHost CPU rather than oversubscribing a solver
-rank.
+OpenFOAM and inference resources are declared separately, then combined in one
+Slurm allocation. FoamNordic places one model host beside OpenFOAM on each
+solver node without treating model CPUs as CPUs for every solver rank.
 
 ```python
 observations = fno.Observe(
@@ -286,20 +285,28 @@ observations = fno.Observe(
     interval=100,
 )
 
+scheduler = fno.Slurm(
+    account="<allocation-account>",
+    partition="small",
+    time="00:15:00",
+    openfoam=fno.Slurm.openfoam(
+        nodes=1,
+        ntasks=16,
+        cpus_per_task=1,
+        mem_per_cpu="2G",
+    ),
+    model=fno.Slurm.model(
+        cpus_per_task=8,
+        mem_per_cpu="1G",
+    ),
+)
+
 longship = fno.Longship(
     case=case,
     closures=(closure,),
     observations=(observations,),
-    placement=fno.Attached(closure_cpus_per_node=1),
-    scheduler=fno.Slurm(
-        account="<allocation-account>",
-        partition="small",
-        time="00:15:00",
-        nodes=1,
-        ntasks=16,
-        cpus_per_task=1,
-        mem_per_cpu="1G",
-    ),
+    scheduler=scheduler,
+    verbose=True,
 )
 
 run = longship.launch()
@@ -311,11 +318,29 @@ returns the background handle with its Job ID. The default wait is unbounded;
 without cancelling the queued job. `verbose=False` suppresses the two launch
 messages but keeps the same start barrier.
 
-`Slurm` deliberately follows the names printed in an `#SBATCH` header:
-`nodes`, `ntasks`, `cpus_per_task`, and `mem_per_cpu`. FoamNordic derives the
-per-node task count from `ntasks / nodes`; users do not declare the same layout
-twice. When a native ClosureHost is attached, its sidecar task is added only to
-the compiled allocation and does not change the declared OpenFOAM `ntasks`.
+`Slurm.openfoam()` deliberately follows the names printed in an `#SBATCH`
+header: `nodes`, `ntasks`, `cpus_per_task`, and `mem_per_cpu`.
+`Slurm.model()` uses the same CPU and memory vocabulary. A model host is always
+exactly one ClosureHost task per OpenFOAM node, so its task topology is an
+internal invariant rather than another user setting or serialized plan field.
+In the example, each model host receives eight CPUs and 8 GiB in total. Model
+resources never change the OpenFOAM `ntasks`. With
+`Longship(verbose=True)`, construction prints a four-column resource table:
+`Resource`, `OpenFOAM`, `Model`, and `Allocation`. The default is quiet.
+
+The shared-memory estimate is
+
+```text
+SHM ~= 32 MiB * OpenFOAM ranks * field-program count
+```
+
+The 32 MiB factor is two directions times 16 slots times a 1 MiB slot. It is
+transport capacity, not model heap. For 16 ranks and one closure this is
+approximately 512 MiB. When both OpenFOAM and model memory are explicit,
+FoamNordic adds this transport capacity to the Slurm node-memory reservation.
+OpenFOAM and the model otherwise share the job's node allocation while
+retaining their separately declared CPU and memory budgets.
+
 Submission uses a private environment copy with inherited `SLURM_*`,
 `SBATCH_*`, and `SRUN_*` values removed. This prevents a Jupyter or parent batch
 allocation from leaking incompatible resource variables into the new job and

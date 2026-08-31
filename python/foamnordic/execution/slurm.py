@@ -10,6 +10,7 @@ import time
 from typing import Mapping, Sequence, TYPE_CHECKING
 
 from .run import _internal_path, _longship_executable, _sailing_paths
+from .resources import SHM_MIB_PER_RANK_PROGRAM, memory_bytes, slurm_memory
 from .shell import quote_command
 
 if TYPE_CHECKING:
@@ -17,15 +18,15 @@ if TYPE_CHECKING:
 
 
 def _template(name: str) -> str:
-    packaged = files("foamnordic").joinpath(f"templates/slurm/{name}")
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
     source = (
         Path(__file__).resolve().parents[3]
         / f"src/foamnordic/template/slurm/{name}"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
+    packaged = files("foamnordic").joinpath(f"templates/slurm/{name}")
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
     raise RuntimeError(f"FoamNordic Slurm template is unavailable: {name}")
 
 
@@ -55,18 +56,47 @@ def write_batch(
         character if character.isalnum() or character in "-_" else "-"
         for character in longship.name
     )[:128]
-    memory = (
-        ""
-        if scheduler.mem_per_cpu is None
-        else (
-            f"#SBATCH --mem-per-cpu={scheduler.mem_per_cpu}"
-            "      # Memory reserved per CPU core\n"
+    model = scheduler.model_resources
+    if not (
+        host is not None
+        and scheduler.has_model_resources
+        and model.mem_per_cpu is not None
+    ):
+        memory = (
+            ""
+            if scheduler.mem_per_cpu is None
+            else (
+                f"#SBATCH --mem-per-cpu={scheduler.mem_per_cpu}"
+                "      # Memory reserved per CPU core\n"
+            )
         )
-    )
+    else:
+        tasks_per_node = scheduler.ntasks // scheduler.nodes
+        memory_per_cpu = memory_bytes(scheduler.mem_per_cpu)
+        model_memory_per_cpu = memory_bytes(model.mem_per_cpu)
+        shm_per_node = (
+            SHM_MIB_PER_RANK_PROGRAM
+            * 1024**2
+            * tasks_per_node
+            * len(longship.field_programs)
+            if host is not None and longship.placement.data_path in {"auto", "shm"}
+            else 0
+        )
+        memory_per_node = (
+            memory_per_cpu * tasks_per_node * scheduler.cpus_per_task
+            + model_memory_per_cpu * model.cpus_per_task
+            + shm_per_node
+        )
+        memory = (
+            ""
+            if memory_per_node is None
+            else (
+                f"#SBATCH --mem={slurm_memory(memory_per_node)}"
+                "              # OpenFOAM and model memory per node\n"
+            )
+        )
     memory_sanitizer = (
-        "unset SLURM_MEM_PER_NODE SLURM_MEM_PER_GPU"
-        if scheduler.mem_per_cpu is not None
-        else "unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE"
+        "unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE"
     )
     longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
     if host is None:
@@ -111,11 +141,10 @@ exec srun \\
                 "PARTITION": scheduler.partition,
                 "TIME_LIMIT": scheduler.time,
                 "NODES": scheduler.nodes,
-                "ALLOCATION_TASKS": scheduler.ntasks + int(runtime["host_tasks"]),
-                "ALLOCATION_CPUS_PER_TASK": max(
-                    scheduler.cpus_per_task,
-                    int(runtime["host_cpus_per_task"]),
+                "ALLOCATION_TASKS": (
+                    int(runtime["allocation_cpus_per_node"]) * scheduler.nodes
                 ),
+                "ALLOCATION_CPUS_PER_TASK": 1,
                 "MEMORY_DIRECTIVE": memory,
                 "MEMORY_SANITIZER": memory_sanitizer,
                 "SAILING_LOG": longship_log,

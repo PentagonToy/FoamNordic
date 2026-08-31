@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import pydoc
 import sys
 import tempfile
 import unittest
@@ -75,8 +76,7 @@ def example_longship() -> fno.Longship:
             account="project_example",
             partition="small",
             time="00:15:00",
-            nodes=1,
-            ntasks=2,
+            openfoam=fno.Slurm.openfoam(nodes=1, ntasks=2),
         ),
     )
 
@@ -235,12 +235,46 @@ class PlanTests(unittest.TestCase):
 
     def test_slurm_uses_native_scheduler_vocabulary(self) -> None:
         parameters = inspect.signature(fno.Slurm).parameters
-        self.assertIn("ntasks", parameters)
-        self.assertIn("cpus_per_task", parameters)
-        self.assertIn("mem_per_cpu", parameters)
+        self.assertIn("openfoam", parameters)
+        self.assertIn("model", parameters)
+        self.assertNotIn("ntasks", parameters)
+        self.assertNotIn("cpus_per_task", parameters)
+        self.assertNotIn("mem_per_cpu", parameters)
         self.assertNotIn("solver_tasks", parameters)
         self.assertNotIn("solver_tasks_per_node", parameters)
         self.assertNotIn("solver_cpus_per_task", parameters)
+
+        openfoam = inspect.signature(fno.Slurm.openfoam).parameters
+        self.assertEqual(
+            tuple(openfoam),
+            ("nodes", "ntasks", "cpus_per_task", "mem_per_cpu"),
+        )
+        model = inspect.signature(fno.Slurm.model).parameters
+        self.assertEqual(tuple(model), ("cpus_per_task", "mem_per_cpu"))
+        self.assertNotIn("ranks", openfoam)
+        self.assertNotIn(
+            "ntasks_per_node",
+            fno.Slurm.model(cpus_per_task=2).to_plan(),
+        )
+        self.assertIn("openfoam", dir(fno.Slurm))
+        self.assertIn("model", dir(fno.Slurm))
+
+        help_text = pydoc.plain(pydoc.render_doc(fno.Slurm))
+        self.assertIn("openfoam(", help_text)
+        self.assertIn("model(", help_text)
+        self.assertIn("exactly one ClosureHost task per node", help_text)
+
+    def test_longship_verbose_displays_resource_plan_at_declaration(self) -> None:
+        longship = example_longship()
+        with patch("foamnordic.execution.resources.display_resources") as display:
+            verbose = fno.Longship(
+                case=longship.case,
+                closures=longship.closures,
+                placement=longship.placement,
+                scheduler=longship.scheduler,
+                verbose=True,
+            )
+        display.assert_called_once_with(verbose)
 
     def test_observe_uses_solver_friendly_cadence(self) -> None:
         parameters = inspect.signature(fno.Observe).parameters
@@ -372,7 +406,7 @@ class PlanTests(unittest.TestCase):
         with patch("foamnordic.execution.launch.launch", return_value=expected):
             stream = io.StringIO()
             with redirect_stdout(stream):
-                actual = example_longship().launch()
+                actual = example_longship().launch(verbose=True)
             self.assertIs(actual, expected)
             self.assertIn("launched with Job ID: 123456", stream.getvalue())
             self.assertIn(
@@ -394,7 +428,7 @@ class PlanTests(unittest.TestCase):
         with patch("foamnordic.execution.launch.launch", return_value=expected):
             stream = io.StringIO()
             with redirect_stdout(stream):
-                example_longship().launch(start_timeout=0.1)
+                example_longship().launch(start_timeout=0.1, verbose=True)
         self.assertIn("remains pending with Job ID: 123456", stream.getvalue())
         self.assertIn(
             "Slurm estimates start at: 2026-08-22T16:10:00",
@@ -424,10 +458,12 @@ class PlanTests(unittest.TestCase):
                 "account": "project_example",
                 "partition": "small",
                 "time": "00:15:00",
-                "nodes": 1,
-                "ntasks": 2,
-                "cpus_per_task": 1,
-                "mem_per_cpu": None,
+                "openfoam": {
+                    "nodes": 1,
+                    "ntasks": 2,
+                    "cpus_per_task": 1,
+                    "mem_per_cpu": None,
+                },
             },
         )
         self.assertEqual(value["runtime"]["lifecycle"]["host_starts_first"], True)
@@ -841,8 +877,7 @@ class PlanTests(unittest.TestCase):
                 account="project",
                 partition="small",
                 time="00:15:00",
-                nodes=2,
-                ntasks=3,
+                openfoam=fno.Slurm.openfoam(nodes=2, ntasks=3),
             )
 
     def test_scheduler_directive_values_reject_whitespace(self) -> None:
@@ -851,8 +886,7 @@ class PlanTests(unittest.TestCase):
                 account="project invalid",
                 partition="small",
                 time="00:15:00",
-                nodes=1,
-                ntasks=1,
+                openfoam=fno.Slurm.openfoam(nodes=1, ntasks=1),
             )
 
     def test_case_accepts_explicit_openfoam_shell_command(self) -> None:
@@ -1017,8 +1051,7 @@ class PlanTests(unittest.TestCase):
                     account="project",
                     partition="small",
                     time="00:15:00",
-                    nodes=1,
-                    ntasks=1,
+                    openfoam=fno.Slurm.openfoam(nodes=1, ntasks=1),
                 ),
             )
 

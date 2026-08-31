@@ -8,6 +8,7 @@ import unittest
 
 import foamnordic as fno
 from foamnordic.core.native_plan import available as native_available
+from foamnordic.execution.resources import resource_values
 from foamnordic.execution.slurm import write_batch, write_submission_wrapper
 
 
@@ -38,10 +39,12 @@ class SlurmRenderingTests(unittest.TestCase):
                 account="project_example",
                 partition="small",
                 time="00:15:00",
-                nodes=1,
-                ntasks=2,
-                cpus_per_task=1,
-                mem_per_cpu="1G",
+                openfoam=fno.Slurm.openfoam(
+                    nodes=1,
+                    ntasks=2,
+                    cpus_per_task=1,
+                    mem_per_cpu="1G",
+                ),
             ),
         )
 
@@ -72,7 +75,7 @@ class SlurmRenderingTests(unittest.TestCase):
         self.assertIn("/logs/Sailing_baseline.out", script)
         self.assertIn("/logs/Sailing_baseline.log", script)
         self.assertIn(
-            "unset SLURM_MEM_PER_NODE SLURM_MEM_PER_GPU",
+            "unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE",
             script,
         )
         self.assertIn("#SBATCH --open-mode=append", script)
@@ -98,6 +101,61 @@ class SlurmRenderingTests(unittest.TestCase):
         self.assertIn("#SBATCH --ntasks=3", script)
         self.assertIn("--host srun --nodes=1 --ntasks=1", script)
         self.assertIn("--solver srun --nodes=1 --ntasks=2", script)
+
+    def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate(self) -> None:
+        case = fno.openfoam.Case(
+            case_dir="case",
+            run_dir="workspace",
+            of_cmd="openfoam/2512",
+            ranks=16,
+        )
+        closure = fno.Closure(
+            name="nutFjord",
+            artifact="model.fnom",
+            inputs={"U": fno.field("U")},
+            outputs={"nut": fno.field("nut")},
+        )
+        longship = fno.Longship(
+            case=case,
+            closures=(closure,),
+            scheduler=fno.Slurm(
+                account="project_example",
+                partition="small",
+                time="00:15:00",
+                openfoam=fno.Slurm.openfoam(
+                    nodes=1,
+                    ntasks=16,
+                    cpus_per_task=1,
+                    mem_per_cpu="2G",
+                ),
+                model=fno.Slurm.model(cpus_per_task=8, mem_per_cpu="1G"),
+            ),
+        )
+        runtime = longship.compile().as_dict()["runtime"]
+        values = resource_values(longship)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = write_batch(
+                longship,
+                runtime,
+                root,
+                ("closure-host",),
+                ("pimpleFoam", "-parallel"),
+                root / ".foamnordic/closure.ready",
+                120.0,
+                30.0,
+            ).read_text(encoding="utf-8")
+
+        self.assertEqual(values["solver_cpus"], 16)
+        self.assertEqual(values["model_cpus"], 8)
+        self.assertEqual(values["shm"], 512 * 1024**2)
+        self.assertIn("#SBATCH --ntasks=24", script)
+        self.assertIn("#SBATCH --cpus-per-task=1", script)
+        self.assertEqual(values["total_memory"], int(40.5 * 1024**3))
+        self.assertIn("#SBATCH --mem=41472M", script)
+        self.assertIn("--host srun --nodes=1 --ntasks=1", script)
+        self.assertIn("--cpus-per-task=8 --cpu-bind=none", script)
+        self.assertIn("--solver srun --nodes=1 --ntasks=16", script)
 
     def test_submission_wrapper_owns_scancel(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
