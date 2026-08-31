@@ -64,6 +64,32 @@ void validate_model_shape(
     }
 }
 
+template <class Value>
+Ort::Value input_tensor(
+    const Ort::MemoryInfo& memory,
+    fjord::TensorView features,
+    const std::vector<std::int64_t>& shape,
+    std::vector<Value>& fallback) {
+    const auto address = reinterpret_cast<std::uintptr_t>(features.bytes.data());
+    Value* data = nullptr;
+    if (address % alignof(Value) == 0) {
+        // ONNX Runtime borrows CPU input storage for the duration of Run().
+        // Its C++ API predates std::span<const T> and requires a mutable pointer.
+        data = const_cast<Value*>(
+            reinterpret_cast<const Value*>(features.bytes.data()));
+    } else {
+        fallback.resize(features.bytes.size() / sizeof(Value));
+        std::memcpy(fallback.data(), features.bytes.data(), features.bytes.size());
+        data = fallback.data();
+    }
+    return Ort::Value::CreateTensor<Value>(
+        memory,
+        data,
+        features.bytes.size() / sizeof(Value),
+        shape.data(),
+        shape.size());
+}
+
 }  // namespace
 
 void OnnxOptions::validate() const {
@@ -77,23 +103,41 @@ public:
     Implementation(const std::filesystem::path& model_path, OnnxOptions options)
         : environment_(ORT_LOGGING_LEVEL_WARNING, "FoamNordic"),
           options_(make_options(options)),
-          session_(environment_, model_path.c_str(), options_),
+          session_(std::make_unique<Ort::Session>(
+              environment_, model_path.c_str(), options_)),
           memory_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
+        initialize();
+    }
+
+    Implementation(std::vector<std::byte> model_bytes, OnnxOptions options)
+        : model_bytes_(std::move(model_bytes)),
+          environment_(ORT_LOGGING_LEVEL_WARNING, "FoamNordic"),
+          options_(make_options(options)),
+          session_(std::make_unique<Ort::Session>(
+              environment_, model_bytes_.data(), model_bytes_.size(), options_)),
+          memory_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
+        if (model_bytes_.empty()) {
+            throw std::invalid_argument("Embedded ONNX payload must not be empty.");
+        }
+        initialize();
+    }
+
+    void initialize() {
         const std::string runtime_version = OrtGetApiBase()->GetVersionString();
         if (runtime_version != "1.28.0") {
             throw std::runtime_error(
                 "FoamNordic requires ONNX Runtime 1.28.0; found "
                 + runtime_version + '.');
         }
-        if (session_.GetInputCount() != 1 || session_.GetOutputCount() != 1) {
+        if (session_->GetInputCount() != 1 || session_->GetOutputCount() != 1) {
             throw std::invalid_argument(
                 "FoamNordic packed ONNX models require exactly one input and output.");
         }
         Ort::AllocatorWithDefaultOptions allocator;
-        input_name_ = session_.GetInputNameAllocated(0, allocator).get();
-        output_name_ = session_.GetOutputNameAllocated(0, allocator).get();
-        const auto input_type = session_.GetInputTypeInfo(0);
-        const auto output_type = session_.GetOutputTypeInfo(0);
+        input_name_ = session_->GetInputNameAllocated(0, allocator).get();
+        output_name_ = session_->GetOutputNameAllocated(0, allocator).get();
+        const auto input_type = session_->GetInputTypeInfo(0);
+        const auto output_type = session_->GetOutputTypeInfo(0);
         const auto input_info = input_type.GetTensorTypeAndShapeInfo();
         const auto output_info = output_type.GetTensorTypeAndShapeInfo();
         input_element_ = input_info.GetElementType();
@@ -126,27 +170,13 @@ public:
         std::vector<double> double_input;
         Ort::Value input{nullptr};
         if (features.element == fjord::Element::float32) {
-            float_input.resize(features.bytes.size() / sizeof(float));
-            std::memcpy(float_input.data(), features.bytes.data(), features.bytes.size());
-            input = Ort::Value::CreateTensor<float>(
-                memory_,
-                float_input.data(),
-                float_input.size(),
-                shape.data(),
-                shape.size());
+            input = input_tensor(memory_, features, shape, float_input);
         } else {
-            double_input.resize(features.bytes.size() / sizeof(double));
-            std::memcpy(double_input.data(), features.bytes.data(), features.bytes.size());
-            input = Ort::Value::CreateTensor<double>(
-                memory_,
-                double_input.data(),
-                double_input.size(),
-                shape.data(),
-                shape.size());
+            input = input_tensor(memory_, features, shape, double_input);
         }
         const char* input_names[]{input_name_.c_str()};
         const char* output_names[]{output_name_.c_str()};
-        auto outputs = session_.Run(
+        auto outputs = session_->Run(
             Ort::RunOptions{nullptr}, input_names, &input, 1, output_names, 1);
         if (outputs.size() != 1 || !outputs.front().IsTensor()) {
             throw std::runtime_error("ONNX Runtime did not return one tensor output.");
@@ -194,9 +224,10 @@ private:
         return result;
     }
 
+    std::vector<std::byte> model_bytes_;
     Ort::Env environment_;
     Ort::SessionOptions options_;
-    Ort::Session session_;
+    std::unique_ptr<Ort::Session> session_;
     Ort::MemoryInfo memory_;
     std::string input_name_;
     std::string output_name_;
@@ -210,6 +241,12 @@ OnnxPackedKernel::OnnxPackedKernel(
     const std::filesystem::path& model_path,
     OnnxOptions options)
     : implementation_(std::make_unique<Implementation>(model_path, options)) {}
+
+OnnxPackedKernel::OnnxPackedKernel(
+    std::vector<std::byte> model_bytes,
+    OnnxOptions options)
+    : implementation_(
+          std::make_unique<Implementation>(std::move(model_bytes), options)) {}
 
 OnnxPackedKernel::~OnnxPackedKernel() = default;
 OnnxPackedKernel::OnnxPackedKernel(OnnxPackedKernel&&) noexcept = default;

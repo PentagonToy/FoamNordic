@@ -198,10 +198,10 @@ Onsaemiro tables. See the
 [Postprocess API](../docs/api/postprocess-api.md).
 
 `fno.Export.onnx(...)` accepts a path without loading the entire ONNX payload
-into Python memory, which is important for large ensembles. FNOM v1 remains a
-small uncompressed native manifest beside that payload.
-`fno.Export.joblib(...)` keeps an uncompressed sibling payload so large
-NumPy-backed estimators can be memory-mapped at worker startup.
+into Python memory while exporting, which is important for large ensembles.
+The resulting `.fnom` is one uncompressed, self-contained model bundle.
+`fno.Export.joblib(...)` embeds its trusted Joblib stream in the same way and
+loads it once at worker startup.
 `fno.Export.equinox(...)` records the PyTree leaves in FNOM and reconstructs
 and JIT-compiles the trusted model once. Joblib and Equinox are selected by
 the artifact rather than by separate installation profiles.
@@ -224,6 +224,7 @@ artifact = fno.Export.joblib(
 `StandardScaler`, `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, and affine
 `FunctionTransformer` are converted to FNOM coefficients once; C++ applies
 them for every backend. Both scaler arguments default to `None`.
+No exporter adds archive decompression or work to the field-exchange loop.
 The Joblib runtime is an export-time artifact contract, so
 `fno.Operator.model(...)` remains backend-neutral.
 

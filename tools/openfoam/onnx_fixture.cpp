@@ -178,7 +178,7 @@ void write_fixture(const std::filesystem::path& directory) {
     const auto model_path = directory / "identity-U.onnx";
     const auto manifest_path = directory / "identity-U.fnom";
     write_model(model_path, identity_model);
-    foamnordic::closure::write_manifest(
+    foamnordic::closure::write_bundle(
         manifest_path,
         {
             1,
@@ -192,11 +192,13 @@ void write_fixture(const std::filesystem::path& directory) {
             {},
             std::nullopt,
             std::nullopt,
-        });
+        },
+        model_path);
+    std::filesystem::remove(model_path);
     const auto nut_model_path = directory / "nutFjord.onnx";
     const auto nut_manifest_path = directory / "nutFjord.fnom";
     write_model(nut_model_path, nut_fjord_model);
-    foamnordic::closure::write_manifest(
+    foamnordic::closure::write_bundle(
         nut_manifest_path,
         {
             1,
@@ -213,11 +215,13 @@ void write_fixture(const std::filesystem::path& directory) {
             {},
             std::nullopt,
             std::nullopt,
-        });
+        },
+        nut_model_path);
+    std::filesystem::remove(nut_model_path);
     const auto k_eqn_model_path = directory / "kEqnFjord.onnx";
     const auto k_eqn_manifest_path = directory / "kEqnFjord.fnom";
     write_model(k_eqn_model_path, k_eqn_fjord_model);
-    foamnordic::closure::write_manifest(
+    foamnordic::closure::write_bundle(
         k_eqn_manifest_path,
         {
             1,
@@ -243,14 +247,13 @@ void write_fixture(const std::filesystem::path& directory) {
             {},
             std::nullopt,
             std::nullopt,
-        });
+        },
+        k_eqn_model_path);
+    std::filesystem::remove(k_eqn_model_path);
     verify_k_eqn_fixture(k_eqn_manifest_path);
-    std::cout << "[FoamNordic] ONNX fixture: " << model_path << '\n'
-              << "[FoamNordic] Manifest: " << manifest_path << '\n'
-              << "[FoamNordic] nutFjord fixture: " << nut_model_path << '\n'
-              << "[FoamNordic] nutFjord manifest: " << nut_manifest_path << '\n'
-              << "[FoamNordic] kEqnFjord fixture: " << k_eqn_model_path << '\n'
-              << "[FoamNordic] kEqnFjord manifest: " << k_eqn_manifest_path << '\n';
+    std::cout << "[FoamNordic] ONNX bundle: " << manifest_path << '\n'
+              << "[FoamNordic] nutFjord bundle: " << nut_manifest_path << '\n'
+              << "[FoamNordic] kEqnFjord bundle: " << k_eqn_manifest_path << '\n';
 }
 
 }  // namespace

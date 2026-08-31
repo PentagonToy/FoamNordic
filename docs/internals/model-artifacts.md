@@ -13,22 +13,20 @@ and model-kernel boundary. The timestep loop never inspects a Python estimator
 or scikit-learn scaler.
 
 The framework-neutral metadata is encoded as a deterministic little-endian
-FoamNordic manifest. Its versioned header is followed by the model family,
+FoamNordic manifest inside the `.fnom` bundle. Its versioned header is followed by the model family,
 artifact path, ordered input/output contracts, affine scaler coefficients, and
 optional Equinox leaf table. The C++ loader places explicit limits on file,
 string, field, feature, rank, and leaf counts; it rejects truncation, invalid
 enum values, malformed scaler flags, and trailing bytes before a worker starts.
-Model payloads remain separate from this small control artifact.
+The original model bytes follow that manifest in the same file.
 
-`.fnom` is deliberately not compressed. It is a bounded (64 MiB maximum),
-deterministic binary manifest that native C++ validates directly before a
-worker starts; the usually much larger ONNX payload remains a sibling file.
-Adding zstd to this control path would add a mandatory runtime dependency while
-compressing the wrong part of the artifact. FNOM v2 adds an optional Joblib
-resident-runtime field while the reader remains compatible with v1. A future
-single-file distribution
-bundle may use independently checksummed zstd entries after measurements, but
-that container will not silently change the `.fnom` wire format.
+`.fnom` is deliberately not compressed. The bounded manifest remains at most
+64 MiB, while the embedded payload may be much larger. Native C++ validates
+the bundle lengths and manifest before a worker starts. Avoiding an archive
+layer removes decompression, temporary extraction, and another runtime
+dependency. FNOM v2 adds an optional Joblib resident-runtime field while the
+reader remains compatible with split v1/v2 artifacts written by earlier
+FoamNordic versions. New exports contain exactly one deployable file.
 
 Before evaluation, C++ gathers only the active cell indices selected by the
 bypass policy, packs fields in manifest order into one contiguous feature
@@ -83,8 +81,8 @@ at bundle creation or managed worker startup. Python pickles and arbitrary
 PyTree traversal never occur in the OpenFOAM exchange loop. A future compiled
 JAX executable can consume the same manifest without changing the bundle.
 
-The current `.eqx` sibling payload contains a cloudpickled reconstructable
-PyTree and a `batched` call policy. It is loaded once and wrapped with
+The embedded Equinox payload contains a cloudpickled reconstructable PyTree
+and a `batched` call policy. It is loaded once and wrapped with
 `jax.jit`; the default policy applies `jax.vmap` over active cells. This is
 less portable than ONNX and must only be used with trusted payloads and a
 compatible Python/JAX/Equinox environment.
@@ -98,10 +96,10 @@ scaling, request ordering, output inverse scaling, bypass merge, and shutdown.
 
 This isolates Python overhead to model evaluation and prevents the earlier
 design from moving full OpenFOAM fields through Python for every operation.
-The sibling `.joblib` payload is uncompressed, allowing
-`joblib.load(..., mmap_mode="r")` to map large NumPy-backed estimators instead
-of first expanding an archive into memory. Joblib payloads are pickle-based
-and must be trusted.
+The embedded `.joblib` stream is uncompressed and loaded once when the managed
+worker starts. It is never decoded or copied in an exchange. Joblib payloads
+are pickle-based and must be trusted. Legacy split artifacts retain their
+`mmap_mode="r"` startup path.
 
 `pip install foamnordic` installs the Joblib/scikit-learn and JAX/Equinox
 runtimes together. Backend selection is a model-artifact decision rather than
@@ -150,8 +148,10 @@ oversubscribing OpenFOAM or Slurm allocations. ONNX Runtime is not embedded in
 the Python wheel because the native host must match the selected platform and
 OpenFOAM runtime.
 
-`load_model(manifest_path)` resolves a relative artifact path beside the
-manifest and owns both the packed ONNX kernel and the field-aware wrapper.
+`load_model(manifest_path)` passes an embedded ONNX byte buffer directly to
+ONNX Runtime and owns both that buffer, the packed ONNX kernel, and the
+field-aware wrapper. Legacy manifests still resolve their relative payload
+path beside the manifest.
 `NativeClosureWorker(address, manifest_path, bypass)` uses this loader
 directly, so the resident process needs no Python model object: its complete
 hot path is field packing, optional input scaling, ONNX inference, optional

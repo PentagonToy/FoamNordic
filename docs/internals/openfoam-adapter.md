@@ -205,7 +205,7 @@ The worker accepts repeated outer-corrector calls at one solver-time index and
 monotonically advancing solver times, while rejecting regressing or
 inconsistent metadata.
 
-The ONNX fixture generator also emits `nutFjord.onnx` and `nutFjord.fnom`.
+The ONNX fixture generator emits one self-contained `nutFjord.fnom` bundle.
 This native double-precision model consumes the packed
 `velocity_grad(9), filter_width(1)` contract and publishes `nut(1)` using
 `nut = 0.05 * filter_width`. It is intentionally simple, but it exercises the
@@ -252,7 +252,7 @@ The canonical coefficient body is
 `src/foamnordic/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this
 model must also provide the normal OpenFOAM `k` field and boundary conditions.
 
-The native fixture generator emits `kEqnFjord.onnx` and `kEqnFjord.fnom` for
+The native fixture generator emits one self-contained `kEqnFjord.fnom` for
 this ordered contract. Its deterministic matrix keeps the integration test
 stable while exercising all packing and splitting paths:
 

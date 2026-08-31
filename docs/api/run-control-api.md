@@ -108,9 +108,10 @@ object is not serialized into the model and is never called during an
 OpenFOAM exchange.
 
 The lowering backend must validate its ONNX opset and IR version against the
-configured ONNX Runtime. The run-control notebook points to
-`kEqnFjord.fnom`; ClosureHost resolves its sibling ONNX payload without
-importing JAX or reconstructing the training model.
+configured ONNX Runtime. The run-control notebook points to the single
+`kEqnFjord.fnom` bundle; ClosureHost reads its embedded ONNX payload directly
+without importing JAX, extracting a temporary file, or reconstructing the
+training model.
 
 ## Case and closure declaration
 

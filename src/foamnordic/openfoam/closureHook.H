@@ -45,6 +45,11 @@ class ClosureHook final {
     std::vector<ClosureOutput> outputs_;
     ClosureSession session_;
     std::unique_ptr<ClosureObservation> observation_;
+    bool profileEnabled_{false};
+    bool profileReported_{false};
+    std::uint64_t profileCalls_{0};
+    double profileWait_{0.0};
+    double profileMaximumWait_{0.0};
 
     [[nodiscard]] static std::vector<ClosureInput> readInputs(
         const dictionary& dict);
@@ -58,6 +63,7 @@ public:
     using InputBinder = std::function<void(operations::OperationFrame&)>;
 
     explicit ClosureHook(const dictionary& dict);
+    ~ClosureHook() noexcept;
 
     ClosureHook(const ClosureHook&) = delete;
     ClosureHook& operator=(const ClosureHook&) = delete;

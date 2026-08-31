@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import tempfile
 import unittest
@@ -45,7 +46,8 @@ class ModelBackendTests(unittest.TestCase):
             metadata = fno._native.read_model_manifest(str(manifest))
             self.assertEqual(metadata["input_scaler"]["kind"], "standard")
             evaluator = _joblib_evaluator(
-                manifest.with_suffix(".joblib"), (("nut", 1),)
+                BytesIO(fno._native.read_model_payload(str(manifest))),
+                (("nut", 1),),
             )
             actual = evaluator(
                 memoryview(np.ascontiguousarray(scaled)),
@@ -81,7 +83,9 @@ class ModelBackendTests(unittest.TestCase):
                 outputs={"nut": fno.Tensor.scalar(dtype="float32")},
             )
             evaluator = _equinox_evaluator(
-                manifest.with_suffix(".eqx"), (("nut", 1),), "float32"
+                BytesIO(fno._native.read_model_payload(str(manifest))),
+                (("nut", 1),),
+                "float32",
             )
             actual = evaluator(memoryview(values), 2, 2, "float32", 0, 0.0)
             expected = jax.vmap(model)(jnp.asarray(values))
@@ -149,7 +153,9 @@ class ModelBackendTests(unittest.TestCase):
                 inputs={"features": fno.Tensor.vector(components=2, dtype="float32")},
                 outputs={"nut": fno.Tensor.scalar(dtype="float32")},
             )
-            loaded = onnx.load(manifest.with_suffix(".onnx"))
+            loaded = onnx.load_from_string(
+                fno._native.read_model_payload(str(manifest))
+            )
             values = np.asarray([[1.0, 3.0], [2.0, 4.0]], dtype=np.float32)
             actual = ReferenceEvaluator(loaded).run(None, {"features": values})[0]
             np.testing.assert_allclose(actual, [[-0.5], [0.5]], rtol=1.0e-6)

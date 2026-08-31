@@ -316,7 +316,9 @@ class Math:
             raise ValueError("Math.ddot requires per-cell tensor fields")
         if left.shape != right.shape:
             raise ValueError("Math.ddot requires matching tensor shapes")
-        return Math.sum(left * right, axis=(-2, -1))
+        # Contract directly so NumPy does not materialize a full temporary
+        # tensor before reducing it. JAX traces the same backend-neutral form.
+        return Math.einsum("...ij,...ij->...", left, right)
 
 
 __all__ = ["FieldExpression", "Math"]

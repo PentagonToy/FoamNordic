@@ -30,7 +30,17 @@ void write_manifest(
     const std::filesystem::path& path,
     const ModelArtifact& artifact);
 
+void write_bundle(
+    const std::filesystem::path& path,
+    const ModelArtifact& artifact,
+    const std::filesystem::path& payload_path);
+
 [[nodiscard]] ModelArtifact read_manifest(
+    const std::filesystem::path& path);
+
+[[nodiscard]] bool is_bundle(const std::filesystem::path& path);
+
+[[nodiscard]] std::vector<std::byte> read_bundle_payload(
     const std::filesystem::path& path);
 
 }  // namespace foamnordic::closure

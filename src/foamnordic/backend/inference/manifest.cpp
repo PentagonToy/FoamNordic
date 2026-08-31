@@ -28,6 +28,11 @@ constexpr std::array<std::byte, 8> magic{
     std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'M'},
     std::byte{'A'}, std::byte{'N'}, std::byte{'1'}, std::byte{0},
 };
+constexpr std::array<std::byte, 8> bundle_magic{
+    std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'},
+    std::byte{'N'}, std::byte{'D'}, std::byte{'1'}, std::byte{0},
+};
+constexpr std::uint64_t bundle_header_bytes = 24;
 constexpr std::uint32_t maximum_entries = 65536;
 constexpr std::uint32_t maximum_string_bytes = 1024 * 1024;
 constexpr std::uint64_t maximum_manifest_bytes = 64ULL * 1024ULL * 1024ULL;
@@ -385,11 +390,40 @@ ModelArtifact read_manifest(const std::filesystem::path& path) {
         throw std::runtime_error("Could not open manifest for reading: " + path.string());
     }
     const auto end = stream.tellg();
-    if (end < 0 || static_cast<std::uint64_t>(end) > maximum_manifest_bytes) {
+    if (end < 0) {
         throw std::runtime_error("Manifest file size is invalid: " + path.string());
     }
-    std::vector<std::byte> bytes(static_cast<std::size_t>(end));
+    const auto file_bytes = static_cast<std::uint64_t>(end);
     stream.seekg(0);
+    std::array<std::byte, 8> prefix{};
+    stream.read(reinterpret_cast<char*>(prefix.data()), prefix.size());
+    if (!stream) {
+        throw std::runtime_error("Could not read manifest: " + path.string());
+    }
+    std::uint64_t manifest_bytes = file_bytes;
+    if (prefix == bundle_magic) {
+        std::array<std::byte, 16> sizes{};
+        stream.read(reinterpret_cast<char*>(sizes.data()), sizes.size());
+        if (!stream) {
+            throw std::runtime_error("Could not read FNOM bundle header: " + path.string());
+        }
+        Reader header(sizes);
+        manifest_bytes = header.u64();
+        const auto payload_bytes = header.u64();
+        if (manifest_bytes == 0 || manifest_bytes > maximum_manifest_bytes
+            || payload_bytes == 0
+            || bundle_header_bytes + manifest_bytes > file_bytes
+            || payload_bytes != file_bytes - bundle_header_bytes - manifest_bytes) {
+            throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
+        }
+        stream.seekg(static_cast<std::streamoff>(bundle_header_bytes));
+    } else {
+        if (file_bytes > maximum_manifest_bytes) {
+            throw std::runtime_error("Manifest file size is invalid: " + path.string());
+        }
+        stream.seekg(0);
+    }
+    std::vector<std::byte> bytes(static_cast<std::size_t>(manifest_bytes));
     stream.read(
         reinterpret_cast<char*>(bytes.data()),
         static_cast<std::streamsize>(bytes.size()));
@@ -397,6 +431,93 @@ ModelArtifact read_manifest(const std::filesystem::path& path) {
         throw std::runtime_error("Could not read manifest: " + path.string());
     }
     return decode_manifest(bytes);
+}
+
+bool is_bundle(const std::filesystem::path& path) {
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Could not open manifest for reading: " + path.string());
+    }
+    std::array<std::byte, 8> prefix{};
+    stream.read(reinterpret_cast<char*>(prefix.data()), prefix.size());
+    return stream && prefix == bundle_magic;
+}
+
+std::vector<std::byte> read_bundle_payload(const std::filesystem::path& path) {
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    if (!stream) {
+        throw std::runtime_error("Could not open FNOM bundle: " + path.string());
+    }
+    const auto end = stream.tellg();
+    if (end < static_cast<std::streamoff>(bundle_header_bytes)) {
+        throw std::runtime_error("FNOM bundle is truncated: " + path.string());
+    }
+    stream.seekg(0);
+    std::array<std::byte, 24> header_bytes{};
+    stream.read(reinterpret_cast<char*>(header_bytes.data()), header_bytes.size());
+    if (!stream || !std::ranges::equal(
+                       std::span(header_bytes).first(bundle_magic.size()), bundle_magic)) {
+        throw std::invalid_argument("FNOM file does not contain an embedded payload.");
+    }
+    Reader header(std::span(header_bytes).subspan(bundle_magic.size()));
+    const auto manifest_bytes = header.u64();
+    const auto payload_bytes = header.u64();
+    const auto file_bytes = static_cast<std::uint64_t>(end);
+    if (manifest_bytes == 0 || manifest_bytes > maximum_manifest_bytes
+        || payload_bytes == 0
+        || bundle_header_bytes + manifest_bytes > file_bytes
+        || payload_bytes != file_bytes - bundle_header_bytes - manifest_bytes) {
+        throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
+    }
+    stream.seekg(static_cast<std::streamoff>(bundle_header_bytes + manifest_bytes));
+    std::vector<std::byte> payload(static_cast<std::size_t>(payload_bytes));
+    stream.read(
+        reinterpret_cast<char*>(payload.data()),
+        static_cast<std::streamsize>(payload.size()));
+    if (!stream) {
+        throw std::runtime_error("Could not read FNOM payload: " + path.string());
+    }
+    return payload;
+}
+
+void write_bundle(
+    const std::filesystem::path& path,
+    const ModelArtifact& artifact,
+    const std::filesystem::path& payload_path) {
+    const auto manifest = encode_manifest(artifact);
+    std::ifstream payload(payload_path, std::ios::binary | std::ios::ate);
+    if (!payload) {
+        throw std::runtime_error("Could not open model payload: " + payload_path.string());
+    }
+    const auto payload_end = payload.tellg();
+    if (payload_end <= 0) {
+        throw std::invalid_argument("Model payload must not be empty.");
+    }
+    payload.seekg(0);
+    const auto temporary = path.parent_path()
+                           / ("." + path.filename().string() + ".bundle.tmp");
+    std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Could not open FNOM bundle for writing: " + path.string());
+    }
+    Writer header;
+    header.raw(bundle_magic);
+    header.u64(manifest.size());
+    header.u64(static_cast<std::uint64_t>(payload_end));
+    const auto prefix = std::move(header).finish();
+    output.write(reinterpret_cast<const char*>(prefix.data()), prefix.size());
+    output.write(reinterpret_cast<const char*>(manifest.data()), manifest.size());
+    std::vector<char> buffer(8 * 1024 * 1024);
+    while (payload) {
+        payload.read(buffer.data(), buffer.size());
+        output.write(buffer.data(), payload.gcount());
+    }
+    output.close();
+    if (!output) {
+        std::filesystem::remove(temporary);
+        throw std::runtime_error("Could not write FNOM bundle: " + path.string());
+    }
+    std::filesystem::rename(temporary, path);
 }
 
 }  // namespace foamnordic::closure

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <random>
 #include <span>
@@ -376,6 +377,45 @@ void test_manifest_round_trip_and_corruption_rejection() {
     require(trailing_rejected, "Manifest accepted trailing data.");
 }
 
+void test_self_contained_bundle_round_trip() {
+    const auto nonce = std::to_string(std::random_device{}());
+    const auto root = std::filesystem::temp_directory_path();
+    const auto payload_path = root / ("foamnordic-payload-" + nonce + ".bin");
+    const auto bundle_path = root / ("foamnordic-bundle-" + nonce + ".fnom");
+    const std::vector<std::byte> expected{
+        std::byte{0x01}, std::byte{0x02}, std::byte{0x00}, std::byte{0xff}};
+    {
+        std::ofstream payload(payload_path, std::ios::binary);
+        payload.write(
+            reinterpret_cast<const char*>(expected.data()), expected.size());
+    }
+    foamnordic::closure::ModelArtifact artifact{
+        2,
+        foamnordic::closure::ModelFormat::joblib,
+        payload_path.filename().string(),
+        contract(),
+        {},
+        std::nullopt,
+        std::nullopt,
+        "sklearn",
+    };
+    foamnordic::closure::write_bundle(bundle_path, artifact, payload_path);
+    require(
+        foamnordic::closure::is_bundle(bundle_path),
+        "Self-contained FNOM bundle was not detected.");
+    const auto loaded = foamnordic::closure::read_manifest(bundle_path);
+    require(
+        loaded.contract.name == artifact.contract.name
+            && loaded.artifact_path == artifact.artifact_path,
+        "Bundled manifest metadata did not round-trip.");
+    require(
+        foamnordic::closure::read_bundle_payload(bundle_path) == expected,
+        "Embedded FNOM payload did not round-trip exactly.");
+    std::error_code ignored;
+    std::filesystem::remove(payload_path, ignored);
+    std::filesystem::remove(bundle_path, ignored);
+}
+
 }  // namespace
 
 int main() {
@@ -389,4 +429,5 @@ int main() {
     test_dense_affine_kernel_float64();
     test_dense_affine_kernel_float32();
     test_manifest_round_trip_and_corruption_rejection();
+    test_self_contained_bundle_round_trip();
 }

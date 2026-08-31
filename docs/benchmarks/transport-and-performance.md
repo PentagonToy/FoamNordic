@@ -118,6 +118,54 @@ equivalence. A case-specific validation tolerance must be agreed before these
 numbers can become a numerical pass/fail gate. Both runs completed normally at
 the requested final time without closure, transport, or solver failure.
 
+## 2026-08-28: macOS serial NACA4412 reference-path diagnosis
+
+The same 89,728-cell NACA4412 mesh was run serially for ten timesteps from
+`0` to `0.025` with `deltaT=0.0025` on Apple Silicon and OpenFOAM v2606. The
+stock and coupled cases used identical initial fields, mesh, numerical
+schemes, solution controls, and write intervals. The coupled run selected
+rank-local SHM and evaluated the same `Ck=0.094`, `Ce=1.048` function through
+the resident Python path.
+
+| Run | OpenFOAM execution time | OpenFOAM wall time | Total wall time |
+|---|---:|---:|---:|
+| Stock `kEqn` | 9.04 s | 10 s | 10.73 s |
+| Python-function `kEqnFjord` | 9.05 s | 10 s | 11 s |
+| Native-reference diagnostic | 9.04 s | 10 s | 11 s |
+
+The short local run showed no material solver-time penalty. Longship reported
+one second of orchestration outside the solver interval.
+
+### Error onset and growth
+
+The binary float64 `internalField` arrays were compared in mesh order. The
+Python-function path differed at the first written timestep and the difference
+then accumulated through the coupled PIMPLE/LES trajectory.
+
+| Time | Field | Maximum absolute difference | Relative L2 difference |
+|---:|---|---:|---:|
+| 0.0025 | `U` | 1.471486e-03 | 2.142881e-05 |
+| 0.0025 | `p` | 8.571174e-04 | 3.006978e-05 |
+| 0.0025 | `k` | 5.193849e-06 | 7.022485e-07 |
+| 0.0025 | `nut` | 2.362574e-09 | 7.090451e-06 |
+| 0.0250 | `U` | 3.891371e-02 | 1.587492e-03 |
+| 0.0250 | `p` | 1.454831e-02 | 2.519213e-03 |
+| 0.0250 | `k` | 2.120177e-03 | 6.159998e-05 |
+| 0.0250 | `nut` | 3.971894e-07 | 3.663150e-04 |
+
+To isolate the cause, a temporary diagnostic retained `kEqnFjord`'s native C++
+reference values while disabling only the external closure overwrite. The
+model class, equation assembly, correction sites, and Longship lifecycle were
+otherwise unchanged. `U`, `p`, `k`, and `nut` were bitwise identical to stock
+OpenFOAM at both `0.0025` and `0.025`.
+
+This establishes that the `kEqnFjord` C++ equation path can reproduce stock
+`kEqn` exactly under the tested build. The observed coupled-field difference
+originates in recomputing and overwriting the reference terms through the
+Python tensor-arithmetic path, not in SHM payload integrity, model correction
+ordering, or OpenFOAM equation assembly. The diagnostic source and installed
+runtime were restored after the measurement.
+
 ## Release performance gate
 
 The microbenchmarks detect transport regressions. The scientific release gate

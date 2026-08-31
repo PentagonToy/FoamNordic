@@ -663,7 +663,6 @@ shasum -a 256 \
     "$adapter_library" \
     "$FOAM_USER_APPBIN/foamnordicOpenFOAMClosureHookProbe" \
     "$build_dir/tools/resident/foamnordic_closure_worker" \
-    "$model_dir/identity-U.onnx" \
     "$model_dir/identity-U.fnom"
 
 echo "[FoamNordic] Native OpenFOAM ONNX closure hook: PASS"

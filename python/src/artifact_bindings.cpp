@@ -288,6 +288,30 @@ nb::dict manifest_dict(const foamnordic::closure::ModelArtifact& artifact) {
     return result;
 }
 
+foamnordic::closure::ModelArtifact make_artifact(
+    const std::string& artifact_path,
+    const std::string& name,
+    const std::string& model_format,
+    const std::vector<Field>& inputs,
+    const std::vector<Field>& outputs,
+    const std::string& dtype,
+    const std::vector<Leaf>& tree_leaves,
+    nb::object x_scaler,
+    nb::object y_scaler,
+    const std::string& runtime) {
+    const auto value_type = element(dtype);
+    return {
+        runtime.empty() ? 1U : 2U,
+        format(model_format),
+        artifact_path,
+        {name, fields(inputs, value_type), fields(outputs, value_type)},
+        leaves(tree_leaves),
+        create_cpp_scaler(std::move(x_scaler), feature_count(inputs)),
+        create_cpp_scaler(std::move(y_scaler), feature_count(outputs)),
+        runtime,
+    };
+}
+
 }  // namespace
 
 void bind_artifacts(nb::module_& module) {
@@ -304,19 +328,19 @@ void bind_artifacts(nb::module_& module) {
            nb::object x_scaler,
            nb::object y_scaler,
            const std::string& runtime) {
-            const auto value_type = element(dtype);
             foamnordic::closure::write_manifest(
                 manifest_path,
-                {
-                    runtime.empty() ? 1U : 2U,
-                    format(model_format),
+                make_artifact(
                     artifact_path,
-                    {name, fields(inputs, value_type), fields(outputs, value_type)},
-                    leaves(tree_leaves),
-                    create_cpp_scaler(std::move(x_scaler), feature_count(inputs)),
-                    create_cpp_scaler(std::move(y_scaler), feature_count(outputs)),
-                    runtime,
-                });
+                    name,
+                    model_format,
+                    inputs,
+                    outputs,
+                    dtype,
+                    tree_leaves,
+                    std::move(x_scaler),
+                    std::move(y_scaler),
+                    runtime));
         },
         "manifest_path"_a,
         "artifact_path"_a,
@@ -332,10 +356,63 @@ void bind_artifacts(nb::module_& module) {
         "Write one backend-neutral FNOM manifest.");
 
     module.def(
+        "write_model_bundle",
+        [](const std::string& manifest_path,
+           const std::string& payload_path,
+           const std::string& name,
+           const std::string& model_format,
+           const std::vector<Field>& inputs,
+           const std::vector<Field>& outputs,
+           const std::string& dtype,
+           const std::vector<Leaf>& tree_leaves,
+           nb::object x_scaler,
+           nb::object y_scaler,
+           const std::string& runtime) {
+            foamnordic::closure::write_bundle(
+                manifest_path,
+                make_artifact(
+                    std::filesystem::path(payload_path).filename().string(),
+                    name,
+                    model_format,
+                    inputs,
+                    outputs,
+                    dtype,
+                    tree_leaves,
+                    std::move(x_scaler),
+                    std::move(y_scaler),
+                    runtime),
+                payload_path);
+        },
+        "manifest_path"_a,
+        "payload_path"_a,
+        "name"_a,
+        "format"_a,
+        "inputs"_a,
+        "outputs"_a,
+        "dtype"_a = "float64",
+        "tree_leaves"_a = std::vector<Leaf>{},
+        "x_scaler"_a = nb::none(),
+        "y_scaler"_a = nb::none(),
+        "runtime"_a = "",
+        "Write one self-contained, uncompressed FNOM model bundle.");
+
+    module.def(
         "read_model_manifest",
         [](const std::string& path) {
-            return manifest_dict(foamnordic::closure::read_manifest(path));
+            auto result = manifest_dict(foamnordic::closure::read_manifest(path));
+            result["bundled"] = foamnordic::closure::is_bundle(path);
+            return result;
         },
         "path"_a,
         "Read the launch metadata required by a managed model worker.");
+
+    module.def(
+        "read_model_payload",
+        [](const std::string& path) {
+            const auto payload = foamnordic::closure::read_bundle_payload(path);
+            return nb::bytes(
+                reinterpret_cast<const char*>(payload.data()), payload.size());
+        },
+        "path"_a,
+        "Read the embedded payload from a self-contained FNOM bundle.");
 }

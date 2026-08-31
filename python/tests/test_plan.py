@@ -635,6 +635,13 @@ class PlanTests(unittest.TestCase):
             },
         )
         native = Mock()
+        packaged_payload = None
+
+        def capture_bundle(_manifest, payload, *_args):
+            nonlocal packaged_payload
+            packaged_payload = Path(payload).read_bytes()
+
+        native.write_model_bundle.side_effect = capture_bundle
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(fno, "_native", native, create=True),
@@ -643,9 +650,7 @@ class PlanTests(unittest.TestCase):
             artifact = _package_function(longship, closure, Path(directory))
             self.assertIsNotNone(artifact)
             assert artifact is not None
-            payload = artifact.with_suffix(".function")
-            with payload.open("rb") as stream:
-                package = cloudpickle.load(stream)
+            package = cloudpickle.loads(packaged_payload)
 
         self.assertEqual(package["input_widths"], (1, 9, 1))
         self.assertEqual(
@@ -672,7 +677,7 @@ class PlanTests(unittest.TestCase):
             package["outputs"],
             ("nut", "kProduction", "kDissipationCoeff"),
         )
-        native.write_model_manifest.assert_called_once()
+        native.write_model_bundle.assert_called_once()
 
     def test_compatibility_seed_is_normalized_to_a_public_key(self) -> None:
         transform = fno.Transform(

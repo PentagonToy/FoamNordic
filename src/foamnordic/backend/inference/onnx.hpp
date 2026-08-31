@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 #include "foamnordic/backend/inference/model.hpp"
 
@@ -30,6 +31,9 @@ class OnnxPackedKernel final : public PackedModelKernel {
 public:
     explicit OnnxPackedKernel(
         const std::filesystem::path& model_path,
+        OnnxOptions options = {});
+    explicit OnnxPackedKernel(
+        std::vector<std::byte> model_bytes,
         OnnxOptions options = {});
     ~OnnxPackedKernel() override;
 

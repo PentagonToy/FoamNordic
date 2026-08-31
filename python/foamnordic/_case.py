@@ -823,9 +823,9 @@ def _package_function(
         (name, _output_width(longship, program, expression))
         for name, expression in program.outputs.items()
     ]
-    _native.write_model_manifest(
+    _native.write_model_bundle(
         str(manifest),
-        payload.name,
+        str(payload),
         program.name,
         "joblib",
         inputs,
@@ -835,6 +835,7 @@ def _package_function(
         None,
         None,
     )
+    payload.unlink()
     return manifest
 
 

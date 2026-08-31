@@ -77,17 +77,37 @@ int main() {
         7,
         0.25,
     };
+    const auto original_feature_bytes = features.bytes;
 
     const auto output = kernel.evaluate(features.view(), 7, 0.25);
+    assert(features.bytes == original_feature_bytes);
     assert((output.shape == std::vector<std::uint64_t>{2, 1}));
     std::array<float, 2> predictions{};
     std::memcpy(predictions.data(), output.bytes.data(), output.bytes.size());
     assert(std::abs(predictions[0] - (-0.5F)) < 1.0e-6F);
     assert(std::abs(predictions[1] - (-7.5F)) < 1.0e-6F);
 
+    std::vector<std::byte> unaligned_storage(features.bytes.size() + 1);
+    std::memcpy(
+        unaligned_storage.data() + 1,
+        features.bytes.data(),
+        features.bytes.size());
+    const foamnordic::fjord::TensorView unaligned_features{
+        features.name,
+        features.element,
+        features.shape,
+        std::span<const std::byte>(unaligned_storage).subspan(1),
+        features.time_index,
+        features.physical_time,
+        features.solver_time_index,
+    };
+    const auto unaligned_output =
+        kernel.evaluate(unaligned_features, 7, 0.25);
+    assert(unaligned_output.bytes == output.bytes);
+
     const auto manifest_path =
         std::filesystem::temp_directory_path() / "foamnordic-native-test.fnom";
-    foamnordic::closure::write_manifest(
+    foamnordic::closure::write_bundle(
         manifest_path,
         {
             1,
@@ -102,7 +122,9 @@ int main() {
             foamnordic::closure::AffineScaler::standard(
                 {1.0, 1.0}, {2.0, 2.0}),
             foamnordic::closure::AffineScaler::robust({10.0}, {2.0}),
-        });
+        },
+        model_path);
+    std::filesystem::remove(model_path);
     auto loaded = foamnordic::closure::load_model(manifest_path);
     foamnordic::closure::TensorMap inputs;
     inputs.emplace("features", features);
@@ -171,6 +193,5 @@ int main() {
     }
     assert(!std::filesystem::exists(socket_path));
 
-    std::filesystem::remove(model_path);
     std::filesystem::remove(manifest_path);
 }

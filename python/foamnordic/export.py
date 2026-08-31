@@ -93,7 +93,7 @@ def onnx(
     y_scaler: object | None = None,
     verbose: bool = False,
 ) -> Path:
-    """Write an ONNX payload plus its uncompressed native `.fnom` manifest."""
+    """Write one self-contained, uncompressed native `.fnom` model bundle."""
 
     if not isinstance(verbose, bool):
         raise TypeError("verbose must be a boolean")
@@ -131,6 +131,7 @@ def onnx(
             outputs,
             dtype,
         )
+    model_path.unlink()
     return manifest
 
 
@@ -155,9 +156,9 @@ def _manifest_contract(
     if len(dtypes) != 1:
         raise ValueError("all tensors in one native artifact must share a dtype")
     dtype = dtypes.pop()
-    _native.write_model_manifest(
+    _native.write_model_bundle(
         str(manifest),
-        payload.name,
+        str(payload),
         model_name,
         model_format,
         input_contract,
@@ -247,6 +248,7 @@ def joblib(
         _display_export(
             manifest, payload, model_name, inputs, outputs, dtype, format_name="Joblib"
         )
+    payload.unlink()
     return manifest
 
 
@@ -338,6 +340,7 @@ def equinox(
         _display_export(
             manifest, payload, model_name, inputs, outputs, dtype, format_name="Equinox"
         )
+    payload.unlink()
     return manifest
 
 
@@ -363,15 +366,15 @@ def _display_export(
         mode="static",
     )
     rows = [
-        ("Manifest", manifest.name),
-        ("Payload", model.name),
+        ("Artifact", manifest.name),
+        ("Payload", f"embedded {model.suffix}"),
         ("Format", f"{format_name} + FNOM v{metadata['schema_version']}"),
         ("Dtype", dtype),
         ("Inputs", ", ".join(f"{key}[{value.components}]" for key, value in inputs.items())),
         ("Outputs", ", ".join(f"{key}[{value.components}]" for key, value in outputs.items())),
         ("Input scaler", "none" if input_scaler is None else input_scaler["kind"]),
         ("Output scaler", "none" if output_scaler is None else output_scaler["kind"]),
-        ("Compression", "none (path-backed startup)"),
+        ("Compression", "none (load once at worker startup)"),
         ("Payload size", f"{model.stat().st_size} B"),
     ]
     if metadata.get("runtime") is not None:

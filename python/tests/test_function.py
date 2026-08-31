@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -9,6 +10,24 @@ import foamnordic as fno
 
 
 class FunctionOperatorTests(unittest.TestCase):
+    def test_unused_random_state_is_not_constructed(self) -> None:
+        package = {
+            "schema": "foamnordic.function/v1",
+            "function": lambda value: value + 1.0,
+            "inputs": ("value",),
+            "input_widths": (1,),
+            "outputs": ("result",),
+            "seed": 42,
+        }
+        values = np.asarray([[1.0], [2.0]], dtype=np.float64)
+        evaluator = _function_evaluator(package, (("result", 1),))
+
+        with patch("numpy.random.default_rng") as default_rng:
+            actual = evaluator(memoryview(values), 2, 1, "float64", 3, 0.1)
+
+        default_rng.assert_not_called()
+        np.testing.assert_array_equal(actual[:, 0], np.asarray([2.0, 3.0]))
+
     def test_tensor_port_is_exposed_in_physical_matrix_shape(self) -> None:
         observed = None
 

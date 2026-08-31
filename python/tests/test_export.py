@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import inspect
 import sys
@@ -76,7 +77,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(metadata["runtime"], "sklearnex")
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
-    def test_existing_onnx_payload_exports_native_manifest(self) -> None:
+    def test_existing_onnx_payload_exports_self_contained_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = fno.export.onnx(
@@ -90,14 +91,14 @@ class ExportTests(unittest.TestCase):
                 },
                 outputs={"omega_c": fno.Tensor.scalar()},
             )
-            self.assertEqual(manifest.read_bytes()[:8], b"FNOMAN1\0")
+            self.assertEqual(manifest.read_bytes()[:8], b"FNOBND1\0")
             self.assertEqual(
-                (root / "reaction-rate.onnx").read_bytes(), b"onnx-payload"
+                fno._native.read_model_payload(str(manifest)), b"onnx-payload"
             )
-            self.assertLess(manifest.stat().st_size, 1024)
+            self.assertFalse((root / "reaction-rate.onnx").exists())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
-    def test_path_backed_payload_is_exported(self) -> None:
+    def test_path_backed_payload_is_embedded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "large-voting-regressor.onnx"
@@ -109,8 +110,9 @@ class ExportTests(unittest.TestCase):
                 outputs={"prediction": fno.Tensor.scalar()},
             )
             self.assertEqual(
-                manifest.with_suffix(".onnx").read_bytes(), source.read_bytes()
+                fno._native.read_model_payload(str(manifest)), source.read_bytes()
             )
+            self.assertFalse(manifest.with_suffix(".onnx").exists())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_verbose_true_displays_export_summary(self) -> None:
@@ -217,7 +219,7 @@ class ExportTests(unittest.TestCase):
             )
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
-    def test_joblib_model_is_path_backed_and_mmap_loadable(self) -> None:
+    def test_joblib_model_is_embedded_and_loadable(self) -> None:
         try:
             import joblib
             import numpy as np
@@ -237,10 +239,10 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(metadata["format"], "joblib")
             self.assertEqual(metadata["schema_version"], 2)
             self.assertEqual(metadata["runtime"], "sklearn")
-            payload = root / metadata["artifact_path"]
-            self.assertTrue(payload.is_file())
-            loaded = joblib.load(payload, mmap_mode="r")
-            self.assertIsInstance(loaded.weights, np.memmap)
+            self.assertTrue(metadata["bundled"])
+            payload = BytesIO(fno._native.read_model_payload(str(manifest)))
+            loaded = joblib.load(payload)
+            np.testing.assert_allclose(loaded.weights, [2.0, 1.0])
             values = np.asarray([[1.0, 3.0], [2.0, 4.0]], dtype=np.float64)
             evaluator = _joblib_evaluator(payload, (("prediction", 1),))
             result = evaluator(memoryview(values), 2, 2, "float64", 0, 0.0)
@@ -268,7 +270,7 @@ class ExportTests(unittest.TestCase):
             )
             metadata = fno._native.read_model_manifest(str(manifest))
             self.assertEqual(metadata["format"], "equinox")
-            payload = root / metadata["artifact_path"]
+            payload = BytesIO(fno._native.read_model_payload(str(manifest)))
             evaluator = _equinox_evaluator(
                 payload, (("prediction", 1),), "float32"
             )

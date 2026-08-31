@@ -17,6 +17,9 @@
 
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
+#ifdef FOAMNORDIC_HAS_ONNXRUNTIME
+#include "foamnordic/backend/inference/onnx.hpp"
+#endif
 #include "foamnordic/backend/connectors/registry.hpp"
 
 namespace foamnordic::closure {
@@ -58,8 +61,17 @@ std::filesystem::path resolve_artifact(
 
 LoadedModel load_model(const std::filesystem::path& manifest_path) {
     auto artifact = read_manifest(manifest_path);
-    auto packed = foamnordic::backend::connect_model(
-        resolve_artifact(manifest_path, artifact.artifact_path), artifact);
+    std::unique_ptr<PackedModelKernel> packed;
+#ifdef FOAMNORDIC_HAS_ONNXRUNTIME
+    if (artifact.format == ModelFormat::onnx && is_bundle(manifest_path)) {
+        packed = std::make_unique<OnnxPackedKernel>(
+            read_bundle_payload(manifest_path));
+    } else
+#endif
+    {
+        packed = foamnordic::backend::connect_model(
+            resolve_artifact(manifest_path, artifact.artifact_path), artifact);
+    }
 
     auto kernel =
         std::make_unique<OwnedArtifactKernel>(artifact, std::move(packed));
