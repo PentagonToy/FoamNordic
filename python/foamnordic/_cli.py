@@ -417,6 +417,40 @@ def _finalize_macos_openfoam_library(library_dir: Path, log: TextIO) -> Path:
     return destination
 
 
+def _native_build_environment() -> dict[str, str]:
+    """Prefer the compiler selected by the active native toolchain.
+
+    Python environments such as Tykky/Conda may put compiler shims ahead of
+    the compiler loaded with OpenFOAM.  OpenFOAM's wmake invokes ``gcc`` and
+    ``g++`` by name, so put the directories containing CC/CXX first without
+    removing the Python environment or tools installed in it.
+    """
+    environment = os.environ.copy()
+    path = environment.get("PATH", "")
+    compiler_directories: list[str] = []
+    for variable in ("CXX", "CC"):
+        command = environment.get(variable)
+        if not command:
+            continue
+        try:
+            executable = shlex.split(command)[0]
+        except (IndexError, ValueError):
+            continue
+        resolved = shutil.which(executable, path=path)
+        if resolved is not None:
+            directory = str(Path(resolved).resolve().parent)
+            if directory not in compiler_directories:
+                compiler_directories.append(directory)
+
+    if compiler_directories:
+        existing = [entry for entry in path.split(os.pathsep) if entry]
+        environment["PATH"] = os.pathsep.join(
+            compiler_directories
+            + [entry for entry in existing if entry not in compiler_directories]
+        )
+    return environment
+
+
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
     terminal = _Terminal(stream)
     terminal.section("FoamNordic native build")
@@ -481,7 +515,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
     solver_source = build_dir / "progressVariableFoam"
     library_dir = prefix / "lib"
     application_dir = prefix / "bin"
-    environment = os.environ.copy()
+    environment = _native_build_environment()
     environment.update(
         {
             "FOAMNORDIC_SOURCE": str(source),
@@ -491,7 +525,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             "FOAM_USER_APPBIN": str(application_dir),
         }
     )
-    cmake_environment = os.environ.copy()
+    cmake_environment = environment.copy()
     if sys.platform == "darwin":
         # OpenFOAM.app ships its own libiconv.  Let Homebrew CMake resolve its
         # own dependencies, then restore the OpenFOAM environment for wmake.

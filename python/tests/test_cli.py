@@ -12,7 +12,12 @@ import unittest
 from unittest.mock import patch
 
 import foamnordic as fno
-from foamnordic._cli import _doctor_checks, _source_root, main
+from foamnordic._cli import (
+    _doctor_checks,
+    _native_build_environment,
+    _source_root,
+    main,
+)
 from foamnordic.build.onnxruntime import NativeOnnxRuntime
 from foamnordic.core.managed import MARKER, mark_generated
 from foamnordic.core.native_plan import available as native_available
@@ -20,6 +25,32 @@ from foamnordic.execution.runtime_paths import openfoam_abi_for_toolchain
 
 
 class CliTests(unittest.TestCase):
+    def test_native_build_prefers_openfoam_toolchain_compilers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            toolchain = root / "toolchain/bin"
+            tykky = root / "tykky/bin"
+            toolchain.mkdir(parents=True)
+            tykky.mkdir(parents=True)
+            for executable in (toolchain / "gcc", toolchain / "g++"):
+                executable.touch()
+                executable.chmod(0o755)
+            with patch.dict(
+                os.environ,
+                {
+                    "PATH": os.pathsep.join((str(tykky), str(toolchain))),
+                    "CC": str(toolchain / "gcc"),
+                    "CXX": str(toolchain / "g++"),
+                },
+                clear=True,
+            ):
+                environment = _native_build_environment()
+
+            entries = environment["PATH"].split(os.pathsep)
+            self.assertEqual(entries[0], str(toolchain.resolve()))
+            self.assertEqual(entries.count(str(toolchain.resolve())), 1)
+            self.assertIn(str(tykky), entries)
+
     def test_case_toolchain_probe_discovers_openfoam_abi(self) -> None:
         completed = subprocess.CompletedProcess(
             args=("bash",),
