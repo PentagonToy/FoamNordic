@@ -55,9 +55,9 @@ private:
     bool has_previous_exchange_{false};
 };
 
-class BlockingClosureExchange {
+class BlockingFieldExchange {
 public:
-    BlockingClosureExchange(fjord::Harbor& harbor, ExchangeContract contract);
+    BlockingFieldExchange(fjord::Harbor& harbor, ExchangeContract contract);
 
     [[nodiscard]] std::uint64_t execute(
         std::uint64_t time_index,

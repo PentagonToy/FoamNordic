@@ -11,8 +11,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef Foam_foamNordic_closureObservation_H
-#define Foam_foamNordic_closureObservation_H
+#ifndef Foam_foamNordic_fieldProgramObservation_H
+#define Foam_foamNordic_fieldProgramObservation_H
 
 #include "Time.H"
 #include "dictionary.H"
@@ -27,21 +27,21 @@
 
 namespace Foam::foamNordic {
 
-class ClosureObservation final {
+class FieldProgramObservation final {
     wordList fields_;
     foamnordic::adapter::CompiledObservationPlan plan_;
     std::unique_ptr<foamnordic::adapter::ObservationPublisher> publisher_;
     std::unique_ptr<foamnordic::adapter::ObservationJsonlWriter> writer_;
     bool enabled_{true};
 
-    explicit ClosureObservation(const dictionary& dict);
+    explicit FieldProgramObservation(const dictionary& dict);
 
 public:
-    [[nodiscard]] static std::unique_ptr<ClosureObservation> create(
+    [[nodiscard]] static std::unique_ptr<FieldProgramObservation> create(
         const dictionary& closureDict);
 
-    ClosureObservation(const ClosureObservation&) = delete;
-    ClosureObservation& operator=(const ClosureObservation&) = delete;
+    FieldProgramObservation(const FieldProgramObservation&) = delete;
+    FieldProgramObservation& operator=(const FieldProgramObservation&) = delete;
 
     void publish(
         const fvMesh& mesh,

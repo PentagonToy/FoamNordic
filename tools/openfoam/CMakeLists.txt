@@ -4,7 +4,7 @@ target_link_libraries(foamnordic_openfoam_echo PRIVATE FoamNordic::fjord)
 if(FOAMNORDIC_ONNX_RUNTIME)
     add_executable(foamnordic_openfoam_onnx_fixture onnx_fixture.cpp)
     target_link_libraries(
-        foamnordic_openfoam_onnx_fixture PRIVATE FoamNordic::closure)
+        foamnordic_openfoam_onnx_fixture PRIVATE FoamNordic::inference)
     if(FOAMNORDIC_TESTS)
         add_test(
             NAME openfoam.onnx_fixture

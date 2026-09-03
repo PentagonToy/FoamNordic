@@ -31,7 +31,7 @@ returned one 4 MiB float64 tensor. Thirty-two exchanges completed.
 Rune metadata, payload endpoints, exchange ordering, solver-time identity,
 atomic completion, and clean shutdown were verified. This measurement is the
 portable inter-node baseline, not the default closure hot path. Its latency
-supports the default Longship policy: place one ClosureHost beside the solver
+supports the default Longship policy: place one ModelHost beside the solver
 ranks on every node and use SHM locally.
 
 ### Split-allocation confirmation

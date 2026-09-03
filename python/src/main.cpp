@@ -46,7 +46,7 @@ NB_MODULE(_native, module) {
     nb::class_<PlacementRequest>(
         module,
         "PlacementRequest",
-        "Mutable native input used to resolve ClosureHost placement.")
+        "Mutable native input used to resolve ModelHost placement.")
         .def(nb::init<>())
         .def_rw("placement", &PlacementRequest::placement)
         .def_rw("device", &PlacementRequest::device)
@@ -81,7 +81,7 @@ NB_MODULE(_native, module) {
         .def_rw("solver_tasks", &LongshipRequest::solver_tasks)
         .def_rw("solver_cpus_per_task", &LongshipRequest::solver_cpus_per_task)
         .def_rw("host_cpus_per_node", &LongshipRequest::host_cpus_per_node)
-        .def_rw("use_closure_host", &LongshipRequest::use_closure_host)
+        .def_rw("use_model_host", &LongshipRequest::use_model_host)
         .def_rw("placement", &LongshipRequest::placement)
         .def("validate", &LongshipRequest::validate);
 

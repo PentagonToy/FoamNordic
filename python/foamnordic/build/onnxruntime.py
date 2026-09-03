@@ -1,4 +1,4 @@
-"""Resolve the pinned native ONNX Runtime used by ClosureHost."""
+"""Resolve the pinned native ONNX Runtime used by ModelHost."""
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ def resolve(*, download: bool = True) -> NativeOnnxRuntime:
         asset, checksum = _ASSETS[key]
     except KeyError:
         raise RuntimeError(
-            "native ONNX ClosureHost supports linux-x86_64, linux-aarch64, "
+            "native ONNX ModelHost supports linux-x86_64, linux-aarch64, "
             "and macOS arm64; use --without-onnx for another platform"
         ) from None
     root = (

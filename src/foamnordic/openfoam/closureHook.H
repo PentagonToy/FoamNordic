@@ -12,8 +12,8 @@
 #ifndef Foam_foamNordic_closureHook_H
 #define Foam_foamNordic_closureHook_H
 
-#include "closureSession.H"
-#include "closureObservation.H"
+#include "fieldProgramSession.H"
+#include "fieldProgramObservation.H"
 
 #include "fvMesh.H"
 #include "wordList.H"
@@ -43,8 +43,8 @@ struct ClosureOutput final {
 class ClosureHook final {
     std::vector<ClosureInput> inputs_;
     std::vector<ClosureOutput> outputs_;
-    ClosureSession session_;
-    std::unique_ptr<ClosureObservation> observation_;
+    FieldProgramSession session_;
+    std::unique_ptr<FieldProgramObservation> observation_;
     [[nodiscard]] static std::vector<ClosureInput> readInputs(
         const dictionary& dict);
     [[nodiscard]] static std::vector<ClosureOutput> readOutputs(

@@ -215,12 +215,12 @@ private:
         }
         if (host.finished()) {
             throw std::runtime_error(
-                "ClosureHost exited before Longship readiness.");
+                "ModelHost exited before Longship readiness.");
         }
         const auto now = std::chrono::steady_clock::now();
         if (now >= deadline) {
             throw std::runtime_error(
-                "Longship timed out waiting for ClosureHost readiness.");
+                "Longship timed out waiting for ModelHost readiness.");
         }
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
             deadline - now);
@@ -252,7 +252,7 @@ void LongshipLaunch::validate() const {
     solver.validate();
     if (host_ready_files.empty()) {
         throw std::invalid_argument(
-            "Longship requires at least one ClosureHost readiness file.");
+            "Longship requires at least one ModelHost readiness file.");
     }
     if (readiness_timeout <= std::chrono::milliseconds::zero()
         || termination_grace <= std::chrono::milliseconds::zero()) {
@@ -306,7 +306,7 @@ LongshipResult sail_longship(
             solver.terminate(launch.termination_grace);
         }
     } else {
-        // ClosureHost is a resident service and is not expected to exit merely
+        // ModelHost is a resident service and is not expected to exit merely
         // because the solver has completed. Ask it to stop immediately; the
         // grace period bounds shutdown after SIGTERM instead of delaying the
         // signal itself.

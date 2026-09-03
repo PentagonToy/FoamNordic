@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 template<class Value>
@@ -146,4 +146,4 @@ std::uint64_t DenseAffineKernel::output_features() const noexcept {
     return output_features_;
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

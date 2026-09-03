@@ -25,7 +25,7 @@ by `correctBoundaryConditions()`. An input and output may name the same field,
 so an identity or corrective `U -> U` contract remains atomic.
 
 The bridge deliberately knows nothing about turbulence or combustion models.
-Solver-integrated closures use the same views with `ClosurePort`, whose commit
+Solver-integrated closures use the same views with `FieldProgramPort`, whose commit
 blocks on every invocation. Specific OpenFOAM model adapters should only select
 fields, expose their views, and invoke the port; transport, sequencing, scaler
 application, bypass, and inference remain in the native core.
@@ -35,8 +35,8 @@ also recorded beside the implementations in
 `src/foamnordic/openfoam/models/README.md`. Copied-case laminar, RAS, and LES
 evidence is recorded in [OpenFOAM case validation](../benchmarks/openfoam-cases.md).
 
-`Foam::foamNordic::ClosureSession` is the reusable solver hook. It owns one
-rank-local connection and one `ClosurePort`; `begin(Time)` creates a fresh
+`Foam::foamNordic::FieldProgramSession` is the reusable solver hook. It owns one
+rank-local connection and one `FieldProgramPort`; `begin(Time)` creates a fresh
 per-call invocation without reconnecting. A turbulence correction, modeled
 equation update, or combustion source evaluation provides its current views,
 registers its outputs, and commits before returning to the solver. Repeated
@@ -70,7 +70,7 @@ One frame belongs to exactly one closure invocation. It caches repeated
 subexpressions only within that invocation and owns all OpenFOAM `tmp` fields
 until the blocking commit finishes. A later PIMPLE/PISO corrector constructs a
 new frame and recomputes its features from the updated solver state. No Python
-or external ClosureHost attempts to reconstruct OpenFOAM differential
+or external ModelHost attempts to reconstruct OpenFOAM differential
 operators.
 
 Binary operations use the same expression tree. `dot(A,B)` and `ddot(A,B)`
@@ -221,7 +221,7 @@ of `nutFjord`, UCX negotiation for every rank, clean ONNX runner shutdown, the
 requested final solver time, and coupled Longship completion.
 
 This gate passed on Roihu with two OpenFOAM v2512 ranks and a resident
-ClosureHost in separate Slurm allocations. Three `pimpleFoam` time steps
+ModelHost in separate Slurm allocations. Three `pimpleFoam` time steps
 completed through the native `grad(U), delta -> nut` ONNX contract over UCX,
 with clean rank, worker, scheduler-proxy, and Longship shutdown. This is the
 baseline solver acceptance gate for later `kEqnFjord` case validation.
@@ -270,7 +270,7 @@ so field ordering and output splitting are checked on workstation builds.
 `tools/openfoam/testKEqnFjordSolverSplitSlurm.sh` is the corresponding compact
 solver gate. It reuses a prepared native/ONNX build, copies the source case,
 selects `kEqnFjord`, runs two parallel `pimpleFoam` ranks against one resident
-ClosureHost, and requires UCX, all three written closure fields, the requested
+ModelHost, and requires UCX, all three written closure fields, the requested
 end time, and clean Longship shutdown. If the compact cavity has no `0/k`, the
 driver seeds its known wall patches from `k.cavity.in`; a production case that
 already owns `0/k`, such as NACA4412, retains its original field and boundary
@@ -282,7 +282,7 @@ literal entries. Existing source dictionaries remain unchanged. This keeps the
 cavity software gate distinct from later physical case validation.
 
 The compact gate passed on Roihu with two OpenFOAM v2512 ranks in a `small`
-allocation and one resident ClosureHost in an interactive allocation. Three
+allocation and one resident ModelHost in an interactive allocation. Three
 time steps exercised model validation plus the pre- and post-k-equation closure
 updates; every rank used UCX, every expected field was written, and Longship
 completed cleanly. The run establishes solver integration only. Its seeded 2D
@@ -361,7 +361,7 @@ Set `FOAMNORDIC_MPI_RANKS=2` (or a larger local rank count) when running
 test starts one worker per rank, requires every rank to negotiate its own SHM
 channel, and verifies two same-solver-time blocking calls without gathering
 fields through rank zero.
-It then launches one resident ONNX ClosureHost through Longship, connects every
+It then launches one resident ONNX ModelHost through Longship, connects every
 OpenFOAM rank to that shared node-local listener, verifies one SHM session per
 rank, and requires protocol shutdown to reap every runner before the coupled
 workload reports success.
@@ -406,12 +406,12 @@ For a central host, use a TCP control address and request the UCX bulk path
 explicitly:
 
 ```foam
-address          "tcp://closure-host:24026";
+address          "tcp://model-host:24026";
 sharedMemory     false;
 ucx              true;
 ```
 
-The adapter connects the TCP control session, requires the ClosureHost to
+The adapter connects the TCP control session, requires the ModelHost to
 select UCX, and upgrades before publishing the first Rune tensor. Both the
 CMake native libraries and the wmake adapter must be built with UCX support.
 An explicit `ucx true` never falls back to TCP.

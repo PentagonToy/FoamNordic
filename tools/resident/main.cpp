@@ -22,7 +22,7 @@
 
 #include <unistd.h>
 
-#include "foamnordic/backend/inference/closure.hpp"
+#include "foamnordic/backend/inference/exchange.hpp"
 #include "foamnordic/backend/inference/worker.hpp"
 #include "foamnordic/fjord/endpoint.hpp"
 
@@ -30,7 +30,7 @@ namespace {
 
 void usage() {
     std::cerr
-        << "Usage: foamnordic_closure_worker <address> <manifest> [OPTIONS]\n"
+        << "Usage: foamnordic_model_worker <address> <manifest> [OPTIONS]\n"
         << "  address   unix:///path/to/worker.sock or tcp://host:port\n"
         << "  manifest  FoamNordic native model manifest\n"
         << "  --connections N  Solver sessions accepted by this host\n"
@@ -88,7 +88,7 @@ public:
             throw std::system_error(
                 errno,
                 std::generic_category(),
-                "Cannot create ClosureHost readiness marker");
+                "Cannot create ModelHost readiness marker");
         }
         const auto identity = std::to_string(static_cast<long long>(::getpid())) + "\n";
         const auto written = ::write(descriptor, identity.data(), identity.size());
@@ -100,7 +100,7 @@ public:
             throw std::system_error(
                 saved_error == 0 ? EIO : saved_error,
                 std::generic_category(),
-                "Cannot write ClosureHost readiness marker");
+                "Cannot write ModelHost readiness marker");
         }
     }
 
@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
         usage();
         return 2;
     }
-    foamnordic::closure::WorkerOptions options;
+    foamnordic::inference::WorkerOptions options;
     std::filesystem::path ready_file;
     try {
         for (int index = 3; index < argc; ++index) {
@@ -147,8 +147,8 @@ int main(int argc, char** argv) {
                     + std::string(argument));
             }
         }
-        foamnordic::closure::EvaluateEveryCell bypass;
-        foamnordic::closure::NativeClosureWorker worker(
+        foamnordic::inference::EvaluateAllCells bypass;
+        foamnordic::inference::ModelWorker worker(
             foamnordic::fjord::FjordAddress::parse(argv[1]),
             std::filesystem::path(argv[2]),
             bypass,

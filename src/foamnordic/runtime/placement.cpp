@@ -28,17 +28,17 @@ DataPath resolve_attached_path(const PlacementRequest& request) {
             return DataPath::tcp;
         case DataPathPreference::shared_memory:
             if (!request.shared_memory_available) {
-                throw std::runtime_error("Attached ClosureHost requested unavailable SHM.");
+                throw std::runtime_error("Attached ModelHost requested unavailable SHM.");
             }
             return DataPath::shared_memory;
         case DataPathPreference::unix_socket:
             if (!request.unix_socket_available) {
-                throw std::runtime_error("Attached ClosureHost requested unavailable UDS.");
+                throw std::runtime_error("Attached ModelHost requested unavailable UDS.");
             }
             return DataPath::unix_socket;
         case DataPathPreference::ucx:
             if (!request.ucx_available) {
-                throw std::runtime_error("ClosureHost requested unavailable UCX.");
+                throw std::runtime_error("ModelHost requested unavailable UCX.");
             }
             return DataPath::ucx;
         case DataPathPreference::tcp:
@@ -53,7 +53,7 @@ DataPath resolve_central_path(const PlacementRequest& request) {
             return request.ucx_available ? DataPath::ucx : DataPath::tcp;
         case DataPathPreference::ucx:
             if (!request.ucx_available) {
-                throw std::runtime_error("Central ClosureHost requested unavailable UCX.");
+                throw std::runtime_error("Central ModelHost requested unavailable UCX.");
             }
             return DataPath::ucx;
         case DataPathPreference::tcp:
@@ -61,7 +61,7 @@ DataPath resolve_central_path(const PlacementRequest& request) {
         case DataPathPreference::shared_memory:
         case DataPathPreference::unix_socket:
             throw std::invalid_argument(
-                "Central ClosureHost cannot use a same-node data path.");
+                "Central ModelHost cannot use a same-node data path.");
     }
     throw std::logic_error("Unknown FoamNordic data-path preference.");
 }
@@ -73,7 +73,7 @@ void PlacementRequest::validate() const {
         throw std::invalid_argument("FoamNordic requires at least one solver node.");
     }
     if (central_host_nodes == 0) {
-        throw std::invalid_argument("Central ClosureHost requires at least one host node.");
+        throw std::invalid_argument("Central ModelHost requires at least one host node.");
     }
 }
 
@@ -89,7 +89,7 @@ PlacementPlan resolve_placement(const PlacementRequest& request) {
     if (placement == HostPlacement::attached) {
         if (request.device == InferenceDevice::gpu && !request.solver_nodes_have_device) {
             throw std::invalid_argument(
-                "Attached GPU ClosureHost requires GPU-capable solver nodes.");
+                "Attached GPU ModelHost requires GPU-capable solver nodes.");
         }
         const auto path = resolve_attached_path(request);
         return {
@@ -100,10 +100,10 @@ PlacementPlan resolve_placement(const PlacementRequest& request) {
             true,
             true,
             path == DataPath::shared_memory
-                ? "one ClosureHost per solver node; SHM bulk path with UDS control"
+                ? "one ModelHost per solver node; SHM bulk path with UDS control"
                 : path == DataPath::unix_socket
-                      ? "one ClosureHost per solver node; UDS data and control"
-                      : "one ClosureHost per solver node; explicit network data path",
+                      ? "one ModelHost per solver node; UDS data and control"
+                      : "one ModelHost per solver node; explicit network data path",
         };
     }
 
@@ -116,8 +116,8 @@ PlacementPlan resolve_placement(const PlacementRequest& request) {
         false,
         true,
         path == DataPath::ucx
-            ? "central ClosureHost nodes; UCX data path with TCP control"
-            : "central ClosureHost nodes; portable TCP data and control",
+            ? "central ModelHost nodes; UCX data path with TCP control"
+            : "central ModelHost nodes; portable TCP data and control",
     };
 }
 

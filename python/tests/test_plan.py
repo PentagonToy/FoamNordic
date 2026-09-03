@@ -98,7 +98,7 @@ class PlanTests(unittest.TestCase):
             return_value=7,
         ):
             value = local.compile().as_dict()
-        self.assertEqual(value["placement"]["closure_cpus_per_node"], "auto")
+        self.assertEqual(value["placement"]["model_cpus_per_node"], "auto")
         self.assertEqual(value["runtime"]["host_cpus_per_task"], 7)
 
     def test_local_model_cpu_budget_can_be_overridden(self) -> None:
@@ -106,7 +106,7 @@ class PlanTests(unittest.TestCase):
         local = fno.Longship(
             case=example.case,
             closures=example.closures,
-            placement=fno.Attached(closure_cpus_per_node=3),
+            placement=fno.Attached(model_cpus_per_node=3),
         )
         self.assertEqual(
             local.compile().as_dict()["runtime"]["host_cpus_per_task"],
@@ -293,7 +293,7 @@ class PlanTests(unittest.TestCase):
         help_text = pydoc.plain(pydoc.render_doc(fno.Slurm))
         self.assertIn("openfoam(", help_text)
         self.assertIn("model(", help_text)
-        self.assertIn("exactly one ClosureHost task per node", help_text)
+        self.assertIn("exactly one ModelHost task per node", help_text)
 
     def test_multi_node_attached_plan_uses_one_host_per_node(self) -> None:
         example = example_longship()
@@ -568,7 +568,7 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(value["transforms"], [])
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
-    def test_solver_only_plan_reserves_no_closure_host(self) -> None:
+    def test_solver_only_plan_reserves_no_model_host(self) -> None:
         example = example_longship()
         pure = fno.Longship(case=example.case, name="openfoam-baseline")
         value = pure.compile().as_dict()

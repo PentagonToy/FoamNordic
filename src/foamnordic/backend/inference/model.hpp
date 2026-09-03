@@ -14,7 +14,7 @@
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/runner.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 class PackedModelKernel {
 public:
@@ -52,4 +52,4 @@ private:
     PackedModelKernel& kernel_;
 };
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

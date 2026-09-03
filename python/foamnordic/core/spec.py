@@ -306,24 +306,24 @@ class Observe:
 
 @dataclass(frozen=True, slots=True)
 class Attached:
-    """Place one native ClosureHost beside each solver node."""
+    """Place one native ModelHost beside each solver node."""
 
-    closure_cpus_per_node: int | None = None
+    model_cpus_per_node: int | None = None
     data_path: str = "auto"
 
     def __post_init__(self) -> None:
-        if self.closure_cpus_per_node is not None:
-            require_positive(self.closure_cpus_per_node, "closure_cpus_per_node")
+        if self.model_cpus_per_node is not None:
+            require_positive(self.model_cpus_per_node, "model_cpus_per_node")
         if self.data_path not in {"auto", "shm", "uds", "ucx", "tcp"}:
             raise ValueError("data_path must be auto, shm, uds, ucx, or tcp")
 
     def to_plan(self) -> dict[str, object]:
         return {
             "kind": "attached",
-            "closure_cpus_per_node": (
+            "model_cpus_per_node": (
                 "auto"
-                if self.closure_cpus_per_node is None
-                else self.closure_cpus_per_node
+                if self.model_cpus_per_node is None
+                else self.model_cpus_per_node
             ),
             "data_path": self.data_path,
         }
@@ -363,7 +363,7 @@ class SlurmOpenFOAM:
 
 @dataclass(frozen=True, slots=True)
 class SlurmModel:
-    """Resources for exactly one ClosureHost task per OpenFOAM node."""
+    """Resources for exactly one ModelHost task per OpenFOAM node."""
 
     cpus_per_task: int = 1
     mem_per_cpu: str | None = None
@@ -447,7 +447,7 @@ class Slurm:
         cpus_per_task: int = 1,
         mem_per_cpu: str | None = None,
     ) -> SlurmModel:
-        """Declare resources for exactly one ClosureHost task per node."""
+        """Declare resources for exactly one ModelHost task per node."""
 
         return SlurmModel(cpus_per_task, mem_per_cpu)
 

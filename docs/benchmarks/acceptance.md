@@ -1,7 +1,7 @@
 # Acceptance status
 
 The transport and turbulence foundation already has Linux HPC evidence for
-cross-node TCP, fabric-backed UCX, central ClosureHost lifecycle, two OpenFOAM
+cross-node TCP, fabric-backed UCX, central ModelHost lifecycle, two OpenFOAM
 ranks, `nutFjord`, and `kEqnFjord`. Those gates do not need to be repeated for
 the combustion milestone.
 
@@ -37,7 +37,7 @@ Roihu's two-node `medium` gate passed on 2026-08-31 with OpenFOAM v2512.
 Baseline job `962069` ran on `rc4231-4232` in 6 seconds; identity-coupled job
 `962071` ran on `rc4152-4153` in 8 seconds. Both final fields matched exactly:
 maximum absolute error was `0.0` for `U` and `p`. This validates one attached
-ClosureHost per node, node-local SHM exchange, distributed MPI identity, and
+ModelHost per node, node-local SHM exchange, distributed MPI identity, and
 coupled startup/shutdown. It is not a cross-node scaling measurement because
 the two paths ran on different node pairs.
 
@@ -46,7 +46,7 @@ the two paths ran on different node pairs.
 Cross-node process placement is validated independently by the two-node
 identity gate below.
 It does not need one two-node allocation: on a site with one-node development
-partitions, the preferred topology is a resident ClosureHost in an existing
+partitions, the preferred topology is a resident ModelHost in an existing
 `interactive` allocation and a one-node solver job submitted to `small`,
 excluding the host node. This mirrors the already validated UCX lifecycle
 gates. It is kept out of the default suite so the first failure can be

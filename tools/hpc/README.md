@@ -71,7 +71,7 @@ module load openfoam/2512
 python "$FOAMNORDIC_REPO/tools/hpc/testMultiNodeLongship.py"
 ```
 
-The script requests two nodes and two OpenFOAM tasks, places one ClosureHost
+The script requests two nodes and two OpenFOAM tasks, places one ModelHost
 on each node, and prints `Two-node Longship gate: PASS` only after final `U`
 and `p` parity succeeds. This gate passed on Roihu's full-node `medium`
 partition with exact field parity. Use `test` when two nodes are available;

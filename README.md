@@ -38,6 +38,13 @@ openfoam
 foamnordic build
 ```
 
+Check the active Python, native, OpenFOAM, MPI, and ABI-matched runtime without
+starting a CFD workload:
+
+```console
+foamnordic doctor
+```
+
 The runtime is installed below
 `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple
 OpenFOAM ABIs can coexist and are selected from `Case.of_cmd` at launch.

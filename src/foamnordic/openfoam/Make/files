@@ -2,8 +2,8 @@ operations/expression.C
 operations/frame.C
 combustion/progressVariableSource.C
 closureHook.C
-closureObservation.C
-closureSession.C
+fieldProgramObservation.C
+fieldProgramSession.C
 fieldBridge.C
 fjordExchange.C
 models/makeClosureModels.C

@@ -15,7 +15,7 @@ done
 [[ -n "${WM_PROJECT_VERSION:-}" ]] \
     || fail "load an OpenFOAM environment before running this test"
 [[ -n "${SLURM_JOB_ID:-}" ]] \
-    || fail "run this test inside an interactive ClosureHost allocation"
+    || fail "run this test inside an interactive ModelHost allocation"
 
 repository=$(
     cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -38,7 +38,7 @@ work_parent=${FOAMNORDIC_TEST_ROOT:?Set FOAMNORDIC_TEST_ROOT}
 
 build_dir="$prepared/build"
 model_dir="$prepared/model"
-worker="$build_dir/tools/resident/foamnordic_closure_worker"
+worker="$build_dir/tools/resident/foamnordic_model_worker"
 longship="$build_dir/tools/longship/foamnordic-longship"
 client_proxy="$repository/tools/longship/runSlurmClient.sh"
 [[ -x "$worker" && -x "$longship" && -x "$client_proxy" ]] \
@@ -120,7 +120,7 @@ job_file="$work_dir/client.job"
 longship_log="$work_dir/longship.log"
 
 echo "[FoamNordic] nutFjord solver work directory: $work_dir"
-echo "[FoamNordic] ClosureHost allocation: $SLURM_JOB_ID ($server_node)"
+echo "[FoamNordic] ModelHost allocation: $SLURM_JOB_ID ($server_node)"
 echo "[FoamNordic] OpenFOAM ranks: $ranks"
 echo "[FoamNordic] Control address: $address"
 echo "[FoamNordic] UCX interface address: $ucx_host"
@@ -176,7 +176,7 @@ client_log=${client_log/\%j/$client_job}
         -eq "$ranks" ]] \
     || fail "not every solver rank negotiated UCX"
 [[ $(grep -c "Native closure runner stopped" "$host_log") -eq "$ranks" ]] \
-    || fail "ClosureHost did not reap every solver rank"
+    || fail "ModelHost did not reap every solver rank"
 grep -q "Selecting LES turbulence model nutFjord" "$client_log" \
     || fail "pimpleFoam did not select nutFjord"
 grep -q '^Time = 0.003' "$client_log" \

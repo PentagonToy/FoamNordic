@@ -20,7 +20,7 @@ from .build.onnxruntime import VERSION as ONNXRUNTIME_VERSION
 from .build.onnxruntime import resolve as resolve_onnxruntime
 from .core.managed import generated_kind, mark_generated
 from .execution.mpi import write_runtime_profile
-from .execution.runtime_paths import active_runtime_candidates, profile
+from .execution.runtime_paths import active_runtime_candidates, platform_tag, profile
 
 
 _FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -181,6 +181,185 @@ def _directories(stream: TextIO) -> int:
     return 0
 
 
+def _doctor_checks() -> list[tuple[str, str, str]]:
+    """Run fast, read-only checks for the active FoamNordic environment."""
+
+    from . import __version__
+
+    checks: list[tuple[str, str, str]] = []
+    checks.append(
+        (
+            "PASS",
+            "FoamNordic",
+            f"{__version__} at {Path(__file__).resolve().parent}",
+        )
+    )
+
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    python_supported = (3, 11) <= sys.version_info[:2] < (3, 13)
+    checks.append(
+        (
+            "PASS" if python_supported else "FAIL",
+            "Python",
+            f"{python_version} at {Path(sys.executable).resolve()}",
+        )
+    )
+
+    selected_platform = platform_tag()
+    supported_platforms = {"darwin-aarch64", "linux-aarch64", "linux-x86_64"}
+    checks.append(
+        (
+            "PASS" if selected_platform in supported_platforms else "WARN",
+            "Platform",
+            selected_platform,
+        )
+    )
+
+    try:
+        from . import _native
+
+        native_file = Path(_native.__file__).resolve() if _native.__file__ else None
+    except ImportError as error:
+        checks.append(("FAIL", "Native extension", str(error)))
+    else:
+        required_native = ("plan_longship", "read_model_manifest", "write_model_bundle")
+        missing_native = [
+            name for name in required_native if not hasattr(_native, name)
+        ]
+        checks.append(
+            (
+                "FAIL" if missing_native else "PASS",
+                "Native extension",
+                f"missing API: {', '.join(missing_native)}"
+                if missing_native
+                else str(native_file or "loaded"),
+            )
+        )
+
+    selected = profile(required=False)
+    wmake = shutil.which("wmake")
+    if selected is None:
+        checks.append(("WARN", "OpenFOAM", "not loaded; wmake and ABI are unavailable"))
+    else:
+        checks.append(("PASS", "OpenFOAM", selected.openfoam))
+
+    compiler_name = os.environ.get("CXX", "c++")
+    compiler = shutil.which(compiler_name)
+    checks.append(
+        (
+            "PASS"
+            if compiler is not None
+            else ("FAIL" if selected is not None else "WARN"),
+            "C++ compiler",
+            compiler or f"{compiler_name} not found",
+        )
+    )
+    if wmake is None and selected is not None:
+        checks.append(("FAIL", "wmake", "not found in PATH"))
+    else:
+        checks.append(("PASS" if wmake else "WARN", "wmake", wmake or "not loaded"))
+
+    mpi = shutil.which("mpirun") or shutil.which("mpiexec")
+    checks.append(("PASS" if mpi else "WARN", "MPI launcher", mpi or "not detected"))
+
+    if selected is None:
+        checks.extend(
+            (
+                ("WARN", "Runtime profile", "load OpenFOAM to select an ABI"),
+                ("WARN", "Longship", "runtime ABI not selected"),
+                ("WARN", "OpenFOAM adapter", "runtime ABI not selected"),
+                ("WARN", "ModelHost", "runtime ABI not selected"),
+                ("WARN", "Reference solver", "runtime ABI not selected"),
+            )
+        )
+        return checks
+
+    runtime = selected.runtime_dir
+    runtime_profile = runtime / "runtime.yaml"
+    checks.append(
+        (
+            "PASS" if runtime_profile.is_file() else "FAIL",
+            "Runtime profile",
+            str(runtime_profile),
+        )
+    )
+    longship = runtime / "bin/foamnordic-longship"
+    checks.append(
+        (
+            "PASS"
+            if longship.is_file() and os.access(longship, os.X_OK)
+            else "FAIL",
+            "Longship",
+            str(longship)
+            if longship.is_file()
+            else f"missing below {runtime / 'bin'}",
+        )
+    )
+    adapter_candidates = tuple((runtime / "lib").glob("libfoamnordicOpenFOAM*"))
+    checks.append(
+        (
+            "PASS" if adapter_candidates else "FAIL",
+            "OpenFOAM adapter",
+            str(adapter_candidates[0])
+            if adapter_candidates
+            else f"missing below {runtime / 'lib'}",
+        )
+    )
+    model_host = runtime / "bin/foamnordic_model_worker"
+    checks.append(
+        (
+            "PASS"
+            if model_host.is_file() and os.access(model_host, os.X_OK)
+            else "WARN",
+            "ModelHost",
+            str(model_host)
+            if model_host.is_file()
+            else "not installed (optional without ONNX)",
+        )
+    )
+    solver = runtime / "bin/foamnordicProgressVariableFoam"
+    checks.append(
+        (
+            "PASS"
+            if solver.is_file() and os.access(solver, os.X_OK)
+            else "FAIL",
+            "Reference solver",
+            str(solver) if solver.is_file() else f"missing below {runtime / 'bin'}",
+        )
+    )
+    return checks
+
+
+def _doctor(stream: TextIO) -> int:
+    import onsaemiro as osm
+
+    checks = _doctor_checks()
+    table = osm.TableMaker(
+        title="FoamNordic Doctor",
+        columns=["Status", "Check", "Detail"],
+        mode="static",
+    )
+    for check in checks:
+        table.add_row(*check)
+    table.display()
+
+    failures = sum(status == "FAIL" for status, _, _ in checks)
+    warnings = sum(status == "WARN" for status, _, _ in checks)
+    if failures:
+        print(
+            f"Result: unhealthy ({failures} failure(s), {warnings} warning(s))",
+            file=stream,
+        )
+        return 1
+    if warnings:
+        print(f"Result: healthy with {warnings} warning(s)", file=stream)
+    else:
+        print("Result: healthy", file=stream)
+    return 0
+
+
 def _run_command(
     command: Sequence[str],
     log: TextIO,
@@ -236,6 +415,40 @@ def _finalize_macos_openfoam_library(library_dir: Path, log: TextIO) -> Path:
     # content-addressed library.
     library.symlink_to(destination.name)
     return destination
+
+
+def _native_build_environment() -> dict[str, str]:
+    """Prefer the compiler selected by the active native toolchain.
+
+    Python environments such as Tykky/Conda may put compiler shims ahead of
+    the compiler loaded with OpenFOAM.  OpenFOAM's wmake invokes ``gcc`` and
+    ``g++`` by name, so put the directories containing CC/CXX first without
+    removing the Python environment or tools installed in it.
+    """
+    environment = os.environ.copy()
+    path = environment.get("PATH", "")
+    compiler_directories: list[str] = []
+    for variable in ("CXX", "CC"):
+        command = environment.get(variable)
+        if not command:
+            continue
+        try:
+            executable = shlex.split(command)[0]
+        except (IndexError, ValueError):
+            continue
+        resolved = shutil.which(executable, path=path)
+        if resolved is not None:
+            directory = str(Path(resolved).resolve().parent)
+            if directory not in compiler_directories:
+                compiler_directories.append(directory)
+
+    if compiler_directories:
+        existing = [entry for entry in path.split(os.pathsep) if entry]
+        environment["PATH"] = os.pathsep.join(
+            compiler_directories
+            + [entry for entry in existing if entry not in compiler_directories]
+        )
+    return environment
 
 
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
@@ -302,7 +515,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
     solver_source = build_dir / "progressVariableFoam"
     library_dir = prefix / "lib"
     application_dir = prefix / "bin"
-    environment = os.environ.copy()
+    environment = _native_build_environment()
     environment.update(
         {
             "FOAMNORDIC_SOURCE": str(source),
@@ -312,7 +525,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             "FOAM_USER_APPBIN": str(application_dir),
         }
     )
-    cmake_environment = os.environ.copy()
+    cmake_environment = environment.copy()
     if sys.platform == "darwin":
         # OpenFOAM.app ships its own libiconv.  Let Homebrew CMake resolve its
         # own dependencies, then restore the OpenFOAM environment for wmake.
@@ -331,7 +544,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         f"-DFOAMNORDIC_ONNX_RUNTIME={'ON' if onnxruntime else 'OFF'}",
         f"-DFOAMNORDIC_RESIDENT_TOOLS={'ON' if onnxruntime else 'OFF'}",
     ]
-    runtime_targets = ["foamnordic_adapter"]
+    runtime_targets = ["foamnordic_adapter", "foamnordic-longship"]
     if onnxruntime is not None:
         configure.extend(
             (
@@ -340,7 +553,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 f"-DFOAMNORDIC_ONNXRUNTIME_LIBRARY={onnxruntime.library}",
             )
         )
-        runtime_targets.append("foamnordic_closure_worker")
+        runtime_targets.append("foamnordic_model_worker")
     commands: list[tuple[str, list[str]]] = [
         (
             "Configure native SDK",
@@ -369,13 +582,12 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             ],
         ),
     ]
-    if onnxruntime is not None:
-        commands.append(
-            (
-                "Install ONNX ClosureHost",
-                [cmake, "--install", str(build_dir), "--component", "Runtime"],
-            )
+    commands.append(
+        (
+            "Install native runtime tools",
+            [cmake, "--install", str(build_dir), "--component", "Runtime"],
         )
+    )
     commands.extend(
         [
             ("Build OpenFOAM integration", [wmake, "libso"]),
@@ -483,16 +695,16 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         print(f"Build log:  {log_path}", file=stream)
         print(f"Reference solver: {solver}", file=stream)
         if onnxruntime is not None:
-            worker = prefix / "bin/foamnordic_closure_worker"
+            worker = prefix / "bin/foamnordic_model_worker"
             if not worker.is_file():
                 raise RuntimeError(
-                    "native build completed without installing ClosureHost"
+                    "native build completed without installing ModelHost"
                 )
             print(
                 f"ONNX Runtime: {ONNXRUNTIME_VERSION} ({onnxruntime.source})",
                 file=stream,
             )
-            print(f"ClosureHost: {worker}", file=stream)
+            print(f"ModelHost: {worker}", file=stream)
         runtime_profile = write_runtime_profile(selected)
         print(f"Runtime profile: {runtime_profile}", file=stream)
     return 0
@@ -678,11 +890,23 @@ def _parser() -> argparse.ArgumentParser:
         description="Build and run native OpenFOAM closure workloads.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    subcommands = parser.add_subparsers(dest="command", required=True)
+    subcommands = parser.add_subparsers(
+        dest="command",
+        metavar="[command]",
+        required=True,
+    )
     subcommands.add_parser(
         "dir",
         help="show the active package, environment, and native directories",
         description="Show the directories used by the active FoamNordic installation.",
+    )
+    subcommands.add_parser(
+        "doctor",
+        help="diagnose the active Python, native, and OpenFOAM environment",
+        description=(
+            "Run fast, read-only checks for the active FoamNordic installation, "
+            "native extension, OpenFOAM toolchain, MPI, and ABI-matched runtime."
+        ),
     )
     build = subcommands.add_parser(
         "build",
@@ -699,7 +923,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--without-onnx",
         action="store_true",
-        help="skip the native ONNX ClosureHost",
+        help="skip the native ONNX ModelHost",
     )
     build.add_argument("--dry-run", action="store_true", help="show commands only")
     inspect_artifact = subcommands.add_parser(
@@ -768,6 +992,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "dir":
         return _directories(sys.stdout)
+    if args.command == "doctor":
+        return _doctor(sys.stdout)
     if args.command == "build":
         if args.jobs <= 0:
             parser.error("--jobs must be positive")

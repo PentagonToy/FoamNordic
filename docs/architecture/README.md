@@ -8,7 +8,7 @@ components own every repeated field exchange.
 Python declaration
     -> immutable execution plan
     -> Longship lifecycle
-    -> OpenFOAM adapter <-> Fjord transport <-> ClosureHost
+    -> OpenFOAM adapter <-> Fjord transport <-> ModelHost
     -> Result and observations
 ```
 
@@ -20,7 +20,7 @@ Python declaration
 | Longship | placement, startup, readiness, shutdown, logs | equations and model semantics |
 | OpenFOAM adapter | field selection, equation hook, result commit | model loading and scheduling |
 | Fjord | versioned tensor transport | OpenFOAM or ML objects |
-| ClosureHost | FNOM loading and inference | solver state |
+| ModelHost | FNOM loading and inference | solver state |
 | Solver/model adapter | equations, correction order, thermodynamics | orchestration |
 
 This boundary also applies to combustion. A solver transports progress,
@@ -36,11 +36,11 @@ or serialized Python object.
 
 Declarations compile before launch. The native plan fixes program order,
 ports, tensor layouts, stages, keys, placement, and observation schedules.
-Runtime code follows that plan and cannot invent fields or reorder closures.
+Runtime code follows that plan and cannot invent fields or reorder field programs.
 
 ## Placement
 
-Node-local inference is the public placement: one ClosureHost is started per
+Node-local inference is the public placement: one ModelHost is started per
 solver node and serves the ranks on that node. This keeps model payloads and
 shared memory local while preserving one fail-together Slurm allocation. Local
 runs use the same lifecycle without a scheduler. TCP and UCX remain native

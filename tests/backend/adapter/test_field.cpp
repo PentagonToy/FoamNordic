@@ -199,7 +199,7 @@ void test_observation_stream_is_separate_from_closure_transport() {
             && received->fields[0].values.maximum == 5.0
             && received->fields[0].values.mean == 1.5
             && received->fields[0].values.count == 18
-            && received->closure_wait == 0.04
+            && received->model_wait == 0.04
             && received->evaluate == 0.006,
         "Observation stream changed native summary metadata.");
     publisher.stop();
@@ -235,7 +235,7 @@ void test_native_observation_jsonl_writer() {
                    != std::string::npos
             && line.find("\"count\":16") != std::string::npos
             && line.find("\"l2\":") != std::string::npos
-            && line.find("\"closure_wait\":0.02") != std::string::npos,
+            && line.find("\"model_wait\":0.02") != std::string::npos,
         "Native JSONL writer changed observation metadata.");
     std::filesystem::remove(path);
 }
@@ -547,7 +547,7 @@ void test_closure_exchange_runs_on_every_call() {
     };
     foamnordic::fjord::Harbor solver(std::move(channels.first), options);
     foamnordic::fjord::Harbor closure(std::move(channels.second), options);
-    foamnordic::adapter::BlockingClosureExchange exchange(
+    foamnordic::adapter::BlockingFieldExchange exchange(
         solver, {{"U"}, {"U"}});
 
     std::thread worker([&closure] {
@@ -577,7 +577,7 @@ void test_closure_exchange_runs_on_every_call() {
         "Repeated closure calls did not receive distinct exchange indices.");
 }
 
-void test_generic_solver_closure_port() {
+void test_generic_field_program_port() {
     auto channels = foamnordic::fjord::local_channel_pair();
     const foamnordic::fjord::HarborOptions options{
         foamnordic::fjord::HandshakeMode::disabled,
@@ -585,7 +585,7 @@ void test_generic_solver_closure_port() {
     };
     foamnordic::fjord::Harbor solver(std::move(channels.first), options);
     foamnordic::fjord::Harbor closure(std::move(channels.second), options);
-    foamnordic::adapter::ClosurePort port(
+    foamnordic::adapter::FieldProgramPort port(
         solver, {{"grad(U)", "delta"}, {"nut"}});
 
     std::thread worker([&closure] {
@@ -673,5 +673,5 @@ int main() {
     test_worker_error_never_modifies_field(true);
     test_pimple_exchange_sequence();
     test_closure_exchange_runs_on_every_call();
-    test_generic_solver_closure_port();
+    test_generic_field_program_port();
 }

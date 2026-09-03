@@ -381,7 +381,7 @@ foamnordic::fjord::TensorView OperationFrame::view(
 }
 
 void OperationFrame::provide(
-    foamnordic::adapter::ClosureInvocation& invocation,
+    foamnordic::adapter::FieldInvocation& invocation,
     const std::string& key,
     const std::string& expression) {
     invocation.provide(view(key, expression));

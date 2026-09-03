@@ -8,4 +8,9 @@ if(FOAMNORDIC_PYTHON)
         TARGETS foamnordic-longship
         RUNTIME DESTINATION foamnordic/bin
         COMPONENT Python)
+else()
+    install(
+        TARGETS foamnordic-longship
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT Runtime)
 endif()

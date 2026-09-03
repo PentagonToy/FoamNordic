@@ -65,7 +65,7 @@ bool close(double actual, double expected) {
         <= absolute + relative * std::abs(expected);
 }
 
-foamnordic::closure::AffineScaler function_transformer(
+foamnordic::inference::AffineScaler function_transformer(
     nb::handle scaler,
     std::size_t features) {
     if (!nb::hasattr(scaler, "n_features_in_")
@@ -136,11 +136,11 @@ foamnordic::closure::AffineScaler function_transformer(
                 "FunctionTransformer has a non-invertible feature scale.");
         }
     }
-    return foamnordic::closure::AffineScaler::function(
+    return foamnordic::inference::AffineScaler::function(
         std::move(gain), bias);
 }
 
-std::optional<foamnordic::closure::AffineScaler> create_cpp_scaler(
+std::optional<foamnordic::inference::AffineScaler> create_cpp_scaler(
     nb::object scaler,
     std::size_t features) {
     if (scaler.is_none()) {
@@ -149,7 +149,7 @@ std::optional<foamnordic::closure::AffineScaler> create_cpp_scaler(
     const auto type_name = nb::cast<std::string>(
         scaler.attr("__class__").attr("__name__"));
     if (type_name == "StandardScaler") {
-        return foamnordic::closure::AffineScaler::standard(
+        return foamnordic::inference::AffineScaler::standard(
             values(scaler, "mean_", features, 0.0),
             values(scaler, "scale_", features, 1.0));
     }
@@ -162,18 +162,18 @@ std::optional<foamnordic::closure::AffineScaler> create_cpp_scaler(
             lower = range.first;
             upper = range.second;
         }
-        return foamnordic::closure::AffineScaler::minmax(
+        return foamnordic::inference::AffineScaler::minmax(
             values(scaler, "scale_", features, 1.0),
             values(scaler, "min_", features, 0.0),
             lower,
             upper);
     }
     if (type_name == "MaxAbsScaler") {
-        return foamnordic::closure::AffineScaler::maxabs(
+        return foamnordic::inference::AffineScaler::maxabs(
             values(scaler, "scale_", features, 1.0));
     }
     if (type_name == "RobustScaler") {
-        return foamnordic::closure::AffineScaler::robust(
+        return foamnordic::inference::AffineScaler::robust(
             values(scaler, "center_", features, 0.0),
             values(scaler, "scale_", features, 1.0));
     }
@@ -203,27 +203,27 @@ foamnordic::fjord::Element element(const std::string& dtype) {
         "dtype must be float32, float64, int32, or int64");
 }
 
-foamnordic::closure::ModelFormat format(const std::string& value) {
+foamnordic::inference::ModelFormat format(const std::string& value) {
     if (value == "compiled") {
-        return foamnordic::closure::ModelFormat::compiled;
+        return foamnordic::inference::ModelFormat::compiled;
     }
     if (value == "equinox") {
-        return foamnordic::closure::ModelFormat::equinox;
+        return foamnordic::inference::ModelFormat::equinox;
     }
     if (value == "joblib") {
-        return foamnordic::closure::ModelFormat::joblib;
+        return foamnordic::inference::ModelFormat::joblib;
     }
     if (value == "onnx") {
-        return foamnordic::closure::ModelFormat::onnx;
+        return foamnordic::inference::ModelFormat::onnx;
     }
     throw std::invalid_argument(
         "model format must be compiled, equinox, joblib, or onnx");
 }
 
-std::vector<foamnordic::closure::FieldContract> fields(
+std::vector<foamnordic::inference::FieldContract> fields(
     const std::vector<Field>& specifications,
     foamnordic::fjord::Element dtype) {
-    std::vector<foamnordic::closure::FieldContract> result;
+    std::vector<foamnordic::inference::FieldContract> result;
     result.reserve(specifications.size());
     for (const auto& [name, components] : specifications) {
         result.push_back({name, dtype, components});
@@ -231,9 +231,9 @@ std::vector<foamnordic::closure::FieldContract> fields(
     return result;
 }
 
-std::vector<foamnordic::closure::TreeLeaf> leaves(
+std::vector<foamnordic::inference::TreeLeaf> leaves(
     const std::vector<Leaf>& specifications) {
-    std::vector<foamnordic::closure::TreeLeaf> result;
+    std::vector<foamnordic::inference::TreeLeaf> result;
     result.reserve(specifications.size());
     for (const auto& [path, dtype, shape, offset, count] : specifications) {
         result.push_back({path, element(dtype), shape, offset, count});
@@ -241,10 +241,10 @@ std::vector<foamnordic::closure::TreeLeaf> leaves(
     return result;
 }
 
-nb::dict manifest_dict(const foamnordic::closure::ModelArtifact& artifact) {
+nb::dict manifest_dict(const foamnordic::inference::ModelArtifact& artifact) {
     nb::dict result;
     result["schema_version"] = artifact.schema_version;
-    result["format"] = foamnordic::closure::name(artifact.format);
+    result["format"] = foamnordic::inference::name(artifact.format);
     result["artifact_path"] = artifact.artifact_path;
     result["name"] = artifact.contract.name;
     nb::list inputs;
@@ -267,12 +267,12 @@ nb::dict manifest_dict(const foamnordic::closure::ModelArtifact& artifact) {
     }
     result["inputs"] = std::move(inputs);
     result["outputs"] = std::move(outputs);
-    const auto scaler = [](const std::optional<foamnordic::closure::AffineScaler>& value) {
+    const auto scaler = [](const std::optional<foamnordic::inference::AffineScaler>& value) {
         if (!value) {
             return nb::object(nb::none());
         }
         nb::dict result;
-        result["kind"] = foamnordic::closure::name(value->kind());
+        result["kind"] = foamnordic::inference::name(value->kind());
         result["gain"] = nb::cast(value->gain());
         result["bias"] = nb::cast(value->bias());
         result["clip_lower"] = value->clip_lower()
@@ -291,7 +291,7 @@ nb::dict manifest_dict(const foamnordic::closure::ModelArtifact& artifact) {
     return result;
 }
 
-foamnordic::closure::ModelArtifact make_artifact(
+foamnordic::inference::ModelArtifact make_artifact(
     const std::string& artifact_path,
     const std::string& name,
     const std::string& model_format,
@@ -331,7 +331,7 @@ void bind_artifacts(nb::module_& module) {
            nb::object x_scaler,
            nb::object y_scaler,
            const std::string& runtime) {
-            foamnordic::closure::write_manifest(
+            foamnordic::inference::write_manifest(
                 manifest_path,
                 make_artifact(
                     artifact_path,
@@ -371,7 +371,7 @@ void bind_artifacts(nb::module_& module) {
            nb::object x_scaler,
            nb::object y_scaler,
            const std::string& runtime) {
-            foamnordic::closure::write_bundle(
+            foamnordic::inference::write_bundle(
                 manifest_path,
                 make_artifact(
                     std::filesystem::path(payload_path).filename().string(),
@@ -402,8 +402,8 @@ void bind_artifacts(nb::module_& module) {
     module.def(
         "read_model_manifest",
         [](const std::string& path) {
-            auto result = manifest_dict(foamnordic::closure::read_manifest(path));
-            result["bundled"] = foamnordic::closure::is_bundle(path);
+            auto result = manifest_dict(foamnordic::inference::read_manifest(path));
+            result["bundled"] = foamnordic::inference::is_bundle(path);
             return result;
         },
         "path"_a,
@@ -412,7 +412,7 @@ void bind_artifacts(nb::module_& module) {
     module.def(
         "read_model_payload",
         [](const std::string& path) {
-            const auto payload = foamnordic::closure::read_bundle_payload(path);
+            const auto payload = foamnordic::inference::read_bundle_payload(path);
             return nb::bytes(
                 reinterpret_cast<const char*>(payload.data()), payload.size());
         },
@@ -422,7 +422,7 @@ void bind_artifacts(nb::module_& module) {
     module.def(
         "extract_model_payload",
         [](const std::string& path, const std::string& destination) {
-            foamnordic::closure::extract_bundle_payload(path, destination);
+            foamnordic::inference::extract_bundle_payload(path, destination);
         },
         "path"_a,
         "destination"_a,
@@ -431,7 +431,7 @@ void bind_artifacts(nb::module_& module) {
     module.def(
         "read_model_payload_region",
         [](const std::string& path) {
-            const auto region = foamnordic::closure::bundle_payload_region(path);
+            const auto region = foamnordic::inference::bundle_payload_region(path);
             return std::make_pair(region.offset, region.size);
         },
         "path"_a,

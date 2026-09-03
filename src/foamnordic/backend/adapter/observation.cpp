@@ -261,8 +261,8 @@ void ObservationJsonlWriter::run() noexcept {
                        << field.values.l2 << ",\"count\":"
                        << field.values.count << '}';
             }
-            stream << "},\"timing\":{\"closure_wait\":"
-                   << record->closure_wait << ",\"evaluate\":"
+            stream << "},\"timing\":{\"model_wait\":"
+                   << record->model_wait << ",\"evaluate\":"
                    << record->evaluate << "}}\n";
             stream.flush();
             if (!stream) {

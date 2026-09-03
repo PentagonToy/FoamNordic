@@ -16,7 +16,7 @@
 
 #include "foamnordic/backend/inference/model.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 class DenseAffineKernel final : public PackedModelKernel {
 public:
@@ -42,4 +42,4 @@ private:
     std::vector<double> bias_;
 };
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

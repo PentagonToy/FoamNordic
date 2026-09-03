@@ -12,7 +12,12 @@ import unittest
 from unittest.mock import patch
 
 import foamnordic as fno
-from foamnordic._cli import _source_root, main
+from foamnordic._cli import (
+    _doctor_checks,
+    _native_build_environment,
+    _source_root,
+    main,
+)
 from foamnordic.build.onnxruntime import NativeOnnxRuntime
 from foamnordic.core.managed import MARKER, mark_generated
 from foamnordic.core.native_plan import available as native_available
@@ -20,6 +25,32 @@ from foamnordic.execution.runtime_paths import openfoam_abi_for_toolchain
 
 
 class CliTests(unittest.TestCase):
+    def test_native_build_prefers_openfoam_toolchain_compilers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            toolchain = root / "toolchain/bin"
+            tykky = root / "tykky/bin"
+            toolchain.mkdir(parents=True)
+            tykky.mkdir(parents=True)
+            for executable in (toolchain / "gcc", toolchain / "g++"):
+                executable.touch()
+                executable.chmod(0o755)
+            with patch.dict(
+                os.environ,
+                {
+                    "PATH": os.pathsep.join((str(tykky), str(toolchain))),
+                    "CC": str(toolchain / "gcc"),
+                    "CXX": str(toolchain / "g++"),
+                },
+                clear=True,
+            ):
+                environment = _native_build_environment()
+
+            entries = environment["PATH"].split(os.pathsep)
+            self.assertEqual(entries[0], str(toolchain.resolve()))
+            self.assertEqual(entries.count(str(toolchain.resolve())), 1)
+            self.assertIn(str(tykky), entries)
+
     def test_case_toolchain_probe_discovers_openfoam_abi(self) -> None:
         completed = subprocess.CompletedProcess(
             args=("bash",),
@@ -79,7 +110,10 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as stopped, redirect_stdout(output):
             main(["--help"])
         self.assertEqual(stopped.exception.code, 0)
+        self.assertIn("[command] ...", output.getvalue())
+        self.assertNotIn("{dir,doctor,build", output.getvalue())
         self.assertIn("dir", output.getvalue())
+        self.assertIn("doctor", output.getvalue())
         self.assertIn("build", output.getvalue())
         self.assertIn("inspect", output.getvalue())
         self.assertIn("validate", output.getvalue())
@@ -151,6 +185,25 @@ class CliTests(unittest.TestCase):
         self.assertIn("Python package", report)
         self.assertIn("Native module", report)
 
+    def test_doctor_reports_fast_read_only_environment_checks(self) -> None:
+        with (
+            patch("foamnordic._cli.profile", return_value=None),
+            patch.dict(os.environ, {"CXX": "c++"}, clear=False),
+            patch(
+                "foamnordic._cli.shutil.which",
+                side_effect=lambda value: (
+                    f"/usr/bin/{value}" if value == "c++" else None
+                ),
+            ),
+        ):
+            checks = _doctor_checks()
+        records = {name: (status, detail) for status, name, detail in checks}
+        self.assertEqual(records["FoamNordic"][0], "PASS")
+        self.assertEqual(records["Python"][0], "PASS")
+        self.assertEqual(records["C++ compiler"][0], "PASS")
+        self.assertEqual(records["OpenFOAM"][0], "WARN")
+        self.assertEqual(records["Runtime profile"][0], "WARN")
+
     def test_build_help_is_discoverable(self) -> None:
         output = StringIO()
         with self.assertRaises(SystemExit) as stopped, redirect_stdout(output):
@@ -213,14 +266,15 @@ class CliTests(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertIn("[Step 1/6]", output.getvalue())
             self.assertIn("Configure native SDK", output.getvalue())
-            self.assertIn("foamnordic_closure_worker", output.getvalue())
-            self.assertIn("Install ONNX ClosureHost", output.getvalue())
+            self.assertIn("foamnordic_model_worker", output.getvalue())
+            self.assertIn("Install native runtime tools", output.getvalue())
+            self.assertIn("foamnordic-longship", output.getvalue())
             self.assertIn("Build OpenFOAM integration", output.getvalue())
             self.assertIn("Build progress-variable solver", output.getvalue())
             self.assertFalse(build_dir.exists())
             self.assertFalse(prefix.exists())
 
-    def test_packaged_buildkit_defines_native_closure_worker(self) -> None:
+    def test_packaged_buildkit_defines_native_model_worker(self) -> None:
         repository = Path(__file__).resolve().parents[2]
         buildkit = (repository / "python/buildkit/CMakeLists.txt").read_text(
             encoding="utf-8"
@@ -231,7 +285,7 @@ class CliTests(unittest.TestCase):
 
         self.assertIn("add_subdirectory(src/foamnordic/backend/inference)", buildkit)
         self.assertIn("add_subdirectory(tools/resident)", buildkit)
-        self.assertIn("foamnordic_closure", buildkit)
+        self.assertIn("foamnordic_inference", buildkit)
         self.assertIn("src/foamnordic/backend/inference", packaging)
         self.assertIn("src/foamnordic/backend/connectors", packaging)
         self.assertIn("tools/resident", packaging)

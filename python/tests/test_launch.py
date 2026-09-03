@@ -235,7 +235,7 @@ class LaunchTests(unittest.TestCase):
                 ),
             )
             environment = {
-                "FOAMNORDIC_CLOSURE_WORKER": str(worker),
+                "FOAMNORDIC_MODEL_WORKER": str(worker),
                 "FOAMNORDIC_OPENFOAM_LIB": str(library),
             }
             with patch.dict(os.environ, environment, clear=False):

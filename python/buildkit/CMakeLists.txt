@@ -15,6 +15,7 @@ add_subdirectory(src/foamnordic/runtime)
 add_subdirectory(src/foamnordic/backend/communication)
 add_subdirectory(src/foamnordic/backend/adapter)
 add_subdirectory(src/foamnordic/backend/inference)
+add_subdirectory(tools/longship)
 
 if(FOAMNORDIC_RESIDENT_TOOLS)
     if(NOT FOAMNORDIC_ONNX_RUNTIME)
@@ -29,7 +30,7 @@ install(
         foamnordic_runtime
         foamnordic_fjord
         foamnordic_adapter
-        foamnordic_closure
+        foamnordic_inference
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Development
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Development
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Development)

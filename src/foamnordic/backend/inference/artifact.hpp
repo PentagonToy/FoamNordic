@@ -16,10 +16,10 @@
 #include <string>
 #include <vector>
 
-#include "foamnordic/backend/inference/closure.hpp"
+#include "foamnordic/backend/inference/exchange.hpp"
 #include "foamnordic/backend/inference/scaler.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 enum class ModelFormat {
     compiled,
@@ -42,7 +42,7 @@ struct ModelArtifact {
     std::uint32_t schema_version{1};
     ModelFormat format{ModelFormat::onnx};
     std::string artifact_path;
-    ClosureContract contract;
+    ProgramContract contract;
     std::vector<TreeLeaf> tree_leaves;
     std::optional<AffineScaler> input_scaler;
     std::optional<AffineScaler> output_scaler;
@@ -53,4 +53,4 @@ struct ModelArtifact {
 
 [[nodiscard]] const char* name(ModelFormat format) noexcept;
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

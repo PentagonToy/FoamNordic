@@ -21,7 +21,7 @@
 
 #include <onnxruntime_cxx_api.h>
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 static_assert(ORT_API_VERSION == 28, "FoamNordic requires ONNX Runtime API 28.");
@@ -260,4 +260,4 @@ fjord::Tensor OnnxPackedKernel::evaluate(
     return implementation_->evaluate(features, exchange_index, physical_time);
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

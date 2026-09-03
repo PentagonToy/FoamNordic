@@ -55,7 +55,7 @@ channel options rather than backend-specific loops.
 
 Harbor translates Rune frames to and from an ordered message stream containing
 tensors, completion markers, shutdown, and errors. It owns safety limits and
-session validation. A native closure runner consumes this stream and gives
+session validation. The native inference runner consumes this stream and gives
 `complete` its batch-boundary meaning. Harbor itself does not choose a
 transport and does not know about Slurm, OpenFOAM dictionaries, JAX, ONNX, or
 Python objects.
@@ -141,7 +141,7 @@ handshake but waits on futex words in the shared region after the upgrade.
 FoamNordic publishes every field exchange atomically. A producer prepares all
 Rune tensor frames for one monotonically increasing exchange and then appends
 one `complete` record containing the exchange index and exact tensor count.
-Release publication in the SPSC ring preserves this order. The native closure
+Release publication in the SPSC ring preserves this order. The native inference
 runner may collect prepared tensors, but it cannot validate, scale, infer, or
 modify an OpenFOAM field until it acquires and validates that commit record.
 An incomplete batch, mismatched index, or mismatched tensor count fails the
@@ -278,7 +278,7 @@ default. Sites with a different fabric name set `FOAMNORDIC_UCX_INTERFACE`, or
 provide the exact listener address through `FOAMNORDIC_UCX_HOST`.
 
 `foamnordic_fjord_network_probe` is the two-node TCP and UCX correctness probe.
-It publishes one tensor plus one atomic completion record per closure call,
+It publishes one tensor plus one atomic completion record per field-program call,
 verifies monotonic exchange and solver-time indices on both peers, checks the
 returned payload, and reports round-trip and payload rates. It intentionally
 contains no Slurm API: the scheduler only places its server and client

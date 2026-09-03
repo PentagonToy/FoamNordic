@@ -160,7 +160,7 @@ def _observations(run) -> list[dict[str, object]]:
                     for name, field in record.summary.items()
                 },
                 "timing": {
-                    "closure_wait": record.timing.closure_wait,
+                    "model_wait": record.timing.model_wait,
                     "evaluate": record.timing.evaluate,
                 },
             }

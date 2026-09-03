@@ -70,7 +70,7 @@ public:
         const std::string& expression);
 
     void provide(
-        foamnordic::adapter::ClosureInvocation& invocation,
+        foamnordic::adapter::FieldInvocation& invocation,
         const std::string& key,
         const std::string& expression);
 };

@@ -15,9 +15,9 @@ itself satisfy the second or third claim.
 | Data plane | Intended placement | FoamNordic implementation | Example HPC validation |
 | --- | --- | --- | --- |
 | UDS | Same node, separate processes | Complete | PASS: OpenFOAM and native ONNX worker over forced pure UDS |
-| SHM | Same node, solver rank and ClosureHost | Complete | PASS: two OpenFOAM ranks, shared resident ONNX ClosureHost, and Longship lifecycle |
+| SHM | Same node, solver rank and ModelHost | Complete | PASS: two OpenFOAM ranks, shared resident ONNX ModelHost, and Longship lifecycle |
 | TCP | Different nodes | Complete | PASS: split Slurm allocations on two compute nodes |
-| UCX | Different nodes, high-performance bulk transfer | UCP stream channel and TCP-to-UCX upgrade complete | PASS: split-allocation OpenFOAM field exchange with a resident ONNX ClosureHost |
+| UCX | Different nodes, high-performance bulk transfer | UCP stream channel and TCP-to-UCX upgrade complete | PASS: split-allocation OpenFOAM field exchange with a resident ONNX ModelHost |
 
 The safe automatic policy is therefore:
 
@@ -33,10 +33,10 @@ directly to the UCP API and upgrades a TCP Harbor before its first payload.
 Automatic mode may select it only when the UCX build is present and the site
 connectivity probe has passed. An explicit UCX request must fail before the
 first exchange if it cannot be honored; it must never silently become TCP.
-The native ClosureHost and OpenFOAM adapter expose an explicit UCX upgrade.
+The native ModelHost and OpenFOAM adapter expose an explicit UCX upgrade.
 Their split-allocation integration gate has passed on a Slurm HPC system: an actual
 OpenFOAM probe on a `small` node exchanged fields with the resident ONNX
-ClosureHost in an interactive allocation.
+ModelHost in an interactive allocation.
 
 ## HPC validation record (CSC Roihu example)
 
@@ -53,7 +53,7 @@ field exchange passed, and the endpoint was cleaned up.
 ### SHM
 
 Another Slurm job connected two OpenFOAM ranks to one shared native ONNX
-ClosureHost on the node. Both rank sessions negotiated SHM, performed atomic
+ModelHost on the node. Both rank sessions negotiated SHM, performed atomic
 field replacement, and completed under Longship supervision. The broader
 native OpenFOAM hook also passed independently.
 
@@ -152,7 +152,7 @@ allocations. A successful client must explicitly print `Data plane: UCX`.
 suite with the central UCX gate. Run it inside the one-node interactive
 allocation, set `FOAMNORDIC_UCX_SPLIT=true`, and provide the UCX installation
 prefix. The script builds the native libraries and wmake adapter with the same
-headers, starts one resident ONNX ClosureHost locally, then submits a one-node
+headers, starts one resident ONNX ModelHost locally, then submits a one-node
 `small` OpenFOAM client while excluding the host node.
 
 The acceptance run forces `UCX_TLS=rc,ud,sm,self` by default, so UCP cannot use
@@ -162,20 +162,20 @@ and the host readiness marker disappears. Failed or interrupted drivers cancel
 the submitted client and terminate the host.
 
 The central acceptance gate passed on 2026-08-21. An interactive allocation
-hosted the resident ONNX ClosureHost; a `small` job on another node ran the
+hosted the resident ONNX ModelHost; a `small` job on another node ran the
 OpenFOAM v2512 closure-hook probe. TCP established control, after which the
 peers upgraded through the host's `ib0` fabric address. The run forced
 `UCX_TLS=rc,ud,sm,self`, excluding UCP's TCP transport.
 
-The ClosureHost reported `data plane: UCX`, the OpenFOAM client verified two
+The ModelHost reported `data plane: UCX`, the OpenFOAM client verified two
 exact atomic field replacements through the resident ONNX model, both native
 runners stopped cleanly, and the Slurm client completed. The driver reported
-`Central OpenFOAM ONNX ClosureHost over UCX: PASS`. The CSC `argos-vars`
+`Central OpenFOAM ONNX ModelHost over UCX: PASS`. The CSC `argos-vars`
 warning disabled only the auxiliary ARGOS integration, as in the earlier TCP
 and UCX transport probes; it did not affect the allocation or data path.
 
 The multi-rank central gate subsequently passed across an interactive host
-allocation and a `small` client allocation. One resident ClosureHost accepted
+allocation and a `small` client allocation. One resident ModelHost accepted
 global OpenFOAM ranks 0 and 1 from the client node. Each rank negotiated an
 independent UCX channel, performed two exact atomic field replacements through
 the shared ONNX model, and shut down its runner cleanly. The parallel OpenFOAM
@@ -207,7 +207,7 @@ into scratch, selected the runtime `nutFjord` model, and left the source case
 unchanged.
 
 Both solver ranks upgraded their independent Fjord sessions to UCX with
-`UCX_TLS=rc,ud,sm,self`. The resident ClosureHost evaluated the native ONNX
+`UCX_TLS=rc,ud,sm,self`. The resident ModelHost evaluated the native ONNX
 artifact for every turbulence correction and published `nut` atomically. The
 parallel `pimpleFoam` run completed times `0.001`, `0.002`, and `0.003`; both
 native runners stopped, Slurm client accounting completed, Longship removed

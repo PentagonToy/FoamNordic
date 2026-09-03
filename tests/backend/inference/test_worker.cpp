@@ -106,7 +106,7 @@ void test_resident_worker_lifecycle() {
     const auto socket_path = std::filesystem::temp_directory_path()
                              / ("foamnordic-worker-"
                                 + std::to_string(std::random_device{}()) + ".sock");
-    const foamnordic::closure::ClosureContract contract{
+    const foamnordic::inference::ProgramContract contract{
         "resident-affine",
         {
             {"a", foamnordic::fjord::Element::float64, 1},
@@ -114,11 +114,11 @@ void test_resident_worker_lifecycle() {
         },
         {{"result", foamnordic::fjord::Element::float64, 1}},
     };
-    foamnordic::closure::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
-    foamnordic::closure::ArtifactModelKernel kernel(
+    foamnordic::inference::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
+    foamnordic::inference::ArtifactModelKernel kernel(
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
             {},
@@ -126,15 +126,15 @@ void test_resident_worker_lifecycle() {
             std::nullopt,
         },
         affine);
-    foamnordic::closure::EvaluateEveryCell bypass;
+    foamnordic::inference::EvaluateAllCells bypass;
     std::exception_ptr worker_failure;
 
     {
-        foamnordic::closure::NativeClosureWorker worker(
+        foamnordic::inference::ModelWorker worker(
             foamnordic::fjord::FjordAddress::local(socket_path.string()),
             {
                 1,
-                foamnordic::closure::ModelFormat::onnx,
+                foamnordic::inference::ModelFormat::onnx,
                 "reference.onnx",
                 contract,
                 {},
@@ -201,7 +201,7 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
     const auto socket_path = std::filesystem::temp_directory_path()
                              / ("foamnordic-worker-multi-"
                                 + std::to_string(std::random_device{}()) + ".sock");
-    const foamnordic::closure::ClosureContract contract{
+    const foamnordic::inference::ProgramContract contract{
         "resident-multi-rank",
         {
             {"a", foamnordic::fjord::Element::float64, 1},
@@ -209,11 +209,11 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
         },
         {{"result", foamnordic::fjord::Element::float64, 1}},
     };
-    foamnordic::closure::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
-    foamnordic::closure::ArtifactModelKernel kernel(
+    foamnordic::inference::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
+    foamnordic::inference::ArtifactModelKernel kernel(
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
             {},
@@ -221,17 +221,17 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
             std::nullopt,
         },
         affine);
-    foamnordic::closure::EvaluateEveryCell bypass;
+    foamnordic::inference::EvaluateAllCells bypass;
     std::exception_ptr worker_failure;
 
     {
-        foamnordic::closure::WorkerOptions options;
+        foamnordic::inference::WorkerOptions options;
         options.connections = 2;
-        foamnordic::closure::NativeClosureWorker worker(
+        foamnordic::inference::ModelWorker worker(
             foamnordic::fjord::FjordAddress::local(socket_path.string()),
             {
                 1,
-                foamnordic::closure::ModelFormat::onnx,
+                foamnordic::inference::ModelFormat::onnx,
                 "reference.onnx",
                 contract,
                 {},
@@ -266,7 +266,7 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
 }
 
 void test_worker_rejects_an_empty_model_cpu_budget() {
-    foamnordic::closure::WorkerOptions options;
+    foamnordic::inference::WorkerOptions options;
     options.model_threads = 0;
     bool rejected = false;
     try {
@@ -279,7 +279,7 @@ void test_worker_rejects_an_empty_model_cpu_budget() {
 
 #ifdef FOAMNORDIC_HAVE_UCX
 void test_resident_worker_upgrades_tcp_control_to_ucx() {
-    const foamnordic::closure::ClosureContract contract{
+    const foamnordic::inference::ProgramContract contract{
         "resident-ucx",
         {
             {"a", foamnordic::fjord::Element::float64, 1},
@@ -287,11 +287,11 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
         },
         {{"result", foamnordic::fjord::Element::float64, 1}},
     };
-    foamnordic::closure::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
-    foamnordic::closure::ArtifactModelKernel kernel(
+    foamnordic::inference::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
+    foamnordic::inference::ArtifactModelKernel kernel(
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
             {},
@@ -299,8 +299,8 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
             std::nullopt,
         },
         affine);
-    foamnordic::closure::EvaluateEveryCell bypass;
-    foamnordic::closure::WorkerOptions options;
+    foamnordic::inference::EvaluateAllCells bypass;
+    foamnordic::inference::WorkerOptions options;
     options.shared_memory = false;
     options.ucx = true;
     options.ucx_host = "127.0.0.1";
@@ -311,11 +311,11 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
     const auto worker_address = port_reservation.address();
     port_reservation.close();
 
-    foamnordic::closure::NativeClosureWorker worker(
+    foamnordic::inference::ModelWorker worker(
         worker_address,
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
             {},

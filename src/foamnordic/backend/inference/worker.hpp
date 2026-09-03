@@ -20,7 +20,7 @@
 #include "foamnordic/backend/inference/runner.hpp"
 #include "foamnordic/fjord/endpoint.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 struct WorkerOptions {
     bool shared_memory{true};
@@ -33,23 +33,23 @@ struct WorkerOptions {
     void validate() const;
 };
 
-class NativeClosureWorker {
+class ModelWorker {
 public:
-    NativeClosureWorker(
+    ModelWorker(
         fjord::FjordAddress address,
         ModelArtifact artifact,
-        const BypassPolicy& bypass,
+        const CellEvaluationPolicy& bypass,
         ModelKernel& kernel,
         WorkerOptions options = {});
 
-    NativeClosureWorker(
+    ModelWorker(
         fjord::FjordAddress address,
         const std::filesystem::path& manifest_path,
-        const BypassPolicy& bypass,
+        const CellEvaluationPolicy& bypass,
         WorkerOptions options = {});
 
-    NativeClosureWorker(const NativeClosureWorker&) = delete;
-    NativeClosureWorker& operator=(const NativeClosureWorker&) = delete;
+    ModelWorker(const ModelWorker&) = delete;
+    ModelWorker& operator=(const ModelWorker&) = delete;
 
     [[nodiscard]] fjord::FjordAddress address() const;
     void run();
@@ -58,10 +58,10 @@ private:
     fjord::FjordAddress requested_address_;
     fjord::FjordListener listener_;
     ModelArtifact artifact_;
-    const BypassPolicy& bypass_;
+    const CellEvaluationPolicy& bypass_;
     std::unique_ptr<ModelKernel> owned_kernel_;
     ModelKernel* kernel_;
     WorkerOptions options_;
 };
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

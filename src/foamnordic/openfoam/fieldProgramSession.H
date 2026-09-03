@@ -9,8 +9,8 @@
  */
 // clang-format on
 
-#ifndef Foam_foamNordic_closureSession_H
-#define Foam_foamNordic_closureSession_H
+#ifndef Foam_foamNordic_fieldProgramSession_H
+#define Foam_foamNordic_fieldProgramSession_H
 
 #include "Time.H"
 #include "dictionary.H"
@@ -35,20 +35,20 @@ namespace Foam::foamNordic {
     bool ucx,
     std::uint64_t sessionId);
 
-class ClosureSession final {
+class FieldProgramSession final {
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
-    std::unique_ptr<foamnordic::adapter::ClosurePort> port_;
+    std::unique_ptr<foamnordic::adapter::FieldProgramPort> port_;
 
 public:
-    ClosureSession(
+    FieldProgramSession(
         const dictionary& dict,
         foamnordic::adapter::ExchangeContract contract);
-    ~ClosureSession();
+    ~FieldProgramSession();
 
-    ClosureSession(const ClosureSession&) = delete;
-    ClosureSession& operator=(const ClosureSession&) = delete;
+    FieldProgramSession(const FieldProgramSession&) = delete;
+    FieldProgramSession& operator=(const FieldProgramSession&) = delete;
 
-    [[nodiscard]] foamnordic::adapter::ClosureInvocation begin(
+    [[nodiscard]] foamnordic::adapter::FieldInvocation begin(
         const Time& time);
 
     void shutdown();
