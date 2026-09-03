@@ -126,7 +126,7 @@ run_client_failure_gate()
         || fail "Longship did not attribute the client failure"
 
     echo "[FoamNordic] Client failure job: $job ($state)"
-    echo "[FoamNordic] Client failure terminated ClosureHost: PASS"
+    echo "[FoamNordic] Client failure terminated ModelHost: PASS"
 }
 
 run_host_failure_gate()
@@ -176,7 +176,7 @@ run_host_failure_gate()
         || fail "host failure left client job $job in state $state"
     [[ ! -e "$ready" ]] \
         || fail "host failure left its readiness marker"
-    grep -q "ClosureHost exited before the solver completed" \
+    grep -q "ModelHost exited before the solver completed" \
         "$prefix-longship.log" \
         || fail "Longship did not attribute the host failure"
 

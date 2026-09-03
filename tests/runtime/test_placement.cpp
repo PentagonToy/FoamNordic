@@ -15,13 +15,13 @@ void test_attached_is_the_default() {
     const auto plan = foamnordic::native::resolve_placement({});
     require(
         plan.placement == foamnordic::native::HostPlacement::attached,
-        "ClosureHost is not attached by default.");
-    require(plan.host_instances == 1, "Single-node solver did not receive one ClosureHost.");
-    require(plan.same_allocation && plan.same_node, "Attached ClosureHost was separated.");
-    require(plan.coupled_lifetime, "Attached ClosureHost lifetime is not tied to the solver.");
+        "ModelHost is not attached by default.");
+    require(plan.host_instances == 1, "Single-node solver did not receive one ModelHost.");
+    require(plan.same_allocation && plan.same_node, "Attached ModelHost was separated.");
+    require(plan.coupled_lifetime, "Attached ModelHost lifetime is not tied to the solver.");
     require(
         plan.data_path == foamnordic::native::DataPath::shared_memory,
-        "Attached ClosureHost did not prefer SHM.");
+        "Attached ModelHost did not prefer SHM.");
 }
 
 void test_attached_scales_per_solver_node() {
@@ -29,7 +29,7 @@ void test_attached_scales_per_solver_node() {
     request.solver_nodes = 4;
     request.shared_memory_available = false;
     const auto plan = foamnordic::native::resolve_placement(request);
-    require(plan.host_instances == 4, "Multi-node solver lacks one ClosureHost per node.");
+    require(plan.host_instances == 4, "Multi-node solver lacks one ModelHost per node.");
     require(
         plan.data_path == foamnordic::native::DataPath::unix_socket,
         "Attached placement did not fall back from SHM to UDS.");
@@ -56,12 +56,12 @@ void test_gpu_is_central_when_solver_nodes_have_no_gpu() {
     require(
         plan.placement == foamnordic::native::HostPlacement::central,
         "GPU host was not centralized.");
-    require(plan.host_instances == 2, "Central ClosureHost node count is incorrect.");
-    require(!plan.same_allocation && !plan.same_node, "Central ClosureHost is colocated.");
-    require(plan.coupled_lifetime, "Central ClosureHost lost experiment lifetime coupling.");
+    require(plan.host_instances == 2, "Central ModelHost node count is incorrect.");
+    require(!plan.same_allocation && !plan.same_node, "Central ModelHost is colocated.");
+    require(plan.coupled_lifetime, "Central ModelHost lost experiment lifetime coupling.");
     require(
         plan.data_path == foamnordic::native::DataPath::ucx,
-        "Central ClosureHost did not prefer UCX.");
+        "Central ModelHost did not prefer UCX.");
 }
 
 void test_gpu_attaches_when_solver_node_has_gpu() {
@@ -71,7 +71,7 @@ void test_gpu_attaches_when_solver_node_has_gpu() {
     const auto plan = foamnordic::native::resolve_placement(request);
     require(
         plan.placement == foamnordic::native::HostPlacement::attached,
-        "GPU ClosureHost was centralized despite a local GPU.");
+        "GPU ModelHost was centralized despite a local GPU.");
 }
 
 void test_central_rejects_local_only_paths() {
@@ -84,7 +84,7 @@ void test_central_rejects_local_only_paths() {
     } catch (const std::invalid_argument&) {
         rejected = true;
     }
-    require(rejected, "Central ClosureHost accepted SHM.");
+    require(rejected, "Central ModelHost accepted SHM.");
 }
 
 }  // namespace

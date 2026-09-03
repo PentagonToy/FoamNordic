@@ -44,31 +44,31 @@ def _submission_environment() -> dict[str, str]:
 
 
 def _worker(longship: Longship | None = None) -> Path:
-    explicit = os.environ.get("FOAMNORDIC_CLOSURE_WORKER")
+    explicit = os.environ.get("FOAMNORDIC_MODEL_WORKER")
     candidates = [] if explicit is None else [Path(explicit)]
     prepared = os.environ.get("FOAMNORDIC_PREPARED_WORK_DIR")
     if prepared:
         candidates.append(
-            Path(prepared) / "build/tools/resident/foamnordic_closure_worker"
+            Path(prepared) / "build/tools/resident/foamnordic_model_worker"
         )
     if longship is not None:
         candidates.extend(
-            path / "bin/foamnordic_closure_worker"
+            path / "bin/foamnordic_model_worker"
             for path in toolchain_runtime_candidates(longship.case._toolchain)
         )
     candidates.extend(
-        path / "bin/foamnordic_closure_worker"
+        path / "bin/foamnordic_model_worker"
         for path in active_runtime_candidates()
     )
     candidates.append(
-        Path.home() / ".local/share/foamnordic/native/bin/foamnordic_closure_worker"
+        Path.home() / ".local/share/foamnordic/native/bin/foamnordic_model_worker"
     )
     for candidate in candidates:
         path = candidate.expanduser().resolve()
         if path.is_file() and os.access(path, os.X_OK):
             return path
     raise RuntimeError(
-        "ClosureHost executable is unavailable. Set FOAMNORDIC_CLOSURE_WORKER "
+        "ModelHost executable is unavailable. Set FOAMNORDIC_MODEL_WORKER "
         "or select a prepared OpenFOAM runtime profile."
     )
 
@@ -219,7 +219,7 @@ def _host_command(
         values.extend(("--key", program.key.to_json(), "--program", program.name))
     if longship.placement.data_path == "uds":
         values.append("--no-shm")
-    # ClosureHost is a FoamNordic backend process, not an OpenFOAM
+    # ModelHost is a FoamNordic backend process, not an OpenFOAM
     # application.  In particular, wrapping it with OpenFOAM.app on macOS
     # leaves an unnecessary outer process alive after the worker exits.  The
     # solver alone owns the case toolchain; backend executables carry their

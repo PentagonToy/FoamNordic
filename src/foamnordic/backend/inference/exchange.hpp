@@ -18,7 +18,7 @@
 
 #include "foamnordic/fjord/tensor.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 struct FieldContract {
     std::string name;
@@ -28,7 +28,7 @@ struct FieldContract {
     void validate() const;
 };
 
-struct ClosureContract {
+struct ProgramContract {
     std::string name;
     std::vector<FieldContract> inputs;
     std::vector<FieldContract> outputs;
@@ -38,9 +38,9 @@ struct ClosureContract {
 
 using TensorMap = std::unordered_map<std::string, fjord::Tensor>;
 
-class BypassPolicy {
+class CellEvaluationPolicy {
 public:
-    virtual ~BypassPolicy() = default;
+    virtual ~CellEvaluationPolicy() = default;
 
     [[nodiscard]] virtual std::vector<std::uint64_t> prepare(
         const TensorMap& inputs,
@@ -54,7 +54,7 @@ public:
         std::uint64_t cell_count) const = 0;
 };
 
-class EvaluateEveryCell final : public BypassPolicy {
+class EvaluateAllCells final : public CellEvaluationPolicy {
 public:
     [[nodiscard]] std::vector<std::uint64_t> prepare(
         const TensorMap& inputs,
@@ -78,9 +78,9 @@ enum class ExchangeState {
     failed,
 };
 
-class ExchangeMachine {
+class CellInferenceExchange {
 public:
-    explicit ExchangeMachine(ClosureContract contract);
+    explicit CellInferenceExchange(ProgramContract contract);
 
     void begin(
         std::uint64_t exchange_index,
@@ -89,9 +89,9 @@ public:
         std::uint64_t solver_time_index = 0);
     void add_input(fjord::Tensor tensor);
     void seal_inputs();
-    [[nodiscard]] const std::vector<std::uint64_t>& prepare(const BypassPolicy& policy);
+    [[nodiscard]] const std::vector<std::uint64_t>& prepare(const CellEvaluationPolicy& policy);
     void add_output(fjord::Tensor tensor);
-    void seal_outputs(const BypassPolicy& policy);
+    void seal_outputs(const CellEvaluationPolicy& policy);
     [[nodiscard]] TensorMap finish();
     void fail(std::string reason);
 
@@ -114,7 +114,7 @@ private:
         const std::string& name,
         const char* direction) const;
 
-    ClosureContract contract_;
+    ProgramContract contract_;
     ExchangeState state_{ExchangeState::waiting};
     std::uint64_t exchange_index_{0};
     std::uint64_t previous_exchange_index_{0};
@@ -129,4 +129,4 @@ private:
     std::string failure_reason_;
 };
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

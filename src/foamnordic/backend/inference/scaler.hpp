@@ -16,7 +16,7 @@
 
 #include "foamnordic/fjord/tensor.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 enum class ScalerKind {
     standard,
@@ -86,4 +86,4 @@ private:
 
 [[nodiscard]] const char* name(ScalerKind kind) noexcept;
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

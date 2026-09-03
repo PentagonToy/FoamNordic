@@ -1,4 +1,4 @@
-"""Specialize one attached ClosureHost command for its Slurm node."""
+"""Specialize one attached ModelHost command for its Slurm node."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ import sys
 def _node_index(nodes: int) -> int:
     value = os.environ.get("SLURM_PROCID")
     if value is None:
-        raise RuntimeError("multi-node ClosureHost requires SLURM_PROCID")
+        raise RuntimeError("multi-node ModelHost requires SLURM_PROCID")
     try:
         index = int(value)
     except ValueError as error:
         raise RuntimeError("SLURM_PROCID must be an integer") from error
     if index < 0 or index >= nodes:
         raise RuntimeError(
-            f"ClosureHost node index {index} is outside the {nodes}-node allocation"
+            f"ModelHost node index {index} is outside the {nodes}-node allocation"
         )
     return index
 

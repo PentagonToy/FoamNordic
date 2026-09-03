@@ -1,10 +1,11 @@
 # Placement and lifecycle
 
 FoamNordic does not expose a database as part of its scientific workflow.
-The native service that receives fields, applies bypass rules, evaluates a
-closure model, and returns fields is called a **ClosureHost**.
+The native service that receives fields, evaluates a resident field program,
+and returns fields is called a **ModelHost**. Cell-selection and bypass policies
+are optional inference details rather than part of the host's identity.
 
-The unified allocation that carries OpenFOAM and its ClosureHosts is called a
+The unified allocation that carries OpenFOAM and its ModelHosts is called a
 **Longship**. Longship is a lifecycle and resource contract, not a data store:
 Fjord carries bytes, Harbor owns a peer session, Rune defines messages, and
 Longship keeps the solver and model processes in one schedulable job.
@@ -17,26 +18,26 @@ worker behavior.
 
 `auto` is the default policy. CPU inference is attached. GPU inference is also
 attached when the solver nodes contain the requested GPU; otherwise FoamNordic
-selects a central GPU ClosureHost. Placement is therefore derived from actual
+selects a central GPU ModelHost. Placement is therefore derived from actual
 resources instead of assuming that every GPU must be remote.
 
 ## Attached
 
 The default is `attached` placement. It means:
 
-- the ClosureHost belongs to the same allocation as OpenFOAM;
-- one ClosureHost instance is created per OpenFOAM solver node;
+- the ModelHost belongs to the same allocation as OpenFOAM;
+- one ModelHost instance is created per OpenFOAM solver node;
 - every instance is constrained to the node containing the ranks it serves;
 - its startup, failure, cancellation, and shutdown belong to the solver job;
-- OpenFOAM does not continue after losing its required ClosureHost.
+- OpenFOAM does not continue after losing its required ModelHost.
 
-For one-node jobs this is simply OpenFOAM plus one native ClosureHost on the
+For one-node jobs this is simply OpenFOAM plus one native ModelHost on the
 same node. For multi-node jobs it avoids gathering all rank fields through one
 remote service.
 
-For a local launch, the default ClosureHost CPU budget is the process affinity
+For a local launch, the default ModelHost CPU budget is the process affinity
 mask on Linux and the logical CPU count on platforms without an affinity API.
-`Attached(closure_cpus_per_node=N)` is only an optional cap. Scheduled runs do
+`Attached(model_cpus_per_node=N)` is only an optional cap. Scheduled runs do
 not infer resources from the login process: an explicit `Slurm.model()` value
 is authoritative, while an omitted model declaration reserves one CPU per
 field program for backward-compatible lightweight jobs.
@@ -45,10 +46,10 @@ Before submission, `plan_longship` validates that solver ranks divide evenly
 across nodes and reserves, per node,
 
 ```text
-solver tasks per node × solver CPUs per task + ClosureHost CPUs
+solver tasks per node × solver CPUs per task + ModelHost CPUs
 ```
 
-The ClosureHost step starts first. OpenFOAM starts only after every node-local
+The ModelHost step starts first. OpenFOAM starts only after every node-local
 host is ready. A solver or host failure terminates the other component and the
 allocation reports failure. The initial native implementation accepts only
 attached placement; central GPU placement must use an explicit later plan and
@@ -67,19 +68,19 @@ readiness markers, refuses to start the solver before every requested host is
 ready, retains child exit status, and terminates the surviving process group
 when either component ends. Graceful termination is bounded and escalates to
 `SIGKILL`; therefore a failed model service cannot leave OpenFOAM blocked in a
-closure exchange or orphan an `srun` step.
+field exchange or orphan an `srun` step.
 
 The `foamnordic-longship` executable exposes that supervisor without Python or
 an intermediate command shell. One or more `--ready` paths identify regular
-marker files or ClosureHost Unix sockets. Arguments following `--host` and
+marker files or ModelHost Unix sockets. Arguments following `--host` and
 `--solver` are passed directly to their processes:
 
 ```bash
 foamnordic-longship \
     --ready /tmp/foamnordic-case.sock \
-    --host-output closure-host.log \
+    --host-output model-host.log \
     --solver-output openfoam.log \
-    --host foamnordic_closure_worker \
+    --host foamnordic_model_worker \
         unix:///tmp/foamnordic-case.sock model.fnom \
     --solver pimpleFoam -case /path/to/case
 ```
@@ -88,7 +89,7 @@ The supervisor removes stale readiness paths before launch, waits for every
 configured host endpoint, starts the solver only afterward, and returns the
 failing component's status. Under Slurm the two commands may be `srun` command
 arrays; the lifecycle behavior remains identical.
-After a successful solver exit, Longship first gives ClosureHost one grace
+After a successful solver exit, Longship first gives ModelHost one grace
 window to consume protocol shutdown and exit naturally. Only a host that
 remains alive receives `SIGTERM` and, after another bounded grace window,
 `SIGKILL`. Longship removes every configured readiness path after both process
@@ -102,7 +103,7 @@ Python `Run.stop(force=False)` waits on this owned lifecycle. An explicit
 then reaps the terminal result, which is useful when a notebook must recover
 from an unresponsive external runtime.
 
-One resident ClosureHost accepts the declared number of solver connections on
+One resident ModelHost accepts the declared number of solver connections on
 its node and owns one model instance. Every connection retains its global MPI
 rank and an independent Harbor, SHM channel, exchange state machine, and
 shutdown boundary. Model evaluation is initially serialized inside the host;
@@ -111,13 +112,13 @@ batching policy may combine compatible rank requests without changing their
 individual exchange identities.
 
 In a Slurm launch, each host writes a distinct readiness marker on a filesystem
-visible to the Longship supervisor. `foamnordic_closure_worker` accepts
+visible to the Longship supervisor. `foamnordic_model_worker` accepts
 `--connections N` and `--ready-file PATH`; `{rank}` in the marker path expands
 from `SLURM_PROCID`, PMI, PMIx, or Open MPI rank metadata. The marker is created
 only after the listener and model are ready and is removed when the worker
 exits. The canonical Slurm template passes all markers to
 `foamnordic-longship`, which alone owns startup and fail-together behavior.
-For a central UCX host, `foamnordic_closure_worker` additionally accepts
+For a central UCX host, `foamnordic_model_worker` additionally accepts
 `--ucx-host HOST`. This keeps TCP as the advertised control address, creates a
 UCP listener on `HOST`, and requires every declared solver connection to
 upgrade before inference begins.

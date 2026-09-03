@@ -89,9 +89,9 @@ and each later activation.
 
 ## Runtime invariants
 
-- A pure OpenFOAM baseline starts no ClosureHost.
+- A pure OpenFOAM baseline starts no ModelHost.
 - A model-driven workload loads each FNOM artifact once per resident worker.
-- Node-local Slurm placement starts one ClosureHost per solver node.
+- Node-local Slurm placement starts one ModelHost per solver node.
 - `Case.of_cmd` selects the matching installed OpenFOAM ABI at launch.
 - Generated cases and caches carry ownership markers; `clobber` removes only
   matching marked paths.

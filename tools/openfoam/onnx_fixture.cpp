@@ -155,8 +155,8 @@ double scalar(const foamnordic::fjord::Tensor& tensor) {
 }
 
 void verify_k_eqn_fixture(const std::filesystem::path& manifest_path) {
-    auto loaded = foamnordic::closure::load_model(manifest_path);
-    foamnordic::closure::TensorMap inputs;
+    auto loaded = foamnordic::inference::load_model(manifest_path);
+    foamnordic::inference::TensorMap inputs;
     inputs.emplace("k", field("k", 1, {2.0}));
     inputs.emplace(
         "velocity_grad",
@@ -178,11 +178,11 @@ void write_fixture(const std::filesystem::path& directory) {
     const auto model_path = directory / "identity-U.onnx";
     const auto manifest_path = directory / "identity-U.fnom";
     write_model(model_path, identity_model);
-    foamnordic::closure::write_bundle(
+    foamnordic::inference::write_bundle(
         manifest_path,
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             model_path.filename().string(),
             {
                 "openfoam-U-identity",
@@ -198,11 +198,11 @@ void write_fixture(const std::filesystem::path& directory) {
     const auto nut_model_path = directory / "nutFjord.onnx";
     const auto nut_manifest_path = directory / "nutFjord.fnom";
     write_model(nut_model_path, nut_fjord_model);
-    foamnordic::closure::write_bundle(
+    foamnordic::inference::write_bundle(
         nut_manifest_path,
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             nut_model_path.filename().string(),
             {
                 "openfoam-nutFjord-fixture",
@@ -221,11 +221,11 @@ void write_fixture(const std::filesystem::path& directory) {
     const auto k_eqn_model_path = directory / "kEqnFjord.onnx";
     const auto k_eqn_manifest_path = directory / "kEqnFjord.fnom";
     write_model(k_eqn_model_path, k_eqn_fjord_model);
-    foamnordic::closure::write_bundle(
+    foamnordic::inference::write_bundle(
         k_eqn_manifest_path,
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             k_eqn_model_path.filename().string(),
             {
                 "openfoam-kEqnFjord-fixture",

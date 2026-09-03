@@ -18,7 +18,7 @@
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/runner.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 struct ModelLoadOptions {
     std::uint32_t threads{1};
@@ -35,4 +35,4 @@ struct LoadedModel {
     const std::filesystem::path& manifest_path,
     ModelLoadOptions options = {});
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

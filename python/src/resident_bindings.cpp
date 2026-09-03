@@ -18,7 +18,7 @@
 
 #include <unistd.h>
 
-#include "foamnordic/backend/inference/closure.hpp"
+#include "foamnordic/backend/inference/exchange.hpp"
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
 #include "foamnordic/backend/inference/worker.hpp"
@@ -29,7 +29,7 @@ using namespace nb::literals;
 
 namespace {
 
-std::uint64_t output_width(const foamnordic::closure::ModelArtifact& artifact) {
+std::uint64_t output_width(const foamnordic::inference::ModelArtifact& artifact) {
     std::uint64_t result = 0;
     for (const auto& field : artifact.contract.outputs) {
         if (result > std::numeric_limits<std::uint64_t>::max() - field.components) {
@@ -40,7 +40,7 @@ std::uint64_t output_width(const foamnordic::closure::ModelArtifact& artifact) {
     return result;
 }
 
-class PythonPackedKernel final : public foamnordic::closure::PackedModelKernel {
+class PythonPackedKernel final : public foamnordic::inference::PackedModelKernel {
 public:
     PythonPackedKernel(nb::object evaluator, std::uint64_t width)
         : evaluator_(std::move(evaluator)), output_width_(width) {}
@@ -124,7 +124,7 @@ public:
             throw std::system_error(
                 errno,
                 std::generic_category(),
-                "Cannot create ClosureHost readiness marker");
+                "Cannot create ModelHost readiness marker");
         }
         const auto identity = std::to_string(static_cast<long long>(::getpid())) + "\n";
         const auto written = ::write(descriptor, identity.data(), identity.size());
@@ -136,7 +136,7 @@ public:
             throw std::system_error(
                 saved_error == 0 ? EIO : saved_error,
                 std::generic_category(),
-                "Cannot write ClosureHost readiness marker");
+                "Cannot write ModelHost readiness marker");
         }
     }
 
@@ -162,24 +162,24 @@ void bind_resident(nb::module_& module) {
            std::uint32_t connections,
            const std::string& ready_file,
            bool shared_memory) {
-            auto artifact = foamnordic::closure::read_manifest(manifest_path);
-            if (artifact.format == foamnordic::closure::ModelFormat::onnx) {
+            auto artifact = foamnordic::inference::read_manifest(manifest_path);
+            if (artifact.format == foamnordic::inference::ModelFormat::onnx) {
                 throw std::invalid_argument(
                     "ONNX artifacts must use the native ONNX connector.");
             }
             PythonPackedKernel packed(std::move(evaluator), output_width(artifact));
-            foamnordic::closure::ArtifactModelKernel kernel(artifact, packed);
-            foamnordic::closure::EvaluateEveryCell bypass;
-            foamnordic::closure::WorkerOptions options;
+            foamnordic::inference::ArtifactModelKernel kernel(artifact, packed);
+            foamnordic::inference::EvaluateAllCells bypass;
+            foamnordic::inference::WorkerOptions options;
             options.connections = connections;
             options.shared_memory = shared_memory;
-            foamnordic::closure::NativeClosureWorker worker(
+            foamnordic::inference::ModelWorker worker(
                 foamnordic::fjord::FjordAddress::parse(address),
                 artifact,
                 bypass,
                 kernel,
                 options);
-            std::cout << "[FoamNordic] Closure worker ready: "
+            std::cout << "[FoamNordic] Model worker ready: "
                       << worker.address().text() << std::endl;
             ReadyMarker ready(ready_file);
             {

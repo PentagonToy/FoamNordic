@@ -51,7 +51,7 @@ void LongshipRequest::validate() const {
             "Longship solver tasks must divide evenly across solver nodes.");
     }
     if (solver_cpus_per_task == 0
-        || (use_closure_host && host_cpus_per_node == 0)) {
+        || (use_model_host && host_cpus_per_node == 0)) {
         throw std::invalid_argument("Longship CPU requests must be positive.");
     }
 }
@@ -61,7 +61,7 @@ LongshipPlan plan_longship(const LongshipRequest& request) {
     const auto tasks_per_node = request.solver_tasks / request.solver_nodes;
     const auto solver_cpus_per_node = checked_multiply(
         tasks_per_node, request.solver_cpus_per_task);
-    if (!request.use_closure_host) {
+    if (!request.use_model_host) {
         return {
             request.name,
             {
@@ -89,12 +89,12 @@ LongshipPlan plan_longship(const LongshipRequest& request) {
     const auto placement = resolve_placement(placement_request);
     if (placement.placement != HostPlacement::attached) {
         throw std::invalid_argument(
-            "Longship currently requires an attached ClosureHost.");
+            "Longship currently requires an attached ModelHost.");
     }
     if (!placement.same_allocation || !placement.same_node
         || placement.host_instances != request.solver_nodes) {
         throw std::logic_error(
-            "Attached ClosureHost placement violated the Longship contract.");
+            "Attached ModelHost placement violated the Longship contract.");
     }
 
     const auto allocation_cpus_per_node = checked_add(

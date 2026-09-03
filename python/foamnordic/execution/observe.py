@@ -30,7 +30,7 @@ class FieldSummary:
 class ObservationTiming:
     """Native timing values attached to one observation record."""
 
-    closure_wait: float = 0.0
+    model_wait: float = 0.0
     evaluate: float = 0.0
 
 
@@ -67,7 +67,7 @@ class ObservationRecord:
             time=float(value["time"]),
             summary=MappingProxyType(summaries),
             timing=ObservationTiming(
-                closure_wait=float(raw_timing.get("closure_wait", 0.0)),
+                model_wait=float(raw_timing.get("model_wait", 0.0)),
                 evaluate=float(raw_timing.get("evaluate", 0.0)),
             ),
         )
@@ -253,7 +253,7 @@ def _merge_records(records) -> ObservationRecord:
         time=values[0].time,
         summary=MappingProxyType(summary),
         timing=ObservationTiming(
-            closure_wait=max(record.timing.closure_wait for record in values),
+            model_wait=max(record.timing.model_wait for record in values),
             evaluate=max(record.timing.evaluate for record in values),
         ),
     )

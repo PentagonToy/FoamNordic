@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include <unordered_set>
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 void TreeLeaf::validate() const {
     if (path.empty() || shape.empty() || byte_count == 0) {
@@ -101,4 +101,4 @@ const char* name(ModelFormat format) noexcept {
     return "unknown";
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

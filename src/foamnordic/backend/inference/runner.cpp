@@ -17,16 +17,16 @@
 
 #include "foamnordic/runtime/log.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
-NativeClosureRunner::NativeClosureRunner(
+InferenceRunner::InferenceRunner(
     fjord::Harbor& harbor,
-    ClosureContract contract,
-    const BypassPolicy& bypass,
+    ProgramContract contract,
+    const CellEvaluationPolicy& bypass,
     ModelKernel& kernel)
     : harbor_(harbor), exchange_(std::move(contract)), bypass_(bypass), kernel_(kernel) {}
 
-bool NativeClosureRunner::run_one() {
+bool InferenceRunner::run_one() {
     bool started = false;
     std::uint32_t received_tensors = 0;
     try {
@@ -34,7 +34,7 @@ bool NativeClosureRunner::run_one() {
             auto message = harbor_.receive_message();
             if (message.kind == fjord::RuneKind::shutdown) {
                 if (started) {
-                    throw std::runtime_error("Closure exchange was interrupted by shutdown.");
+                    throw std::runtime_error("Model exchange was interrupted by shutdown.");
                 }
                 return false;
             }
@@ -43,7 +43,7 @@ bool NativeClosureRunner::run_one() {
             }
             if (message.kind == fjord::RuneKind::tensor) {
                 if (!message.tensor.has_value() || message.tensor->shape.empty()) {
-                    throw std::runtime_error("Closure input tensor is incomplete.");
+                    throw std::runtime_error("Model input tensor is incomplete.");
                 }
                 if (!started) {
                     exchange_.begin(
@@ -59,15 +59,15 @@ bool NativeClosureRunner::run_one() {
             }
             if (message.kind == fjord::RuneKind::complete) {
                 if (!started || message.exchange_index != exchange_.exchange_index()) {
-                    throw std::runtime_error("Closure completion marker does not match its batch.");
+                    throw std::runtime_error("Model completion marker does not match its batch.");
                 }
                 if (message.tensor_count != received_tensors) {
                     throw std::runtime_error(
-                        "Closure atomic commit does not match its prepared tensor batch.");
+                        "Model atomic commit does not match its prepared tensor batch.");
                 }
                 break;
             }
-            throw std::runtime_error("Closure runner received an unsupported message.");
+            throw std::runtime_error("Model runner received an unsupported message.");
         }
 
         exchange_.seal_inputs();
@@ -104,11 +104,11 @@ bool NativeClosureRunner::run_one() {
     }
 }
 
-void NativeClosureRunner::run() {
-    native::log(native::LogLevel::info, "Native closure runner started.");
+void InferenceRunner::run() {
+    native::log(native::LogLevel::info, "Native model runner started.");
     while (run_one()) {
     }
-    native::log(native::LogLevel::info, "Native closure runner stopped.");
+    native::log(native::LogLevel::info, "Native model runner stopped.");
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

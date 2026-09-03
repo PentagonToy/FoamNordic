@@ -6,7 +6,7 @@ nanobind_add_module(_native
     src/main.cpp
     src/resident_bindings.cpp
 )
-target_link_libraries(_native PRIVATE FoamNordic::runtime FoamNordic::closure)
+target_link_libraries(_native PRIVATE FoamNordic::runtime FoamNordic::inference)
 target_compile_features(_native PRIVATE cxx_std_20)
 set_target_properties(_native PROPERTIES CXX_EXTENSIONS OFF)
 

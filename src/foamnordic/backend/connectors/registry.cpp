@@ -48,9 +48,9 @@ void register_connector(std::unique_ptr<ModelConnector> connector) {
     value.connectors.push_back(std::move(connector));
 }
 
-std::unique_ptr<closure::PackedModelKernel> connect_model(
+std::unique_ptr<inference::PackedModelKernel> connect_model(
     const std::filesystem::path& payload,
-    const closure::ModelArtifact& artifact) {
+    const inference::ModelArtifact& artifact) {
     auto& value = registry();
     std::scoped_lock lock(value.mutex);
     for (const auto& connector : value.connectors) {
@@ -60,7 +60,7 @@ std::unique_ptr<closure::PackedModelKernel> connect_model(
     }
     throw std::runtime_error(
         "No registered FoamNordic backend connector supports model format: "
-        + std::string(closure::name(artifact.format)));
+        + std::string(inference::name(artifact.format)));
 }
 
 std::vector<std::string> available_connectors() {

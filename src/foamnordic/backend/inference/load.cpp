@@ -23,7 +23,7 @@
 #endif
 #include "foamnordic/backend/connectors/registry.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 class OwnedArtifactKernel final : public ModelKernel {
@@ -91,4 +91,4 @@ LoadedModel load_model(
     return {std::move(artifact), std::move(kernel)};
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

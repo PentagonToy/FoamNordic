@@ -1,14 +1,14 @@
 # Observations and retention
 
-## Preserve the monitoring experience, not the closure loop
+## Preserve the monitoring experience, not the field-program loop
 
 Earlier notebooks used one `for step` loop for three different jobs:
 
-1. receive closure inputs and return required outputs;
+1. receive field-program inputs and return required outputs;
 2. compute monitoring statistics;
 3. retain a field for plotting.
 
-Only the last two belong near an interactive notebook. Closure progress and
+Only the last two belong near an interactive notebook. Model progress and
 field replacement move entirely into the node-local native execution plan.
 The notebook becomes a read-only observer and never calls `step.send()`.
 
@@ -25,8 +25,8 @@ for observation in run.observe(progress=True):
 ```
 
 This loop consumes observation events. Stopping it, restarting the kernel, or
-rendering slowly does not pause a closure invocation. It has no mutable solver
-field handle.
+rendering slowly does not pause a field-program invocation. It has no mutable
+solver field handle.
 
 ## Three retention domains
 
@@ -43,7 +43,7 @@ The default does not preserve ten full-resolution field snapshots.
 Compact summaries use a bounded ring. The public API declares only the
 solver-friendly `interval`. Internal queue length, byte limits, and stale-record
 eviction remain implementation safety details. When a nonessential observer
-falls behind, closure or Transform execution never waits for free observation
+falls behind, Closure or Transform execution never waits for free observation
 memory.
 
 Useful policies are:
@@ -77,14 +77,14 @@ the declared visualization product.
 
 ## Observation backpressure
 
-Observation transport is separate from closure transport. Its default behavior
+Observation transport is separate from field-program transport. Its default behavior
 is lossy but bounded:
 
 ```text
 producer faster than viewer
   → keep newest permitted records
   → increment dropped-observation counter
-  → continue solver and closure execution
+  → continue solver and field-program execution
 ```
 
 Synchronous observation is diagnostic-only and must be requested explicitly.

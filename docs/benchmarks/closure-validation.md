@@ -135,7 +135,7 @@ and resident function implementations.
 The hosts differ, so the seven-second solver wall-time difference is only
 indicative. The FoamNordic timing does verify the corrected normal-shutdown
 lifecycle: after OpenFOAM completed, Longship signalled the resident
-ClosureHost immediately and finalized in one second instead of consuming the
+ModelHost immediately and finalized in one second instead of consuming the
 30-second termination grace period before sending the signal.
 
 ## Linux pitzDaily learned closure

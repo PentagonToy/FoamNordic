@@ -11,9 +11,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "closureObservation.H"
+#include "fieldProgramObservation.H"
 
-#include "closureSession.H"
+#include "fieldProgramSession.H"
 #include "fieldBridge.H"
 
 #include "IOstreams.H"
@@ -82,7 +82,7 @@ foamnordic::adapter::CompiledObservationPlan compilePlan(
 
 }  // namespace
 
-ClosureObservation::ClosureObservation(const dictionary& dict)
+FieldProgramObservation::FieldProgramObservation(const dictionary& dict)
     : fields_(dict.get<wordList>("fields")),
       plan_(compilePlan(fields_, dict)) {
     if (dict.found("path")) {
@@ -98,16 +98,16 @@ ClosureObservation::ClosureObservation(const dictionary& dict)
     }
 }
 
-std::unique_ptr<ClosureObservation> ClosureObservation::create(
+std::unique_ptr<FieldProgramObservation> FieldProgramObservation::create(
     const dictionary& closureDict) {
     if (!closureDict.found("observation")) {
         return nullptr;
     }
-    return std::unique_ptr<ClosureObservation>(
-        new ClosureObservation(closureDict.subDict("observation")));
+    return std::unique_ptr<FieldProgramObservation>(
+        new FieldProgramObservation(closureDict.subDict("observation")));
 }
 
-void ClosureObservation::publish(
+void FieldProgramObservation::publish(
     const fvMesh& mesh,
     const Time& time,
     std::uint64_t exchangeIndex,
@@ -133,7 +133,7 @@ void ClosureObservation::publish(
             static_cast<double>(time.value()),
             views);
         if (record) {
-            record->closure_wait = closureWait;
+            record->model_wait = closureWait;
             record->evaluate = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - started).count();
             if (writer_) {
@@ -160,7 +160,7 @@ void ClosureObservation::publish(
     }
 }
 
-void ClosureObservation::shutdown() noexcept {
+void FieldProgramObservation::shutdown() noexcept {
     enabled_ = false;
     if (publisher_) {
         publisher_->stop();

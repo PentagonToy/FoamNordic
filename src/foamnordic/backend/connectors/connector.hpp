@@ -14,10 +14,10 @@ public:
     virtual ~ModelConnector() = default;
 
     [[nodiscard]] virtual std::string_view id() const noexcept = 0;
-    [[nodiscard]] virtual bool supports(closure::ModelFormat format) const noexcept = 0;
-    [[nodiscard]] virtual std::unique_ptr<closure::PackedModelKernel> load(
+    [[nodiscard]] virtual bool supports(inference::ModelFormat format) const noexcept = 0;
+    [[nodiscard]] virtual std::unique_ptr<inference::PackedModelKernel> load(
         const std::filesystem::path& payload,
-        const closure::ModelArtifact& artifact) const = 0;
+        const inference::ModelArtifact& artifact) const = 0;
 };
 
 }  // namespace foamnordic::backend

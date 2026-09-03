@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 template <class Value>
@@ -199,4 +199,4 @@ const char* name(ScalerKind kind) noexcept {
     return "unknown";
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

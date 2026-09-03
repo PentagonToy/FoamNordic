@@ -8,7 +8,7 @@ labelled as design targets describe future extensions rather than public API.
 ## Design character
 
 FoamNordic keeps the Nordic names that describe real architectural boundaries:
-Longship owns the coupled workload, ClosureHost evaluates a resident model,
+Longship owns the coupled workload, ModelHost evaluates a resident model,
 and Fjord carries native messages. The public Python surface otherwise uses
 plain scientific names. A user should not need to understand transport or
 scheduler internals to run a case, and decorative vocabulary should not hide
@@ -114,15 +114,15 @@ quiet by default; `verbose=True` displays an Onsaemiro artifact summary.
 
 The model CPU declaration is an active runtime budget, not scheduler metadata
 only. Under Slurm, `Slurm.model(cpus_per_task=N)` reserves and passes `N` CPUs
-to ClosureHost. A local Longship automatically uses the CPUs granted to its
+to ModelHost. A local Longship automatically uses the CPUs granted to its
 process (Linux affinity/cpuset when available, otherwise the machine's logical
 CPU count); no placement declaration is required. An explicit
-`Attached(closure_cpus_per_node=N)` remains available to cap that local budget.
+`Attached(model_cpus_per_node=N)` remains available to cap that local budget.
 ONNX Runtime uses the selected budget for
 intra-operator work while retaining one inter-operator scheduler; Joblib caps
 native BLAS/OpenMP pools and propagates the value to fitted estimators exposing
 `n_jobs`; Equinox/JAX configures its CPU runtime before JAX is imported. When
-several field programs share one ClosureHost allocation, Longship divides the
+several field programs share one ModelHost allocation, Longship divides the
 budget between their resident processes and rejects a declaration smaller
 than the program count. This prevents hidden oversubscription on both laptops
 and Slurm nodes.
@@ -136,7 +136,7 @@ OpenFOAM exchange.
 
 The lowering backend must validate its ONNX opset and IR version against the
 configured ONNX Runtime. The run-control notebook points to the single
-`kEqnFjord.fnom` bundle; ClosureHost reads its embedded ONNX payload directly
+`kEqnFjord.fnom` bundle; ModelHost reads its embedded ONNX payload directly
 without importing JAX, extracting a temporary file, or reconstructing the
 training model.
 
@@ -351,7 +351,7 @@ the submission line appends it as `(est. start: TIMESTAMP)`; the later
 `Slurm.openfoam()` deliberately follows the names printed in an `#SBATCH`
 header: `nodes`, `ntasks`, `cpus_per_task`, and `mem_per_cpu`.
 `Slurm.model()` uses the same CPU and memory vocabulary. A model host is always
-exactly one ClosureHost task per OpenFOAM node, so its task topology is an
+exactly one ModelHost task per OpenFOAM node, so its task topology is an
 internal invariant rather than another user setting or serialized plan field.
 In the example, each model host receives eight CPUs and 8 GiB in total. Model
 resources never change the OpenFOAM `ntasks`. With
@@ -384,7 +384,7 @@ allocation from leaking incompatible resource variables into the new job and
 does not mutate the notebook's `os.environ`.
 
 For a fair solver baseline, omit closures. The native plan then reserves no
-ClosureHost CPU and the launch path leaves the source case's turbulence or
+ModelHost CPU and the launch path leaves the source case's turbulence or
 combustion dictionary unchanged:
 
 ```python
@@ -430,7 +430,7 @@ for observation in run.observe(progress=True):
             f"{observation.time:.4f}",
             f"{observation.summary['nut'].minimum:.6e}",
             f"{observation.summary['nut'].maximum:.6e}",
-            f"{observation.timing.closure_wait:.3f}",
+            f"{observation.timing.model_wait:.3f}",
             f"{observation.timing.evaluate:.3f}",
         ])
 

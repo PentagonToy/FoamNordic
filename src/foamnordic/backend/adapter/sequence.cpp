@@ -30,7 +30,7 @@ std::optional<std::uint64_t> ExchangeSequence::next(
     std::uint64_t time_index) {
     if (started_ && time_index < previous_time_index_) {
         throw std::invalid_argument(
-            "OpenFOAM time index moved backwards during closure exchange.");
+            "OpenFOAM time index moved backwards during model exchange.");
     }
     if (cadence_ == ExchangeCadence::time_step) {
         if (started_ && time_index == previous_time_index_) {
@@ -42,7 +42,7 @@ std::optional<std::uint64_t> ExchangeSequence::next(
     }
     if (started_ && next_call_exchange_ == 0) {
         throw std::overflow_error(
-            "FoamNordic per-call closure exchange index overflowed.");
+            "FoamNordic per-call model exchange index overflowed.");
     }
     previous_time_index_ = time_index;
     started_ = true;

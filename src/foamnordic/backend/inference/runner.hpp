@@ -14,10 +14,10 @@
 #include <cstdint>
 #include <vector>
 
-#include "foamnordic/backend/inference/closure.hpp"
+#include "foamnordic/backend/inference/exchange.hpp"
 #include "foamnordic/fjord/harbor.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 class ModelKernel {
 public:
@@ -31,12 +31,12 @@ public:
         std::uint32_t rank = 0) = 0;
 };
 
-class NativeClosureRunner {
+class InferenceRunner {
 public:
-    NativeClosureRunner(
+    InferenceRunner(
         fjord::Harbor& harbor,
-        ClosureContract contract,
-        const BypassPolicy& bypass,
+        ProgramContract contract,
+        const CellEvaluationPolicy& bypass,
         ModelKernel& kernel);
 
     [[nodiscard]] bool run_one();
@@ -44,9 +44,9 @@ public:
 
 private:
     fjord::Harbor& harbor_;
-    ExchangeMachine exchange_;
-    const BypassPolicy& bypass_;
+    CellInferenceExchange exchange_;
+    const CellEvaluationPolicy& bypass_;
     ModelKernel& kernel_;
 };
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

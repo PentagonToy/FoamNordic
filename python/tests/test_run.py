@@ -348,7 +348,7 @@ class RunTests(unittest.TestCase):
                 "exchange_index": 4,
                 "time": 0.25,
                 "summary": {"nut": {"min": 0.1, "max": 0.4}},
-                "timing": {"closure_wait": 0.02, "evaluate": 0.03},
+                "timing": {"model_wait": 0.02, "evaluate": 0.03},
             }
             observations_dir = Path(directory) / "observations"
             observations_dir.mkdir()
@@ -393,7 +393,7 @@ class RunTests(unittest.TestCase):
                             "count": 4,
                         }
                     },
-                    "timing": {"closure_wait": 0.02, "evaluate": 0.003},
+                    "timing": {"model_wait": 0.02, "evaluate": 0.003},
                 },
                 {
                     "exchange_index": 8,
@@ -407,7 +407,7 @@ class RunTests(unittest.TestCase):
                             "count": 12,
                         }
                     },
-                    "timing": {"closure_wait": 0.04, "evaluate": 0.005},
+                    "timing": {"model_wait": 0.04, "evaluate": 0.005},
                 },
             )
             observations_dir = root / "observations"
@@ -424,7 +424,7 @@ class RunTests(unittest.TestCase):
             self.assertEqual(summary.mean, 1.25)
             self.assertEqual(summary.l2, 5.0)
             self.assertEqual(summary.count, 16)
-            self.assertEqual(observations[0].timing.closure_wait, 0.04)
+            self.assertEqual(observations[0].timing.model_wait, 0.04)
             self.assertTrue(run.stop().success)
 
     def test_stop_force_requires_boolean(self) -> None:

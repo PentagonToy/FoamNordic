@@ -14,7 +14,7 @@ compression, and deliberate obscurity are not part of its ownership model.
 ## Canonical workflow
 
 ```text
-fno.Export.* -> model.fnom -> fno.Operator.model() -> ClosureHost
+fno.Export.* -> model.fnom -> fno.Operator.model() -> ModelHost
 ```
 
 Metadata can be inspected without importing or executing the backend payload:
@@ -36,12 +36,12 @@ artifact.validate()
 `validate` checks the container, bounds, manifest version, tensor contract,
 scalers, tree metadata, and payload layout. It deliberately does not unpickle
 Joblib or Equinox payloads, compile C++ source, or execute an ONNX graph.
-Backend loading remains an execution-time validation performed by ClosureHost.
+Backend loading remains an execution-time validation performed by ModelHost.
 
 ## Execution boundaries
 
 All backends consume named packed tensors with the same native scaling and
-atomic publication contract. ONNX executes in the native ClosureHost.
+atomic publication contract. ONNX executes in the native ModelHost.
 Supported sklearn graphs are lowered to compiled C++; unsupported estimators
 use a persistent Joblib resident. Equinox reconstructs and JIT-compiles its
 trusted PyTree once in a persistent JAX resident. Serialized Python objects are
@@ -88,7 +88,7 @@ The manifest begins with `FNOMAN1\0`, followed by:
 1. manifest schema, `u32`;
 2. backend family, `u8` (`1` Equinox, `2` Joblib, `3` ONNX, `4` compiled C++);
 3. backend artifact name string;
-4. closure-contract name string;
+4. program-contract name string;
 5. input field sequence;
 6. output field sequence;
 7. optional input affine scaler;

@@ -17,7 +17,7 @@
 
 namespace {
 
-using foamnordic::closure::TensorMap;
+using foamnordic::inference::TensorMap;
 using foamnordic::fjord::Element;
 using foamnordic::fjord::Tensor;
 
@@ -84,7 +84,7 @@ bool values_close(
     return true;
 }
 
-class CombustionBypass final : public foamnordic::closure::BypassPolicy {
+class CombustionBypass final : public foamnordic::inference::CellEvaluationPolicy {
 public:
     std::vector<std::uint64_t> prepare(
         const TensorMap& inputs,
@@ -129,7 +129,7 @@ public:
     }
 };
 
-class CombustionKernel final : public foamnordic::closure::ModelKernel {
+class CombustionKernel final : public foamnordic::inference::ModelKernel {
 public:
     TensorMap evaluate(
         const TensorMap& inputs,
@@ -170,7 +170,7 @@ void test_native_combustion_exchange(bool shared_memory) {
                 1,
                 4096,
             }));
-            foamnordic::closure::NativeClosureRunner runner(
+            foamnordic::inference::InferenceRunner runner(
                 worker,
                 {
                     "progress-variable-combustion",
@@ -232,16 +232,16 @@ void test_scaled_affine_exchange(bool shared_memory) {
                         : foamnordic::fjord::local_channel_pair();
     foamnordic::fjord::Harbor client(std::move(channels.first));
     foamnordic::fjord::Harbor worker(std::move(channels.second));
-    foamnordic::closure::EvaluateEveryCell bypass;
-    foamnordic::closure::DenseAffineKernel affine(
+    foamnordic::inference::EvaluateAllCells bypass;
+    foamnordic::inference::DenseAffineKernel affine(
         2,
         1,
         {2.0, 3.0},
         {1.0});
-    foamnordic::closure::ArtifactModelKernel kernel(
+    foamnordic::inference::ArtifactModelKernel kernel(
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             "artifact/reference-affine.onnx",
             {
                 "scaled-affine-reference",
@@ -252,10 +252,10 @@ void test_scaled_affine_exchange(bool shared_memory) {
                 {{"target", Element::float64, 1}},
             },
             {},
-            foamnordic::closure::AffineScaler::standard(
+            foamnordic::inference::AffineScaler::standard(
                 {10.0, 100.0},
                 {2.0, 10.0}),
-            foamnordic::closure::AffineScaler::standard(
+            foamnordic::inference::AffineScaler::standard(
                 {5.0},
                 {2.0}),
         },
@@ -271,7 +271,7 @@ void test_scaled_affine_exchange(bool shared_memory) {
                 1,
                 4096,
             }));
-            foamnordic::closure::NativeClosureRunner runner(
+            foamnordic::inference::InferenceRunner runner(
                 worker,
                 {
                     "scaled-affine-reference",
@@ -333,12 +333,12 @@ void test_k_eqn_fjord_contract() {
     weights[10] = 0.05;
     weights[11] = 0.02;
     weights[22] = 0.10;
-    foamnordic::closure::DenseAffineKernel affine(
+    foamnordic::inference::DenseAffineKernel affine(
         11, 3, std::move(weights), {0.0, 0.0, 0.0});
-    foamnordic::closure::ArtifactModelKernel kernel(
+    foamnordic::inference::ArtifactModelKernel kernel(
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             "artifact/kEqnFjord.onnx",
             {
                 "kEqnFjord-contract",
@@ -397,7 +397,7 @@ void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
                         : foamnordic::fjord::local_channel_pair();
     foamnordic::fjord::Harbor client(std::move(channels.first));
     foamnordic::fjord::Harbor worker(std::move(channels.second));
-    foamnordic::closure::EvaluateEveryCell bypass;
+    foamnordic::inference::EvaluateAllCells bypass;
     CombustionKernel kernel;
     std::exception_ptr workerFailure;
 
@@ -410,7 +410,7 @@ void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
                 1,
                 4096,
             }));
-            foamnordic::closure::NativeClosureRunner runner(
+            foamnordic::inference::InferenceRunner runner(
                 worker,
                 {
                     "failure-reporting",

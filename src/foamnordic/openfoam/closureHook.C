@@ -98,7 +98,7 @@ ClosureHook::ClosureHook(const dictionary& dict)
     : inputs_(readInputs(dict)),
       outputs_(readOutputs(dict)),
       session_(dict, contract(inputs_, outputs_)),
-      observation_(ClosureObservation::create(dict)) {}
+      observation_(FieldProgramObservation::create(dict)) {}
 
 ClosureHook::~ClosureHook() noexcept {
     try {

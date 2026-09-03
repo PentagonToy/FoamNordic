@@ -17,24 +17,24 @@
 
 namespace foamnordic::adapter {
 
-class ClosureInvocation {
+class FieldInvocation {
 public:
-    ClosureInvocation(
-        BlockingClosureExchange& exchange,
+    FieldInvocation(
+        BlockingFieldExchange& exchange,
         std::uint64_t time_index,
         double physical_time);
 
-    ClosureInvocation(const ClosureInvocation&) = delete;
-    ClosureInvocation& operator=(const ClosureInvocation&) = delete;
-    ClosureInvocation(ClosureInvocation&&) = delete;
-    ClosureInvocation& operator=(ClosureInvocation&&) = delete;
+    FieldInvocation(const FieldInvocation&) = delete;
+    FieldInvocation& operator=(const FieldInvocation&) = delete;
+    FieldInvocation(FieldInvocation&&) = delete;
+    FieldInvocation& operator=(FieldInvocation&&) = delete;
 
-    ClosureInvocation& provide(fjord::TensorView field);
-    ClosureInvocation& receive(fjord::MutableTensorView field);
+    FieldInvocation& provide(fjord::TensorView field);
+    FieldInvocation& receive(fjord::MutableTensorView field);
     [[nodiscard]] std::uint64_t commit();
 
 private:
-    BlockingClosureExchange& exchange_;
+    BlockingFieldExchange& exchange_;
     std::uint64_t time_index_;
     double physical_time_;
     InputFieldMap inputs_;
@@ -42,16 +42,16 @@ private:
     bool committed_{false};
 };
 
-class ClosurePort {
+class FieldProgramPort {
 public:
-    ClosurePort(fjord::Harbor& harbor, ExchangeContract contract);
+    FieldProgramPort(fjord::Harbor& harbor, ExchangeContract contract);
 
-    [[nodiscard]] ClosureInvocation begin(
+    [[nodiscard]] FieldInvocation begin(
         std::uint64_t time_index,
         double physical_time);
 
 private:
-    BlockingClosureExchange exchange_;
+    BlockingFieldExchange exchange_;
 };
 
 }  // namespace foamnordic::adapter

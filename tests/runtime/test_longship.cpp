@@ -40,7 +40,7 @@ void test_single_node_longship() {
 
     require(plan.allocation_nodes == 1, "Single-node allocation is invalid.");
     require(plan.solver_tasks_per_node == 16, "Solver layout is invalid.");
-    require(plan.host_tasks == 1, "ClosureHost was not attached.");
+    require(plan.host_tasks == 1, "ModelHost was not attached.");
     require(plan.allocation_cpus_per_node == 20, "Host CPUs were not reserved.");
     require(plan.host_starts_first && plan.fail_together, "Lifecycle is not coupled.");
     require(
@@ -66,11 +66,11 @@ void test_solver_only_longship() {
     foamnordic::native::LongshipRequest request;
     request.solver_tasks = 8;
     request.solver_cpus_per_task = 2;
-    request.use_closure_host = false;
+    request.use_model_host = false;
     request.host_cpus_per_node = 0;
     const auto plan = foamnordic::native::plan_longship(request);
 
-    require(plan.host_tasks == 0, "Solver-only plan allocated a ClosureHost.");
+    require(plan.host_tasks == 0, "Solver-only plan allocated a ModelHost.");
     require(plan.host_cpus_per_task == 0, "Solver-only plan reserved host CPUs.");
     require(plan.allocation_cpus_per_node == 16, "Solver-only CPUs are incorrect.");
     require(!plan.host_starts_first, "Solver-only plan has a host startup phase.");
@@ -119,7 +119,7 @@ void test_longship_cli_preserves_component_arguments() {
         "--host",
         "srun",
         "--nodes=2",
-        "foamnordic_closure_worker",
+        "foamnordic_model_worker",
         "--solver",
         "srun",
         "--ntasks=32",
@@ -135,7 +135,7 @@ void test_longship_cli_preserves_component_arguments() {
     require(
         request.launch.host.arguments
                 == std::vector<std::string>{
-                    "srun", "--nodes=2", "foamnordic_closure_worker"}
+                    "srun", "--nodes=2", "foamnordic_model_worker"}
             && request.launch.solver.arguments
                    == std::vector<std::string>{
                        "srun", "--ntasks=32", "pimpleFoam", "-parallel"},
@@ -241,9 +241,9 @@ void test_supervisor_propagates_host_failure() {
         std::chrono::seconds(1),
         std::chrono::milliseconds(50),
     });
-    require(result.host_failed_first, "Early ClosureHost exit was not detected.");
-    require(result.host_status == 9, "ClosureHost failure status was lost.");
-    require(!result.success(), "Failed ClosureHost produced a successful Longship.");
+    require(result.host_failed_first, "Early ModelHost exit was not detected.");
+    require(result.host_status == 9, "ModelHost failure status was lost.");
+    require(!result.success(), "Failed ModelHost produced a successful Longship.");
     std::filesystem::remove(ready);
 }
 
@@ -290,7 +290,7 @@ void test_supervisor_times_out_before_solver_start() {
     } catch (const std::runtime_error&) {
         timed_out = true;
     }
-    require(timed_out, "Longship accepted an unready ClosureHost.");
+    require(timed_out, "Longship accepted an unready ModelHost.");
 }
 
 void test_supervisor_cancels_components_together() {

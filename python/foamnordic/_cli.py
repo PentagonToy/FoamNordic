@@ -270,7 +270,7 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
                 ("WARN", "Runtime profile", "load OpenFOAM to select an ABI"),
                 ("WARN", "Longship", "runtime ABI not selected"),
                 ("WARN", "OpenFOAM adapter", "runtime ABI not selected"),
-                ("WARN", "ClosureHost", "runtime ABI not selected"),
+                ("WARN", "ModelHost", "runtime ABI not selected"),
                 ("WARN", "Reference solver", "runtime ABI not selected"),
             )
         )
@@ -307,15 +307,15 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
             else f"missing below {runtime / 'lib'}",
         )
     )
-    closure_host = runtime / "bin/foamnordic_closure_worker"
+    model_host = runtime / "bin/foamnordic_model_worker"
     checks.append(
         (
             "PASS"
-            if closure_host.is_file() and os.access(closure_host, os.X_OK)
+            if model_host.is_file() and os.access(model_host, os.X_OK)
             else "WARN",
-            "ClosureHost",
-            str(closure_host)
-            if closure_host.is_file()
+            "ModelHost",
+            str(model_host)
+            if model_host.is_file()
             else "not installed (optional without ONNX)",
         )
     )
@@ -519,7 +519,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 f"-DFOAMNORDIC_ONNXRUNTIME_LIBRARY={onnxruntime.library}",
             )
         )
-        runtime_targets.append("foamnordic_closure_worker")
+        runtime_targets.append("foamnordic_model_worker")
     commands: list[tuple[str, list[str]]] = [
         (
             "Configure native SDK",
@@ -661,16 +661,16 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         print(f"Build log:  {log_path}", file=stream)
         print(f"Reference solver: {solver}", file=stream)
         if onnxruntime is not None:
-            worker = prefix / "bin/foamnordic_closure_worker"
+            worker = prefix / "bin/foamnordic_model_worker"
             if not worker.is_file():
                 raise RuntimeError(
-                    "native build completed without installing ClosureHost"
+                    "native build completed without installing ModelHost"
                 )
             print(
                 f"ONNX Runtime: {ONNXRUNTIME_VERSION} ({onnxruntime.source})",
                 file=stream,
             )
-            print(f"ClosureHost: {worker}", file=stream)
+            print(f"ModelHost: {worker}", file=stream)
         runtime_profile = write_runtime_profile(selected)
         print(f"Runtime profile: {runtime_profile}", file=stream)
     return 0
@@ -889,7 +889,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--without-onnx",
         action="store_true",
-        help="skip the native ONNX ClosureHost",
+        help="skip the native ONNX ModelHost",
     )
     build.add_argument("--dry-run", action="store_true", help="show commands only")
     inspect_artifact = subcommands.add_parser(

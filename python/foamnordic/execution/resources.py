@@ -51,7 +51,7 @@ def resource_values(longship: Longship) -> dict[str, object]:
         model.cpus_per_task
         if scheduler.has_model_resources
         else (
-            longship.placement.closure_cpus_per_node
+            longship.placement.model_cpus_per_node
             or max(1, programs)
         )
     )

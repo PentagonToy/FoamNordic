@@ -1,9 +1,9 @@
 # Native runtime
 
-FoamNordic treats a learned closure as a field contract, not as a particular
-ML framework. Each exchange declares named input and output fields, element
-types, component counts, exchange index, solver time index, physical time, and
-local cell count.
+FoamNordic treats every resident model as a field-program contract, not as a
+particular ML framework or physical role. Each exchange declares named input
+and output fields, element types, component counts, exchange index, solver time
+index, physical time, and local cell count.
 
 The native state machine is:
 
@@ -62,12 +62,12 @@ a timestep loop.
 
 ## Native runner
 
-`NativeClosureRunner` owns the complete hot path for one or more exchanges:
+`InferenceRunner` owns the complete hot path for one or more exchanges:
 
 ```text
 Harbor input tensors
   → validate one ordered exchange batch
-  → seal required closure inputs
+  → seal required program inputs
   → run the native bypass policy
   → evaluate active cells through a ModelKernel
   → merge predictions into full mesh fields
@@ -83,7 +83,7 @@ during a partial batch is an error rather than an implicit incomplete result.
 `ModelKernel` is deliberately smaller than a framework API. It receives the
 validated input map, the sorted active-cell indices, exchange index, and
 physical time, and returns named prediction tensors. Native ONNX, a compiled
-closure, or a managed Python worker may implement that boundary without changing
+model, or a managed Python worker may implement that boundary without changing
 OpenFOAM coupling, bypass rules, or Rune/Fjord transport.
 
 An input and output may intentionally share a field name, such as `U -> U`.
@@ -92,10 +92,10 @@ names remain unique within the input list and within the output list.
 
 ## Resident worker
 
-`NativeClosureWorker` owns one native listener and one complete model session.
+`ModelWorker` owns one native listener and one complete model session.
 It validates the model manifest before accepting a solver, negotiates UDS or
 TCP, upgrades a same-node UDS session to SHM when both peers support it, and
-then gives the established Harbor to `NativeClosureRunner`. Shutdown is a Rune
+then gives the established Harbor to `InferenceRunner`. Shutdown is a Rune
 lifecycle message processed between atomic exchanges. The worker therefore
 contains no timestep polling and leaves no Unix socket after its lifetime.
 If validation or inference fails during an active exchange, the worker sends a
@@ -118,8 +118,8 @@ same OpenFOAM time index and physical time are intentional and must each wait
 for their committed response. Timestep deduplication belongs only to the
 general function-object field path.
 
-`ClosurePort` is the solver-facing boundary for this rule. A solver begins an
-invocation with its OpenFOAM time index and physical time, provides any number
+`FieldProgramPort` is the solver-facing boundary for this rule. A solver begins
+an invocation with its OpenFOAM time index and physical time, provides any number
 of read-only field views, registers mutable output views, and commits once.
 Commit performs the complete blocking atomic exchange; it returns only after
 every declared output has been validated and copied into the solver-owned
@@ -142,7 +142,7 @@ they do not own OpenFOAM fields or lifecycle state.
 Native diagnostic lines use this form:
 
 ```text
-[FoamNordic] Info: Closure exchange ready.
+[FoamNordic] Info: Model exchange ready.
 ```
 
 The tag is yellow only when stderr is attached to a terminal. Batch logs and

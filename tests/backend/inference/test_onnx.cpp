@@ -67,7 +67,7 @@ int main() {
             static_cast<std::streamsize>(model_bytes.size()));
     }
 
-    foamnordic::closure::OnnxPackedKernel kernel(model_path);
+    foamnordic::inference::OnnxPackedKernel kernel(model_path);
     constexpr std::array<float, 4> values{1.0F, 3.0F, -2.0F, 4.0F};
     foamnordic::fjord::Tensor features{
         "features",
@@ -107,11 +107,11 @@ int main() {
 
     const auto manifest_path =
         std::filesystem::temp_directory_path() / "foamnordic-native-test.fnom";
-    foamnordic::closure::write_bundle(
+    foamnordic::inference::write_bundle(
         manifest_path,
         {
             1,
-            foamnordic::closure::ModelFormat::onnx,
+            foamnordic::inference::ModelFormat::onnx,
             model_path.filename().string(),
             {
                 "native-onnx",
@@ -119,14 +119,14 @@ int main() {
                 {{"predictions", foamnordic::fjord::Element::float32, 1}},
             },
             {},
-            foamnordic::closure::AffineScaler::standard(
+            foamnordic::inference::AffineScaler::standard(
                 {1.0, 1.0}, {2.0, 2.0}),
-            foamnordic::closure::AffineScaler::robust({10.0}, {2.0}),
+            foamnordic::inference::AffineScaler::robust({10.0}, {2.0}),
         },
         model_path);
     std::filesystem::remove(model_path);
-    auto loaded = foamnordic::closure::load_model(manifest_path);
-    foamnordic::closure::TensorMap inputs;
+    auto loaded = foamnordic::inference::load_model(manifest_path);
+    foamnordic::inference::TensorMap inputs;
     inputs.emplace("features", features);
     const auto loaded_outputs =
         loaded.kernel->evaluate(inputs, {0, 1}, 7, 0.25);
@@ -143,8 +143,8 @@ int main() {
         std::filesystem::temp_directory_path()
         / ("foamnordic-onnx-worker-" + std::to_string(std::random_device{}())
            + ".sock");
-    foamnordic::closure::EvaluateEveryCell bypass;
-    foamnordic::closure::NativeClosureWorker worker(
+    foamnordic::inference::EvaluateAllCells bypass;
+    foamnordic::inference::ModelWorker worker(
         foamnordic::fjord::FjordAddress::local(socket_path.string()),
         manifest_path,
         bypass);

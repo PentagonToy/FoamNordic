@@ -28,7 +28,7 @@
 #include "foamnordic/fjord/ucx_channel.hpp"
 #endif
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 fjord::FjordListener make_listener(const fjord::FjordAddress& address) {
@@ -63,31 +63,31 @@ private:
 void WorkerOptions::validate() const {
     if (connections == 0) {
         throw std::invalid_argument(
-            "Native closure worker connection count must be positive.");
+            "Native model worker connection count must be positive.");
     }
     if (model_threads == 0) {
         throw std::invalid_argument(
-            "Native closure worker model thread count must be positive.");
+            "Native model worker model thread count must be positive.");
     }
     if (maximum_payload == 0) {
-        throw std::invalid_argument("Native closure worker payload limit must be positive.");
+        throw std::invalid_argument("Native model worker payload limit must be positive.");
     }
     if (ucx && ucx_host.empty()) {
         throw std::invalid_argument(
-            "Native closure worker UCX mode requires an advertised host.");
+            "Native model worker UCX mode requires an advertised host.");
     }
 #ifndef FOAMNORDIC_HAVE_UCX
     if (ucx) {
         throw std::invalid_argument(
-            "Native closure worker was built without UCX support.");
+            "Native model worker was built without UCX support.");
     }
 #endif
 }
 
-NativeClosureWorker::NativeClosureWorker(
+ModelWorker::ModelWorker(
     fjord::FjordAddress address,
     ModelArtifact artifact,
-    const BypassPolicy& bypass,
+    const CellEvaluationPolicy& bypass,
     ModelKernel& kernel,
     WorkerOptions options)
     : requested_address_(std::move(address)),
@@ -101,10 +101,10 @@ NativeClosureWorker::NativeClosureWorker(
     options_.validate();
 }
 
-NativeClosureWorker::NativeClosureWorker(
+ModelWorker::ModelWorker(
     fjord::FjordAddress address,
     const std::filesystem::path& manifest_path,
-    const BypassPolicy& bypass,
+    const CellEvaluationPolicy& bypass,
     WorkerOptions options)
     : requested_address_(std::move(address)),
       listener_(make_listener(requested_address_)),
@@ -118,14 +118,14 @@ NativeClosureWorker::NativeClosureWorker(
     kernel_ = owned_kernel_.get();
 }
 
-fjord::FjordAddress NativeClosureWorker::address() const {
+fjord::FjordAddress ModelWorker::address() const {
     return listener_.address();
 }
 
-void NativeClosureWorker::run() {
+void ModelWorker::run() {
     native::log(
         native::LogLevel::info,
-        "Closure worker listening at " + listener_.address().text());
+        "Model worker listening at " + listener_.address().text());
     auto capabilities = requested_address_.kind == fjord::FjordKind::unix_socket
                             ? fjord::Capability::uds
                             : fjord::Capability::tcp;
@@ -136,7 +136,7 @@ void NativeClosureWorker::run() {
     if (options_.ucx) {
         if (requested_address_.kind != fjord::FjordKind::tcp) {
             throw std::invalid_argument(
-                "Native closure worker UCX mode requires a TCP control address.");
+                "Native model worker UCX mode requires a TCP control address.");
         }
         capabilities = capabilities | fjord::Capability::ucx;
     }
@@ -159,11 +159,11 @@ void NativeClosureWorker::run() {
         if (options_.ucx
             && !fjord::any(session.capabilities & fjord::Capability::ucx)) {
             throw std::runtime_error(
-                "Closure worker required UCX but the solver did not negotiate it.");
+                "Model worker required UCX but the solver did not negotiate it.");
         }
         if (!ranks.insert(session.rank).second) {
             throw std::runtime_error(
-                "Closure worker received a duplicate solver rank.");
+                "Model worker received a duplicate solver rank.");
         }
         if (connection == 0) {
             session_id = session.session_id;
@@ -171,7 +171,7 @@ void NativeClosureWorker::run() {
         } else if (session.session_id != session_id
                    || session.peers != global_peers) {
             throw std::runtime_error(
-                "Closure worker sessions disagree on MPI identity.");
+                "Model worker sessions disagree on MPI identity.");
         }
         if (fjord::any(session.capabilities & fjord::Capability::ucx)) {
 #ifdef FOAMNORDIC_HAVE_UCX
@@ -179,11 +179,11 @@ void NativeClosureWorker::run() {
             harbor->offer_ucx(ucx_listener);
             native::log(
                 native::LogLevel::info,
-                "Closure worker rank " + std::to_string(session.rank)
+                "Model worker rank " + std::to_string(session.rank)
                     + " data plane: UCX");
 #else
             throw std::runtime_error(
-                "Closure worker selected UCX without UCX build support.");
+                "Model worker selected UCX without UCX build support.");
 #endif
         } else if (fjord::any(session.capabilities & fjord::Capability::shm)) {
             const auto shared_memory_name =
@@ -194,17 +194,17 @@ void NativeClosureWorker::run() {
             harbor->offer_shared_memory(shared_memory_name);
             native::log(
                 native::LogLevel::info,
-                "Closure worker rank " + std::to_string(session.rank)
+                "Model worker rank " + std::to_string(session.rank)
                     + " data plane: SHM");
         } else if (requested_address_.kind == fjord::FjordKind::unix_socket) {
             native::log(
                 native::LogLevel::info,
-                "Closure worker rank " + std::to_string(session.rank)
+                "Model worker rank " + std::to_string(session.rank)
                     + " data plane: UDS");
         } else {
             native::log(
                 native::LogLevel::info,
-                "Closure worker rank " + std::to_string(session.rank)
+                "Model worker rank " + std::to_string(session.rank)
                     + " data plane: TCP");
         }
         harbors.push_back(std::move(harbor));
@@ -219,7 +219,7 @@ void NativeClosureWorker::run() {
         for (auto& harbor : harbors) {
             runners.emplace_back([&, peer = harbor.get()] {
                 try {
-                    NativeClosureRunner runner(
+                    InferenceRunner runner(
                         *peer,
                         artifact_.contract,
                         bypass_,
@@ -250,9 +250,10 @@ void NativeClosureWorker::run() {
     for (auto& runner : runners) {
         runner.join();
     }
+    listener_.close();
     if (failure) {
         std::rethrow_exception(failure);
     }
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

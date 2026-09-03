@@ -235,7 +235,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertIn("[Step 1/6]", output.getvalue())
             self.assertIn("Configure native SDK", output.getvalue())
-            self.assertIn("foamnordic_closure_worker", output.getvalue())
+            self.assertIn("foamnordic_model_worker", output.getvalue())
             self.assertIn("Install native runtime tools", output.getvalue())
             self.assertIn("foamnordic-longship", output.getvalue())
             self.assertIn("Build OpenFOAM integration", output.getvalue())
@@ -243,7 +243,7 @@ class CliTests(unittest.TestCase):
             self.assertFalse(build_dir.exists())
             self.assertFalse(prefix.exists())
 
-    def test_packaged_buildkit_defines_native_closure_worker(self) -> None:
+    def test_packaged_buildkit_defines_native_model_worker(self) -> None:
         repository = Path(__file__).resolve().parents[2]
         buildkit = (repository / "python/buildkit/CMakeLists.txt").read_text(
             encoding="utf-8"
@@ -254,7 +254,7 @@ class CliTests(unittest.TestCase):
 
         self.assertIn("add_subdirectory(src/foamnordic/backend/inference)", buildkit)
         self.assertIn("add_subdirectory(tools/resident)", buildkit)
-        self.assertIn("foamnordic_closure", buildkit)
+        self.assertIn("foamnordic_inference", buildkit)
         self.assertIn("src/foamnordic/backend/inference", packaging)
         self.assertIn("src/foamnordic/backend/connectors", packaging)
         self.assertIn("tools/resident", packaging)

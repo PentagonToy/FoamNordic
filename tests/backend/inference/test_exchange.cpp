@@ -6,11 +6,11 @@
 #include <utility>
 #include <vector>
 
-#include "foamnordic/backend/inference/closure.hpp"
+#include "foamnordic/backend/inference/exchange.hpp"
 
 namespace {
 
-using foamnordic::closure::TensorMap;
+using foamnordic::inference::TensorMap;
 using foamnordic::fjord::Element;
 using foamnordic::fjord::Tensor;
 
@@ -43,7 +43,7 @@ std::vector<double> values_of(const Tensor& tensor) {
     return values;
 }
 
-class CombustionBypass final : public foamnordic::closure::BypassPolicy {
+class CombustionBypass final : public foamnordic::inference::CellEvaluationPolicy {
 public:
     std::vector<std::uint64_t> prepare(
         const TensorMap& inputs,
@@ -76,7 +76,7 @@ public:
 };
 
 void test_combustion_bypass() {
-    foamnordic::closure::ExchangeMachine exchange({
+    foamnordic::inference::CellInferenceExchange exchange({
         "progress-variable-combustion",
         {
             {"c_tilde", Element::float64, 1},
@@ -103,7 +103,7 @@ void test_combustion_bypass() {
 }
 
 void test_incomplete_exchange_is_rejected() {
-    foamnordic::closure::ExchangeMachine exchange({
+    foamnordic::inference::CellInferenceExchange exchange({
         "smagorinsky",
         {{"grad_U", Element::float64, 9}, {"delta", Element::float64, 1}},
         {{"nut", Element::float64, 1}},
@@ -120,14 +120,14 @@ void test_incomplete_exchange_is_rejected() {
 }
 
 void test_in_place_field_contract() {
-    foamnordic::closure::ClosureContract in_place{
+    foamnordic::inference::ProgramContract in_place{
         "velocity-correction",
         {{"U", Element::float64, 3}},
         {{"U", Element::float64, 3}},
     };
     in_place.validate();
 
-    foamnordic::closure::ClosureContract duplicate_input{
+    foamnordic::inference::ProgramContract duplicate_input{
         "invalid-velocity-correction",
         {{"U", Element::float64, 3}, {"U", Element::float64, 3}},
         {{"U", Element::float64, 3}},

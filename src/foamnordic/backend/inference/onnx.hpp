@@ -18,7 +18,7 @@
 
 #include "foamnordic/backend/inference/model.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 struct OnnxOptions {
     std::int32_t intra_op_threads{1};
@@ -53,4 +53,4 @@ private:
     std::unique_ptr<Implementation> implementation_;
 };
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

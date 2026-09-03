@@ -24,7 +24,7 @@ struct LongshipRequest {
     std::uint32_t solver_tasks{1};
     std::uint32_t solver_cpus_per_task{1};
     std::uint32_t host_cpus_per_node{1};
-    bool use_closure_host{true};
+    bool use_model_host{true};
     PlacementRequest placement{};
 
     void validate() const;

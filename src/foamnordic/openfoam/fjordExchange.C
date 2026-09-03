@@ -10,8 +10,8 @@
 // clang-format on
 
 #include "fjordExchange.H"
-#include "closureObservation.H"
-#include "closureSession.H"
+#include "fieldProgramObservation.H"
+#include "fieldProgramSession.H"
 #include "fieldBridge.H"
 
 #include "addToRunTimeSelectionTable.H"
@@ -34,7 +34,7 @@ fjordExchange::fjordExchange(
     fvMeshFunctionObject(name, runTime, dict) {
     sequence_ = std::make_unique<foamnordic::adapter::ExchangeSequence>();
     read(dict);
-    observation_ = foamNordic::ClosureObservation::create(dict);
+    observation_ = foamNordic::FieldProgramObservation::create(dict);
     connectPeer();
 }
 

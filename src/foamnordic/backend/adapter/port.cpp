@@ -17,8 +17,8 @@
 
 namespace foamnordic::adapter {
 
-ClosureInvocation::ClosureInvocation(
-    BlockingClosureExchange& exchange,
+FieldInvocation::FieldInvocation(
+    BlockingFieldExchange& exchange,
     std::uint64_t time_index,
     double physical_time)
     : exchange_(exchange),
@@ -26,33 +26,33 @@ ClosureInvocation::ClosureInvocation(
       physical_time_(physical_time) {
     if (!std::isfinite(physical_time_)) {
         throw std::invalid_argument(
-            "FoamNordic closure invocation physical time must be finite.");
+            "FoamNordic model invocation physical time must be finite.");
     }
 }
 
-ClosureInvocation& ClosureInvocation::provide(fjord::TensorView field) {
+FieldInvocation& FieldInvocation::provide(fjord::TensorView field) {
     field.validate();
     if (committed_ || !inputs_.emplace(field.name, std::move(field)).second) {
         throw std::logic_error(
-            "FoamNordic closure input was duplicated or provided after commit.");
+            "FoamNordic model input was duplicated or provided after commit.");
     }
     return *this;
 }
 
-ClosureInvocation& ClosureInvocation::receive(
+FieldInvocation& FieldInvocation::receive(
     fjord::MutableTensorView field) {
     field.validate();
     if (committed_ || !outputs_.emplace(field.name, std::move(field)).second) {
         throw std::logic_error(
-            "FoamNordic closure output was duplicated or received after commit.");
+            "FoamNordic model output was duplicated or received after commit.");
     }
     return *this;
 }
 
-std::uint64_t ClosureInvocation::commit() {
+std::uint64_t FieldInvocation::commit() {
     if (committed_) {
         throw std::logic_error(
-            "FoamNordic closure invocation was committed more than once.");
+            "FoamNordic model invocation was committed more than once.");
     }
     const auto exchange_index =
         exchange_.execute(time_index_, physical_time_, inputs_, outputs_);
@@ -60,15 +60,15 @@ std::uint64_t ClosureInvocation::commit() {
     return exchange_index;
 }
 
-ClosurePort::ClosurePort(
+FieldProgramPort::FieldProgramPort(
     fjord::Harbor& harbor,
     ExchangeContract contract)
     : exchange_(harbor, std::move(contract)) {}
 
-ClosureInvocation ClosurePort::begin(
+FieldInvocation FieldProgramPort::begin(
     std::uint64_t time_index,
     double physical_time) {
-    return ClosureInvocation(exchange_, time_index, physical_time);
+    return FieldInvocation(exchange_, time_index, physical_time);
 }
 
 }  // namespace foamnordic::adapter

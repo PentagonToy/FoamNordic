@@ -16,7 +16,7 @@ set -Eeuo pipefail
 @ENVIRONMENT@
 
 echo "[FoamNordic] Longship job: $SLURM_JOB_ID"
-echo "[FoamNordic] Starting one multi-rank ClosureHost per solver node."
+echo "[FoamNordic] Starting one multi-rank ModelHost per solver node."
 
 exec @LONGSHIP_EXECUTABLE@ \
     @HOST_READY_ARGUMENTS@ \

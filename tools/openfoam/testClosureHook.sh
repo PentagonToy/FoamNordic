@@ -226,7 +226,7 @@ run_uds_onnx_probe()
     address="unix://$work_dir/closure-uds.sock"
     configure_probe U U U 1.0 0.25 false
 
-    "$build_dir/tools/resident/foamnordic_closure_worker" \
+    "$build_dir/tools/resident/foamnordic_model_worker" \
         "$address" \
         "$model_dir/identity-U.fnom" \
         --no-shm \
@@ -333,7 +333,7 @@ run_longship_mpi_onnx_probe()
 {
     ((mpi_ranks > 1)) || return 0
 
-    echo "[FoamNordic] Verifying one ONNX ClosureHost with $mpi_ranks OpenFOAM ranks"
+    echo "[FoamNordic] Verifying one ONNX ModelHost with $mpi_ranks OpenFOAM ranks"
     address="unix://$work_dir/closure-shared.sock"
     configure_probe U U U 1.0 0.25 false
 
@@ -353,7 +353,7 @@ run_longship_mpi_onnx_probe()
         --readiness-timeout-ms "$((test_timeout * 1000))" \
         --termination-grace-ms 5000 \
         --host \
-        "$build_dir/tools/resident/foamnordic_closure_worker" \
+        "$build_dir/tools/resident/foamnordic_model_worker" \
         "$address" \
         "$model_dir/identity-U.fnom" \
         --connections "$mpi_ranks" \
@@ -366,13 +366,13 @@ run_longship_mpi_onnx_probe()
         >"$work_dir/longship.log" 2>&1
 
     [[ ! -e "$work_dir/closure-shared.sock" ]] \
-        || fail "Longship left its shared ClosureHost endpoint"
+        || fail "Longship left its shared ModelHost endpoint"
     [[ $(grep -Ec "Closure worker rank [0-9]+ data plane: SHM" \
             "$work_dir/longship-host.log") -eq "$mpi_ranks" ]] \
-        || fail "shared ClosureHost did not negotiate SHM with every rank"
+        || fail "shared ModelHost did not negotiate SHM with every rank"
     [[ $(grep -c "Native closure runner stopped" \
             "$work_dir/longship-host.log") -eq "$mpi_ranks" ]] \
-        || fail "shared ClosureHost did not reap every rank session"
+        || fail "shared ModelHost did not reap every rank session"
     grep -q "OpenFOAM closure hook: PASS" "$work_dir/longship-solver.log" \
         || fail "Longship OpenFOAM probe did not report success"
     grep -q "Longship completed successfully" "$work_dir/longship.log" \
@@ -381,7 +381,7 @@ run_longship_mpi_onnx_probe()
     sed -n '1,100p' "$work_dir/longship.log"
     sed -n '1,120p' "$work_dir/longship-host.log"
     sed -n '1,120p' "$work_dir/longship-solver.log"
-    echo "[FoamNordic] Shared ONNX ClosureHost Longship exchange: PASS"
+    echo "[FoamNordic] Shared ONNX ModelHost Longship exchange: PASS"
 }
 
 run_split_ucx_onnx_probe()
@@ -467,7 +467,7 @@ run_split_ucx_onnx_probe()
         --readiness-timeout-ms "$((test_timeout * 1000))" \
         --termination-grace-ms 30000 \
         --host \
-        "$build_dir/tools/resident/foamnordic_closure_worker" \
+        "$build_dir/tools/resident/foamnordic_model_worker" \
         "$address" \
         "$model_dir/identity-U.fnom" \
         --connections "$central_ranks" \
@@ -513,10 +513,10 @@ run_split_ucx_onnx_probe()
         || fail "central UCX Longship left its readiness marker"
     [[ $(grep -Ec "Closure worker rank [0-9]+ data plane: UCX" \
             "$host_log") -eq "$central_ranks" ]] \
-        || fail "central ClosureHost did not negotiate UCX with every rank"
+        || fail "central ModelHost did not negotiate UCX with every rank"
     [[ $(grep -c "Native closure runner stopped" "$host_log") \
             -eq "$central_ranks" ]] \
-        || fail "central ClosureHost did not reap every rank session"
+        || fail "central ModelHost did not reap every rank session"
     grep -q "OpenFOAM closure hook: PASS" "$client_log" \
         || fail "central UCX OpenFOAM client did not report success"
     grep -q "Slurm client completed: $client_job" "$client_proxy_log" \
@@ -528,7 +528,7 @@ run_split_ucx_onnx_probe()
     sed -n '1,120p' "$client_proxy_log"
     sed -n '1,140p' "$host_log"
     sed -n '1,180p' "$client_log"
-    echo "[FoamNordic] Central $central_ranks-rank OpenFOAM ONNX ClosureHost over UCX: PASS"
+    echo "[FoamNordic] Central $central_ranks-rank OpenFOAM ONNX ModelHost over UCX: PASS"
 }
 
 export FOAMNORDIC_SOURCE="$repository"
@@ -572,8 +572,8 @@ fi
 if [[ -n "$resume_work_dir" ]]; then
     [[ "${FOAMNORDIC_UCX_SPLIT:-false}" == true ]] \
         || fail "resume mode requires FOAMNORDIC_UCX_SPLIT=true"
-    [[ -x "$build_dir/tools/resident/foamnordic_closure_worker" ]] \
-        || fail "resume work directory lacks the ClosureHost executable"
+    [[ -x "$build_dir/tools/resident/foamnordic_model_worker" ]] \
+        || fail "resume work directory lacks the ModelHost executable"
     [[ -x "$FOAM_USER_APPBIN/foamnordicOpenFOAMClosureHookProbe" ]] \
         || fail "resume work directory lacks the OpenFOAM probe"
     [[ -f "$model_dir/identity-U.fnom" && -d "$case_dir/system" ]] \
@@ -625,7 +625,7 @@ run_rejection_probe "$work_dir/rejected.log"
 echo "[FoamNordic] Verifying native ONNX inference"
 configure_probe U U U 1.0 0.25 false
 "$build_dir/tools/openfoam/foamnordic_openfoam_onnx_fixture" "$model_dir"
-"$build_dir/tools/resident/foamnordic_closure_worker" \
+"$build_dir/tools/resident/foamnordic_model_worker" \
     "$address" \
     "$model_dir/identity-U.fnom" \
     >"$work_dir/worker.log" 2>&1 &
@@ -662,7 +662,7 @@ echo "[FoamNordic] SHA-256"
 shasum -a 256 \
     "$adapter_library" \
     "$FOAM_USER_APPBIN/foamnordicOpenFOAMClosureHookProbe" \
-    "$build_dir/tools/resident/foamnordic_closure_worker" \
+    "$build_dir/tools/resident/foamnordic_model_worker" \
     "$model_dir/identity-U.fnom"
 
 echo "[FoamNordic] Native OpenFOAM ONNX closure hook: PASS"

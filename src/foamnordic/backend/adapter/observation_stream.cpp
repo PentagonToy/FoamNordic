@@ -78,7 +78,7 @@ template <class Integer>
     write_integer<std::uint64_t>(
         frame, 24, std::bit_cast<std::uint64_t>(record.physical_time));
     write_integer<std::uint64_t>(
-        frame, 32, std::bit_cast<std::uint64_t>(record.closure_wait));
+        frame, 32, std::bit_cast<std::uint64_t>(record.model_wait));
     write_integer<std::uint64_t>(
         frame, 40, std::bit_cast<std::uint64_t>(record.evaluate));
     std::size_t offset = header_size;
@@ -113,7 +113,7 @@ template <class Integer>
     record.exchange_index = read_integer<std::uint64_t>(frame, 16);
     record.physical_time = std::bit_cast<double>(
         read_integer<std::uint64_t>(frame, 24));
-    record.closure_wait = std::bit_cast<double>(
+    record.model_wait = std::bit_cast<double>(
         read_integer<std::uint64_t>(frame, 32));
     record.evaluate = std::bit_cast<double>(
         read_integer<std::uint64_t>(frame, 40));

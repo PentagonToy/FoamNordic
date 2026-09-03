@@ -141,7 +141,7 @@ std::string longship_usage() {
         "  foamnordic-longship --ready PATH [--ready PATH ...] [OPTIONS]\n"
         "      --host COMMAND [ARG ...] --solver COMMAND [ARG ...]\n\n"
         "Options:\n"
-        "  --host-output PATH          Redirect ClosureHost stdout and stderr.\n"
+        "  --host-output PATH          Redirect ModelHost stdout and stderr.\n"
         "  --solver-output PATH        Redirect solver stdout and stderr.\n"
         "  --readiness-timeout-ms N    Wait for all readiness files (default 30000).\n"
         "  --termination-grace-ms N    Grace before SIGKILL (default 2000).\n"
@@ -156,7 +156,7 @@ int run_longship(
     if (request.show_help) {
         return 0;
     }
-    log(LogLevel::info, "Starting ClosureHost component.");
+    log(LogLevel::info, "Starting ModelHost component.");
     const auto result = sail_longship(request.launch, stop);
     if (result.success()) {
         log(LogLevel::info, "Longship completed successfully.");
@@ -165,7 +165,7 @@ int run_longship(
     if (result.cancelled) {
         log(LogLevel::warning, "Longship cancelled; components terminated together.");
     } else if (result.host_failed_first) {
-        log(LogLevel::error, "ClosureHost exited before the solver completed.");
+        log(LogLevel::error, "ModelHost exited before the solver completed.");
     } else {
         log(LogLevel::error, "Solver exited with a failure status.");
     }

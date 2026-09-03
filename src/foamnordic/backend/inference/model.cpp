@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 std::uint64_t features(const std::vector<FieldContract>& fields) {
@@ -186,4 +186,4 @@ TensorMap ArtifactModelKernel::evaluate(
 
 const ModelArtifact& ArtifactModelKernel::artifact() const noexcept { return artifact_; }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

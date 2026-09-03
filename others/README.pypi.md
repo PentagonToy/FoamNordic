@@ -5,8 +5,8 @@
 # FoamNordic
 
 FoamNordic is a native C++ and Python framework for ordinary OpenFOAM and
-machine-learning closure workloads. It keeps atomic field exchange, packing,
-scaling, and lifecycle in the native runtime while exposing a compact
+machine-learning field programs, including equation-level closures. It keeps
+atomic field exchange, packing, scaling, and lifecycle in the native runtime while exposing a compact
 declarative API for cases, placement, launch, observations, and results.
 
 FoamNordic is active research software. The current stable release is
@@ -35,7 +35,7 @@ models, and JAX/Equinox resident models. No backend-specific extra is required.
 Binary wheels carry the native Python control runtime and compact OpenFOAM
 source build kit. `foamnordic build` compiles it for the currently loaded ABI;
 each case later selects that runtime from its declared `of_cmd` and `shell`.
-The build also prepares the native ONNX ClosureHost and verified ONNX Runtime
+The build also prepares the native ONNX ModelHost and verified ONNX Runtime
 1.28.0. Offline systems can point `FOAMNORDIC_ONNX_RUNTIME_ROOT` at an unpacked
 1.28.0 distribution.
 

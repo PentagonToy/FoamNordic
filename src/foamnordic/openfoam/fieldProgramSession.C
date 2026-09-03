@@ -9,7 +9,7 @@
  */
 // clang-format on
 
-#include "closureSession.H"
+#include "fieldProgramSession.H"
 
 #include "Pstream.H"
 
@@ -78,7 +78,7 @@ std::unique_ptr<foamnordic::fjord::Harbor> connectSession(
         if (!foamnordic::fjord::any(
                 selected.capabilities & foamnordic::fjord::Capability::ucx)) {
             throw std::runtime_error(
-                "FoamNordic required UCX but ClosureHost did not negotiate it.");
+                "FoamNordic required UCX but ModelHost did not negotiate it.");
         }
 #ifdef FOAMNORDIC_HAVE_UCX
         harbor->accept_ucx();
@@ -91,7 +91,7 @@ std::unique_ptr<foamnordic::fjord::Harbor> connectSession(
     return harbor;
 }
 
-ClosureSession::ClosureSession(
+FieldProgramSession::FieldProgramSession(
     const dictionary& dict,
     foamnordic::adapter::ExchangeContract contract) {
     const auto address = dict.get<string>("address");
@@ -100,18 +100,18 @@ ClosureSession::ClosureSession(
     const auto sessionId = static_cast<std::uint64_t>(
         dict.getOrDefault<label>("sessionId", 1));
     harbor_ = connectSession(address, sharedMemory, ucx, sessionId);
-    port_ = std::make_unique<foamnordic::adapter::ClosurePort>(
+    port_ = std::make_unique<foamnordic::adapter::FieldProgramPort>(
         *harbor_, std::move(contract));
 }
 
-ClosureSession::~ClosureSession() {
+FieldProgramSession::~FieldProgramSession() {
     try {
         shutdown();
     } catch (...) {
     }
 }
 
-foamnordic::adapter::ClosureInvocation ClosureSession::begin(
+foamnordic::adapter::FieldInvocation FieldProgramSession::begin(
     const Time& time) {
     if (!port_) {
         throw std::logic_error("FoamNordic closure session is shut down.");
@@ -121,7 +121,7 @@ foamnordic::adapter::ClosureInvocation ClosureSession::begin(
         static_cast<double>(time.value()));
 }
 
-void ClosureSession::shutdown() {
+void FieldProgramSession::shutdown() {
     port_.reset();
     if (harbor_) {
         harbor_->shutdown();

@@ -21,7 +21,7 @@
 #include <string>
 #include <utility>
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 namespace {
 
 constexpr std::array<std::byte, 8> magic{
@@ -630,4 +630,4 @@ void write_bundle(
     std::filesystem::rename(temporary, path);
 }
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

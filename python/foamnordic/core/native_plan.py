@@ -68,14 +68,14 @@ def compile_runtime_plan(longship: Any) -> dict[str, object]:
     request.solver_tasks = solver_tasks
     request.solver_cpus_per_task = solver_cpus_per_task
     program_count = len(longship.closure_programs) + len(longship.transforms)
-    declared_host_cpus = longship.placement.closure_cpus_per_node
+    declared_host_cpus = longship.placement.model_cpus_per_node
     if scheduler is not None and scheduler.has_model_resources and program_count:
         request.host_cpus_per_node = scheduler.model_resources.cpus_per_task
     elif scheduler is None:
         request.host_cpus_per_node = declared_host_cpus or local_cpu_budget()
     else:
         request.host_cpus_per_node = declared_host_cpus or max(1, program_count)
-    request.use_closure_host = bool(longship.field_programs)
+    request.use_model_host = bool(longship.field_programs)
     request.placement = placement
 
     plan = _native.plan_longship(request)

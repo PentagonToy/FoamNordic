@@ -19,7 +19,7 @@
 
 #include "foamnordic/backend/inference/artifact.hpp"
 
-namespace foamnordic::closure {
+namespace foamnordic::inference {
 
 struct BundlePayloadRegion {
     std::uint64_t offset;
@@ -56,4 +56,4 @@ void extract_bundle_payload(
 [[nodiscard]] std::vector<std::byte> read_bundle_payload(
     const std::filesystem::path& path);
 
-}  // namespace foamnordic::closure
+}  // namespace foamnordic::inference

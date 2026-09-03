@@ -45,7 +45,7 @@ struct ObservationRecord {
     std::uint64_t exchange_index{0};
     double physical_time{0.0};
     std::vector<FieldObservation> fields;
-    double closure_wait{0.0};
+    double model_wait{0.0};
     double evaluate{0.0};
 
     [[nodiscard]] std::size_t byte_size() const noexcept;

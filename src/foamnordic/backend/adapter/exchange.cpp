@@ -56,7 +56,7 @@ fjord::MutableTensorView require_field(
 void ExchangeContract::validate() const {
     if (inputs.empty() || outputs.empty()) {
         throw std::invalid_argument(
-            "A closure exchange requires at least one input and one output field.");
+            "A model exchange requires at least one input and one output field.");
     }
     validate_names(inputs, "input");
     validate_names(outputs, "output");
@@ -69,19 +69,19 @@ AtomicFieldExchange::AtomicFieldExchange(
     contract_.validate();
 }
 
-BlockingClosureExchange::BlockingClosureExchange(
+BlockingFieldExchange::BlockingFieldExchange(
     fjord::Harbor& harbor,
     ExchangeContract contract)
     : exchange_(harbor, std::move(contract)) {}
 
-std::uint64_t BlockingClosureExchange::execute(
+std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
     double physical_time,
     const MutableFieldMap& fields) {
     const auto exchange_index = sequence_.next(time_index);
     if (!exchange_index) {
         throw std::logic_error(
-            "Per-call closure sequencing did not issue an exchange index.");
+            "Per-call model sequencing did not issue an exchange index.");
     }
     auto rebound = fields;
     for (auto& [name, field] : rebound) {
@@ -151,7 +151,7 @@ void AtomicFieldExchange::execute(
         auto message = harbor_.receive_message();
         if (message.kind == fjord::RuneKind::error) {
             throw std::runtime_error(
-                "The native closure worker rejected the active exchange.");
+                "The native model worker rejected the active exchange.");
         }
         if (message.kind == fjord::RuneKind::tensor) {
             if (!message.tensor || message.tensor->time_index != exchange_index
@@ -215,7 +215,7 @@ void AtomicFieldExchange::execute(
     has_previous_exchange_ = true;
 }
 
-std::uint64_t BlockingClosureExchange::execute(
+std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
     double physical_time,
     const InputFieldMap& inputs,
@@ -223,7 +223,7 @@ std::uint64_t BlockingClosureExchange::execute(
     const auto exchange_index = sequence_.next(time_index);
     if (!exchange_index) {
         throw std::logic_error(
-            "Per-call closure sequencing did not issue an exchange index.");
+            "Per-call model sequencing did not issue an exchange index.");
     }
     auto rebound_inputs = inputs;
     for (auto& [name, field] : rebound_inputs) {
