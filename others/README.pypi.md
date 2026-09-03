@@ -26,6 +26,7 @@ foamnordic build
 foamnordic --version
 foamnordic --help
 foamnordic dir
+foamnordic doctor
 ```
 
 The same installation includes ONNX packaging, compiled and Joblib/scikit-learn

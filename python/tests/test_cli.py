@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 import foamnordic as fno
-from foamnordic._cli import _source_root, main
+from foamnordic._cli import _doctor_checks, _source_root, main
 from foamnordic.build.onnxruntime import NativeOnnxRuntime
 from foamnordic.core.managed import MARKER, mark_generated
 from foamnordic.core.native_plan import available as native_available
@@ -79,7 +79,10 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as stopped, redirect_stdout(output):
             main(["--help"])
         self.assertEqual(stopped.exception.code, 0)
+        self.assertIn("[command] ...", output.getvalue())
+        self.assertNotIn("{dir,doctor,build", output.getvalue())
         self.assertIn("dir", output.getvalue())
+        self.assertIn("doctor", output.getvalue())
         self.assertIn("build", output.getvalue())
         self.assertIn("inspect", output.getvalue())
         self.assertIn("validate", output.getvalue())
@@ -150,6 +153,24 @@ class CliTests(unittest.TestCase):
         self.assertIn("Python environment", report)
         self.assertIn("Python package", report)
         self.assertIn("Native module", report)
+
+    def test_doctor_reports_fast_read_only_environment_checks(self) -> None:
+        with (
+            patch("foamnordic._cli.profile", return_value=None),
+            patch(
+                "foamnordic._cli.shutil.which",
+                side_effect=lambda value: (
+                    f"/usr/bin/{value}" if value == "c++" else None
+                ),
+            ),
+        ):
+            checks = _doctor_checks()
+        records = {name: (status, detail) for status, name, detail in checks}
+        self.assertEqual(records["FoamNordic"][0], "PASS")
+        self.assertEqual(records["Python"][0], "PASS")
+        self.assertEqual(records["C++ compiler"][0], "PASS")
+        self.assertEqual(records["OpenFOAM"][0], "WARN")
+        self.assertEqual(records["Runtime profile"][0], "WARN")
 
     def test_build_help_is_discoverable(self) -> None:
         output = StringIO()

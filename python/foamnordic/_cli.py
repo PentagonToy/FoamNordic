@@ -20,7 +20,7 @@ from .build.onnxruntime import VERSION as ONNXRUNTIME_VERSION
 from .build.onnxruntime import resolve as resolve_onnxruntime
 from .core.managed import generated_kind, mark_generated
 from .execution.mpi import write_runtime_profile
-from .execution.runtime_paths import active_runtime_candidates, profile
+from .execution.runtime_paths import active_runtime_candidates, platform_tag, profile
 
 
 _FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -178,6 +178,160 @@ def _directories(stream: TextIO) -> int:
     width = max(len(label) for label, _ in rows)
     for label, value in rows:
         print(f"{label:<{width}}  {value}", file=stream)
+    return 0
+
+
+def _doctor_checks() -> list[tuple[str, str, str]]:
+    """Run fast, read-only checks for the active FoamNordic environment."""
+
+    from . import __version__
+
+    checks: list[tuple[str, str, str]] = []
+    checks.append(
+        (
+            "PASS",
+            "FoamNordic",
+            f"{__version__} at {Path(__file__).resolve().parent}",
+        )
+    )
+
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    python_supported = (3, 11) <= sys.version_info[:2] < (3, 13)
+    checks.append(
+        (
+            "PASS" if python_supported else "FAIL",
+            "Python",
+            f"{python_version} at {Path(sys.executable).resolve()}",
+        )
+    )
+
+    selected_platform = platform_tag()
+    supported_platforms = {"darwin-aarch64", "linux-aarch64", "linux-x86_64"}
+    checks.append(
+        (
+            "PASS" if selected_platform in supported_platforms else "WARN",
+            "Platform",
+            selected_platform,
+        )
+    )
+
+    try:
+        from . import _native
+
+        native_file = Path(_native.__file__).resolve() if _native.__file__ else None
+    except ImportError as error:
+        checks.append(("FAIL", "Native extension", str(error)))
+    else:
+        checks.append(("PASS", "Native extension", str(native_file or "loaded")))
+
+    selected = profile(required=False)
+    wmake = shutil.which("wmake")
+    if selected is None:
+        checks.append(("WARN", "OpenFOAM", "not loaded; wmake and ABI are unavailable"))
+    else:
+        checks.append(("PASS", "OpenFOAM", selected.openfoam))
+
+    compiler_name = os.environ.get("CXX", "c++")
+    compiler = shutil.which(compiler_name)
+    checks.append(
+        (
+            "PASS"
+            if compiler is not None
+            else ("FAIL" if selected is not None else "WARN"),
+            "C++ compiler",
+            compiler or f"{compiler_name} not found",
+        )
+    )
+    if wmake is None and selected is not None:
+        checks.append(("FAIL", "wmake", "not found in PATH"))
+    else:
+        checks.append(("PASS" if wmake else "WARN", "wmake", wmake or "not loaded"))
+
+    mpi = shutil.which("mpirun") or shutil.which("mpiexec")
+    checks.append(("PASS" if mpi else "WARN", "MPI launcher", mpi or "not detected"))
+
+    if selected is None:
+        checks.extend(
+            (
+                ("WARN", "Runtime profile", "load OpenFOAM to select an ABI"),
+                ("WARN", "OpenFOAM adapter", "runtime ABI not selected"),
+                ("WARN", "ClosureHost", "runtime ABI not selected"),
+                ("WARN", "Reference solver", "runtime ABI not selected"),
+            )
+        )
+        return checks
+
+    runtime = selected.runtime_dir
+    runtime_profile = runtime / "runtime.yaml"
+    checks.append(
+        (
+            "PASS" if runtime_profile.is_file() else "FAIL",
+            "Runtime profile",
+            str(runtime_profile),
+        )
+    )
+    adapter_candidates = tuple((runtime / "lib").glob("libfoamnordicOpenFOAM*"))
+    checks.append(
+        (
+            "PASS" if adapter_candidates else "FAIL",
+            "OpenFOAM adapter",
+            str(adapter_candidates[0])
+            if adapter_candidates
+            else f"missing below {runtime / 'lib'}",
+        )
+    )
+    closure_host = runtime / "bin/foamnordic_closure_worker"
+    checks.append(
+        (
+            "PASS"
+            if closure_host.is_file() and os.access(closure_host, os.X_OK)
+            else "WARN",
+            "ClosureHost",
+            str(closure_host)
+            if closure_host.is_file()
+            else "not installed (optional without ONNX)",
+        )
+    )
+    solver = runtime / "bin/foamnordicProgressVariableFoam"
+    checks.append(
+        (
+            "PASS"
+            if solver.is_file() and os.access(solver, os.X_OK)
+            else "FAIL",
+            "Reference solver",
+            str(solver) if solver.is_file() else f"missing below {runtime / 'bin'}",
+        )
+    )
+    return checks
+
+
+def _doctor(stream: TextIO) -> int:
+    import onsaemiro as osm
+
+    checks = _doctor_checks()
+    table = osm.TableMaker(
+        title="FoamNordic Doctor",
+        columns=["Status", "Check", "Detail"],
+        mode="static",
+    )
+    for check in checks:
+        table.add_row(*check)
+    table.display()
+
+    failures = sum(status == "FAIL" for status, _, _ in checks)
+    warnings = sum(status == "WARN" for status, _, _ in checks)
+    if failures:
+        print(
+            f"Result: unhealthy ({failures} failure(s), {warnings} warning(s))",
+            file=stream,
+        )
+        return 1
+    if warnings:
+        print(f"Result: healthy with {warnings} warning(s)", file=stream)
+    else:
+        print("Result: healthy", file=stream)
     return 0
 
 
@@ -678,11 +832,23 @@ def _parser() -> argparse.ArgumentParser:
         description="Build and run native OpenFOAM closure workloads.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    subcommands = parser.add_subparsers(dest="command", required=True)
+    subcommands = parser.add_subparsers(
+        dest="command",
+        metavar="[command]",
+        required=True,
+    )
     subcommands.add_parser(
         "dir",
         help="show the active package, environment, and native directories",
         description="Show the directories used by the active FoamNordic installation.",
+    )
+    subcommands.add_parser(
+        "doctor",
+        help="diagnose the active Python, native, and OpenFOAM environment",
+        description=(
+            "Run fast, read-only checks for the active FoamNordic installation, "
+            "native extension, OpenFOAM toolchain, MPI, and ABI-matched runtime."
+        ),
     )
     build = subcommands.add_parser(
         "build",
@@ -768,6 +934,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "dir":
         return _directories(sys.stdout)
+    if args.command == "doctor":
+        return _doctor(sys.stdout)
     if args.command == "build":
         if args.jobs <= 0:
             parser.error("--jobs must be positive")
