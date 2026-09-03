@@ -157,6 +157,7 @@ class CliTests(unittest.TestCase):
     def test_doctor_reports_fast_read_only_environment_checks(self) -> None:
         with (
             patch("foamnordic._cli.profile", return_value=None),
+            patch.dict(os.environ, {"CXX": "c++"}, clear=False),
             patch(
                 "foamnordic._cli.shutil.which",
                 side_effect=lambda value: (
@@ -235,7 +236,8 @@ class CliTests(unittest.TestCase):
             self.assertIn("[Step 1/6]", output.getvalue())
             self.assertIn("Configure native SDK", output.getvalue())
             self.assertIn("foamnordic_closure_worker", output.getvalue())
-            self.assertIn("Install ONNX ClosureHost", output.getvalue())
+            self.assertIn("Install native runtime tools", output.getvalue())
+            self.assertIn("foamnordic-longship", output.getvalue())
             self.assertIn("Build OpenFOAM integration", output.getvalue())
             self.assertIn("Build progress-variable solver", output.getvalue())
             self.assertFalse(build_dir.exists())

@@ -224,7 +224,19 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
     except ImportError as error:
         checks.append(("FAIL", "Native extension", str(error)))
     else:
-        checks.append(("PASS", "Native extension", str(native_file or "loaded")))
+        required_native = ("plan_longship", "read_model_manifest", "write_model_bundle")
+        missing_native = [
+            name for name in required_native if not hasattr(_native, name)
+        ]
+        checks.append(
+            (
+                "FAIL" if missing_native else "PASS",
+                "Native extension",
+                f"missing API: {', '.join(missing_native)}"
+                if missing_native
+                else str(native_file or "loaded"),
+            )
+        )
 
     selected = profile(required=False)
     wmake = shutil.which("wmake")
@@ -256,6 +268,7 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
         checks.extend(
             (
                 ("WARN", "Runtime profile", "load OpenFOAM to select an ABI"),
+                ("WARN", "Longship", "runtime ABI not selected"),
                 ("WARN", "OpenFOAM adapter", "runtime ABI not selected"),
                 ("WARN", "ClosureHost", "runtime ABI not selected"),
                 ("WARN", "Reference solver", "runtime ABI not selected"),
@@ -270,6 +283,18 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
             "PASS" if runtime_profile.is_file() else "FAIL",
             "Runtime profile",
             str(runtime_profile),
+        )
+    )
+    longship = runtime / "bin/foamnordic-longship"
+    checks.append(
+        (
+            "PASS"
+            if longship.is_file() and os.access(longship, os.X_OK)
+            else "FAIL",
+            "Longship",
+            str(longship)
+            if longship.is_file()
+            else f"missing below {runtime / 'bin'}",
         )
     )
     adapter_candidates = tuple((runtime / "lib").glob("libfoamnordicOpenFOAM*"))
@@ -485,7 +510,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         f"-DFOAMNORDIC_ONNX_RUNTIME={'ON' if onnxruntime else 'OFF'}",
         f"-DFOAMNORDIC_RESIDENT_TOOLS={'ON' if onnxruntime else 'OFF'}",
     ]
-    runtime_targets = ["foamnordic_adapter"]
+    runtime_targets = ["foamnordic_adapter", "foamnordic-longship"]
     if onnxruntime is not None:
         configure.extend(
             (
@@ -523,13 +548,12 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             ],
         ),
     ]
-    if onnxruntime is not None:
-        commands.append(
-            (
-                "Install ONNX ClosureHost",
-                [cmake, "--install", str(build_dir), "--component", "Runtime"],
-            )
+    commands.append(
+        (
+            "Install native runtime tools",
+            [cmake, "--install", str(build_dir), "--component", "Runtime"],
         )
+    )
     commands.extend(
         [
             ("Build OpenFOAM integration", [wmake, "libso"]),

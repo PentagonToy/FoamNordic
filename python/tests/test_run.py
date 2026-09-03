@@ -12,6 +12,7 @@ from foamnordic.execution.observe import ObservationStream
 from foamnordic.execution.run import (
     _OpenFOAMProgress,
     RunStatus,
+    _container_private_path,
     _launch_local,
     _launch_process,
     _longship_executable,
@@ -115,6 +116,40 @@ def packaged_longship_available() -> bool:
 
 
 class SlurmMetadataTests(unittest.TestCase):
+    def test_tykky_build_root_is_container_private(self) -> None:
+        self.assertTrue(
+            _container_private_path(
+                Path(
+                    "/ROIHU_TYKKY_example/miniforge/envs/env1/"
+                    "bin/foamnordic-longship"
+                )
+            )
+        )
+
+    def test_longship_prefers_abi_runtime_over_packaged_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "runtime"
+            executable = runtime / "bin/foamnordic-longship"
+            executable.parent.mkdir(parents=True)
+            executable.touch(mode=0o700)
+            package = root / "package/foamnordic/_native.so"
+            package.parent.mkdir(parents=True)
+            package.touch()
+            with (
+                patch.dict(os.environ, {}, clear=False),
+                patch(
+                    "foamnordic.execution.run.active_runtime_candidates",
+                    return_value=(runtime,),
+                ),
+                patch(
+                    "foamnordic.execution.run.find_spec",
+                    return_value=Mock(origin=str(package)),
+                ),
+            ):
+                os.environ.pop("FOAMNORDIC_LONGSHIP", None)
+                self.assertEqual(_longship_executable(), executable.resolve())
+
     def test_longship_resolves_beside_editable_native_module(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             package = Path(directory) / "foamnordic"

@@ -15,6 +15,7 @@ add_subdirectory(src/foamnordic/runtime)
 add_subdirectory(src/foamnordic/backend/communication)
 add_subdirectory(src/foamnordic/backend/adapter)
 add_subdirectory(src/foamnordic/backend/inference)
+add_subdirectory(tools/longship)
 
 if(FOAMNORDIC_RESIDENT_TOOLS)
     if(NOT FOAMNORDIC_ONNX_RUNTIME)

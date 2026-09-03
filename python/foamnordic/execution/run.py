@@ -21,6 +21,7 @@ from time import monotonic, sleep
 from typing import Callable, Mapping, Sequence, TextIO
 
 from ..core.managed import generated_kind, relocate_generated
+from .runtime_paths import active_runtime_candidates
 
 
 _ACTIVE_RUNS: set[Run] = set()
@@ -915,6 +916,11 @@ def _longship_executable() -> Path:
     if override:
         candidates.append(Path(override).expanduser())
 
+    candidates.extend(
+        runtime / "bin/foamnordic-longship"
+        for runtime in active_runtime_candidates()
+    )
+
     candidates.append(
         Path(__file__).resolve().parents[1] / "bin/foamnordic-longship"
     )
@@ -926,16 +932,32 @@ def _longship_executable() -> Path:
             / "bin/foamnordic-longship"
         )
 
+    rejected: list[Path] = []
     for executable in dict.fromkeys(candidates):
+        if _container_private_path(executable):
+            rejected.append(executable)
+            continue
         if executable.is_file() and os.access(executable, os.X_OK):
-            return executable
+            return executable.resolve()
 
     checked = ", ".join(str(path) for path in candidates)
+    rejected_note = (
+        " Container-private paths were rejected: "
+        + ", ".join(str(path) for path in rejected)
+        if rejected
+        else ""
+    )
     raise RuntimeError(
         "The Longship executable is unavailable. Install a binary wheel or "
         "an editable/Git build containing the native runtime. "
-        f"Checked: {checked}"
+        f"Checked: {checked}.{rejected_note}"
     )
+
+
+def _container_private_path(path: Path) -> bool:
+    """Reject known ephemeral container build roots from external launch plans."""
+
+    return any(part.startswith("ROIHU_TYKKY_") for part in path.parts)
 
 
 def _launch_local(
