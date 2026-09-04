@@ -6,7 +6,7 @@ usage() {
 Usage: others/wheel-maker [options]
 
 Build FoamNordic wheels with GitHub Actions and prepare a checked wheelhouse.
-The script stops immediately before publishing to TestPyPI.
+The script prepares artifacts only; publishing to PyPI is a separate command.
 
 Options:
   --ref REF          Remote branch to build (default: main)
@@ -88,6 +88,8 @@ fi
 
 version=$(sed -nE 's/^version = "([^"]+)"/\1/p' python/pyproject.toml | head -1)
 [[ -n "$version" ]] || fail "could not read the FoamNordic version"
+python3 others/release_notes.py >/dev/null \
+    || fail "release versions or changelog are inconsistent"
 
 gh auth status >/dev/null 2>&1 \
     || fail "GitHub CLI is not authenticated; run: gh auth login"
@@ -129,6 +131,7 @@ elif [[ "$output" != /* ]]; then
 fi
 [[ ! -e "$output" ]] || fail "output already exists: $output"
 mkdir -p "$output"
+python3 others/release_notes.py > "$output/release-notes.md"
 
 download=$(mktemp -d "${TMPDIR:-/tmp}/foamnordic-wheels.XXXXXX")
 cleanup() {
@@ -181,7 +184,7 @@ note "Checking wheel metadata"
     shasum -a 256 ./*.whl > SHA256SUMS
 )
 
-upload_helper="$output/upload-testpypi"
+upload_helper="$output/upload-pypi"
 cat > "$upload_helper" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -201,7 +204,7 @@ if ! python3 -c 'import twine' >/dev/null 2>&1; then
     python_command="$temporary/environment/bin/python"
 fi
 "$python_command" -m twine check "$wheelhouse"/*.whl
-"$python_command" -m twine upload --repository testpypi "$wheelhouse"/*.whl
+"$python_command" -m twine upload --repository-url https://upload.pypi.org/legacy/ "$wheelhouse"/*.whl
 EOF
 chmod 0755 "$upload_helper"
 
@@ -214,5 +217,5 @@ printf '\n%s\n' "[FoamNordic] Wheelhouse ready: $output"
 printf '%s\n' "[FoamNordic] Version: $version"
 printf '%s\n' "[FoamNordic] Commit: $local_sha"
 printf '%s\n' "[FoamNordic] Run: $run_url"
-printf '%s\n\n' "[FoamNordic] TestPyPI upload command (prompts for the token):"
+printf '%s\n\n' "[FoamNordic] PyPI upload command (run only after clean-install validation; prompts for the token):"
 printf '%q\n' "$upload_helper"

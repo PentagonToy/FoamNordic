@@ -77,6 +77,10 @@ install(
     PATTERN "Make" EXCLUDE
     PATTERN "lnInclude" EXCLUDE)
 install(
+    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/longship
+    DESTINATION foamnordic/buildkit/tools
+    COMPONENT Python)
+install(
     DIRECTORY ${PROJECT_SOURCE_DIR}/tools/resident
     DESTINATION foamnordic/buildkit/tools
     COMPONENT Python)

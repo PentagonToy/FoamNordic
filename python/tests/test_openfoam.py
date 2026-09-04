@@ -159,7 +159,7 @@ class OpenFOAMReaderTests(unittest.TestCase):
         self.assertIn("openfoam -c", command[2])
         self.assertIn("-np 6 pimpleFoam", command[2])
 
-    def test_explicit_mpi_launcher_isolated_from_openfoam_environment(self) -> None:
+    def test_macos_explicit_mpi_launcher_isolated_from_openfoam_environment(self) -> None:
         from foamnordic.execution.launch import _solver_command
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -176,7 +176,7 @@ class OpenFOAMReaderTests(unittest.TestCase):
             )
             with mock.patch.dict(
                 os.environ, {"FOAMNORDIC_MPIRUN": str(launcher)}
-            ):
+            ), mock.patch("foamnordic.execution.mpi.platform.system", return_value="Darwin"):
                 command = _solver_command(
                     fno.Longship(case=case),
                     Path("prepared-case"),
@@ -188,6 +188,37 @@ class OpenFOAMReaderTests(unittest.TestCase):
         self.assertIn('-x DYLD_LIBRARY_PATH=', command[2])
         self.assertIn("-np 6 pimpleFoam", command[2])
         self.assertIn("-parallel", command[2])
+
+    def test_linux_explicit_mpi_launcher_preserves_openfoam_environment(self) -> None:
+        from foamnordic.execution.launch import _solver_command
+
+        with tempfile.TemporaryDirectory() as temporary:
+            launcher = Path(temporary) / "mpirun"
+            launcher.touch(mode=0o755)
+            # Exercise both shell setup and wrapper paths independently of host OS.
+            for of_cmd in ("module load openfoam/2512", "openfoam"):
+                with self.subTest(of_cmd=of_cmd):
+                    case = fno.OpenFOAM.Case(
+                        name="cavity",
+                        case_dir="case",
+                        run_dir="runs",
+                        of_cmd=of_cmd,
+                        shell="bash",
+                        application="pimpleFoam",
+                        ranks=6,
+                    )
+                    with mock.patch.dict(
+                        os.environ, {"FOAMNORDIC_MPIRUN": str(launcher)}
+                    ), mock.patch("foamnordic.execution.mpi.platform.system", return_value="Linux"):
+                        command = _solver_command(
+                            fno.Longship(case=case), Path("prepared-case"), local_mpi=True,
+                        )
+
+                    self.assertIn(str(launcher), command[2])
+                    self.assertNotIn("unset DYLD_LIBRARY_PATH", command[2])
+                    self.assertNotIn("-x DYLD_LIBRARY_PATH=", command[2])
+                    self.assertIn("-np 6 pimpleFoam", command[2])
+                    self.assertIn("-parallel", command[2])
 
 
 if __name__ == "__main__":

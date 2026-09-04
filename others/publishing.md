@@ -1,60 +1,77 @@
 # Publishing FoamNordic wheels
 
-FoamNordic publishes native wheels rather than an sdist. The current source
-layout keeps the C++ project above `python/`, so an isolated sdist would not
-contain a valid CMake source root. The source corresponding to a release stays
-available through its signed Git tag.
+Version 1.0.5 establishes the documented distribution baseline. FoamNordic
+publishes native wheels, not an sdist: the current source layout keeps the C++
+project above `python/`. Source remains available through the release Git tag.
 
-The `Build release wheels` GitHub workflow builds and tests this matrix:
+## Prepare
 
-| Python | Linux x86_64 | Linux aarch64 | macOS arm64 |
-| --- | --- | --- | --- |
-| CPython 3.11 | wheel | wheel | wheel |
-| CPython 3.12 | wheel | wheel | wheel |
+Commit and push the release source, then run `./others/wheel-maker` from a
+clean checkout. It builds and tests six wheels: CPython 3.11 and 3.12 on Linux
+x86_64, Linux aarch64, and macOS arm64. It checks metadata, records SHA256 sums,
+and extracts the release body from `CHANGELOG.md`. It does not publish anything.
 
-It never uploads to a package index automatically. Download all workflow
-artifacts into one empty `wheelhouse/` directory, then verify them:
+Wheel CI tests the installed Python/native package and compiles the installed
+standalone build kit, including Longship. This is not a substitute for running
+OpenFOAM on the release target environments.
 
-```console
-python -m pip install --upgrade twine
-python -m twine check wheelhouse/*.whl
-```
+## Clean-install gate
 
-TestPyPI and PyPI use separate accounts and API tokens. At each password
-prompt, use a token and the username `__token__`; do not store a token in the
-repository.
-
-```console
-python -m twine upload --repository testpypi wheelhouse/*.whl
-```
-
-Verify the release in a fresh environment. The extra index is
-needed because runtime dependencies normally come from PyPI, not TestPyPI:
+Use a fresh virtual environment outside the source checkout. Select the exact
+wheel for that interpreter and platform from the newly prepared wheelhouse:
 
 ```console
 python3 -m venv test-install
 source test-install/bin/activate
 python -m pip install --upgrade pip
-python -m pip install \
-    --index-url https://test.pypi.org/simple/ \
-    --extra-index-url https://pypi.org/simple/ \
-    foamnordic==1.0.4
+python -m pip install /absolute/path/to/wheelhouse/foamnordic-1.0.5-<python>-<abi>-<platform>.whl
+python -m pip check
 foamnordic --version
 foamnordic dir
-module load openfoam/2512  # use the target site's command
+module load openfoam/2512  # use the target site's command; macOS: openfoam
 foamnordic build
+foamnordic doctor
 ```
 
-The release-wheel gate verifies both the packaged Python/native control runtime
-and that its bundled build kit can produce an OpenFOAM ABI integration without
-a source checkout.
+Replace the wheel placeholders with its actual filename. Confirm version
+`1.0.5` and that Python/native module paths belong to the fresh environment.
+Build from the bundled kit without `--source`. Run a small OpenFOAM case to
+successful completion and record the platform, Python/OpenFOAM versions and
+results. Do not overwrite an existing user's runtime to test: use an isolated
+build/runtime prefix and verify that runtime, not an old default installation.
+Remove only test-owned artifacts after validation.
 
-After that clean installation passes, publish the same six immutable wheel
-files to PyPI:
+If source or package metadata changes, rebuild and validate the resulting
+wheels again. Never rename a wheel to change its version.
+
+## Publish
+
+After the release gates pass, tag the exact validated commit as `v1.0.5` and
+publish the same checked wheel files:
 
 ```console
-python -m twine upload wheelhouse/*.whl
+./wheelhouse-1.0.5-<run-id>/upload-pypi
 ```
 
-Use the exact `1.0.4` pin while validating the stable release, then publish
-the same six immutable wheel files to PyPI after the TestPyPI gate passes.
+This helper uploads to **production PyPI** and prompts for the API token through
+Twine. Do not store credentials in the repository. PyPI files are immutable;
+check that the intended version is available before publication.
+
+Tag pushes also trigger wheel CI. Do not replace already validated artifacts
+with newly rebuilt ones merely because their filenames match.
+
+## GitHub release notes
+
+`CHANGELOG.md` is the single source of release bodies. Add one section per
+release and synchronize `python/pyproject.toml`, `python/foamnordic/__init__.py`,
+`CMakeLists.txt`, `python/buildkit/CMakeLists.txt`, and CLI version assertions.
+
+```console
+python3 others/release_notes.py --tag v1.0.5
+python3 -m unittest discover -s others/tests -v
+```
+
+Use the generated wheelhouse `release-notes.md` verbatim for the GitHub release
+associated with the validated tag. Publish the GitHub release after confirming
+the PyPI upload. Neither wheel preparation nor changelog extraction creates a
+tag or a release automatically.

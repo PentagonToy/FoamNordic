@@ -94,7 +94,7 @@ class CliTests(unittest.TestCase):
                 os.chdir(previous)
 
     def test_public_version_and_directory_are_discoverable(self) -> None:
-        self.assertEqual(fno.__version__, "1.0.4")
+        self.assertEqual(fno.__version__, "1.0.5")
         self.assertIn("Longship", dir(fno))
         self.assertIn("export", dir(fno))
 
@@ -103,7 +103,7 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as stopped, redirect_stdout(output):
             main(["--version"])
         self.assertEqual(stopped.exception.code, 0)
-        self.assertEqual(output.getvalue().strip(), "foamnordic 1.0.4")
+        self.assertEqual(output.getvalue().strip(), "foamnordic 1.0.5")
 
     def test_top_level_help_lists_runtime_and_fnom_commands(self) -> None:
         output = StringIO()
