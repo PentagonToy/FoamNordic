@@ -1,6 +1,6 @@
 """Declarative control plane for native FoamNordic workloads."""
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 from . import combustion, export, math, models, openfoam, postprocess, random, runtime
 from .export import Tensor

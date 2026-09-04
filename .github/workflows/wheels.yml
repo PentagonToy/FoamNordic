@@ -10,7 +10,31 @@ permissions:
   contents: read
 
 jobs:
+  release-notes:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate release metadata and extract changelog
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python3 -m unittest discover -s others/tests -v
+          if [ "$REF_TYPE" = tag ]; then
+            python3 others/release_notes.py --tag "$REF_NAME" > release-notes.md
+          else
+            python3 others/release_notes.py > release-notes.md
+          fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
   wheels:
+    needs: release-notes
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
     strategy:

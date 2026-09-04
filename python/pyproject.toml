@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "foamnordic"
-version = "1.0.4"
+version = "1.0.5"
 description = "Declarative orchestration for native OpenFOAM closure workloads"
 readme = { file = "../others/README.pypi.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.13"
@@ -43,6 +43,7 @@ Homepage = "https://github.com/PentagonToy/FoamNordic"
 Documentation = "https://github.com/PentagonToy/FoamNordic#readme"
 Issues = "https://github.com/PentagonToy/FoamNordic/issues"
 Source = "https://github.com/PentagonToy/FoamNordic"
+Changelog = "https://github.com/PentagonToy/FoamNordic/blob/main/CHANGELOG.md"
 
 [project.scripts]
 foamnordic = "foamnordic._cli:main"
@@ -66,7 +67,7 @@ cmake.define.FOAMNORDIC_TESTS = "OFF"
 [tool.cibuildwheel]
 build = "cp311-* cp312-*"
 skip = "*-musllinux_*"
-test-command = "python -c 'import foamnordic._native as native; print(\"FoamNordic native:\", native.__file__)' && python -m unittest discover -s {project}/python/tests -v"
+test-command = "python -c 'import foamnordic._native as native; print(\"FoamNordic native:\", native.__file__)' && python -m unittest discover -s {project}/python/tests -v && python {project}/others/check_wheel_buildkit.py"
 
 [tool.cibuildwheel.macos]
 environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }

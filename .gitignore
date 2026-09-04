@@ -1,6 +1,30 @@
 .DS_Store
+# Generated distribution artifacts (keep python/foamnordic/build/ tracked).
+/dist/
+/python/dist/
+/wheelhouse/
 /build/
 wheelhouse-*/
+*.whl
+*.egg-info/
+/release-notes.md
+/SHA256SUMS
+# Local installation checks and Python caches.
+.venv/
+venv/
+/test-install/
+/test-wheelhouse/
+.ipynb_checkpoints/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+# Local credentials; ignore rules do not replace secret scanning.
+.pypirc
+.env
+.env.*
+!.env.example
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt

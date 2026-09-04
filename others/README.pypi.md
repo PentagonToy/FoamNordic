@@ -9,8 +9,9 @@ machine-learning field programs, including equation-level closures. It keeps
 atomic field exchange, packing, scaling, and lifecycle in the native runtime while exposing a compact
 declarative API for cases, placement, launch, observations, and results.
 
-FoamNordic is active research software. The current stable release is
-`1.0.4`.
+FoamNordic is active research software. Version `1.0.5` establishes the
+documented distribution baseline. Release notes and upgrade guidance are maintained in the
+[changelog](https://github.com/PentagonToy/FoamNordic/blob/main/CHANGELOG.md).
 
 ## Install
 
@@ -18,7 +19,7 @@ FoamNordic is active research software. The current stable release is
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install foamnordic
+python -m pip install foamnordic
 
 # Load or enter the desired OpenFOAM environment once, then:
 foamnordic build
@@ -49,10 +50,12 @@ case = fno.OpenFOAM.Case(
     name="cavity",
     case_dir=Path("cases/cavity"),
     run_dir="output/cavity",
-    of_cmd="openfoam/2512",
+    of_cmd="module load openfoam/2512",  # macOS OpenFOAM.app: "openfoam"
     shell="bash",
 )
 
+# Use an existing cavity case with a blockMeshDict and initial fields.
+case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
 print(case.fields.keys())
 
 run = fno.Longship(case=case).launch()
@@ -84,5 +87,4 @@ OpenFOAM releases as Apple Silicon applications and Homebrew packages.
 - [Python run-control API](https://github.com/PentagonToy/FoamNordic/blob/main/docs/api/run-control-api.md)
 - [Postprocess API](https://github.com/PentagonToy/FoamNordic/blob/main/docs/api/postprocess-api.md)
 - [Native architecture](https://github.com/PentagonToy/FoamNordic/tree/main/docs/architecture)
-- [Architecture](https://github.com/PentagonToy/FoamNordic/tree/main/docs/architecture)
 - [License](https://github.com/PentagonToy/FoamNordic/blob/main/LICENSE)

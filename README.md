@@ -14,7 +14,8 @@ payload together with tensor contracts, scaling, runtime requirements, and
 compatibility metadata. Fjord moves fields over shared memory, Unix sockets,
 UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
 
-Current release: `1.0.4` (Python 3.11–3.12).
+Release baseline: `1.0.5` (Python 3.11–3.12).
+See [CHANGELOG.md](CHANGELOG.md) for release notes and upgrade guidance.
 
 ## Install
 
