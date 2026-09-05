@@ -67,6 +67,31 @@ void test_capacity_and_backpressure() {
     require(!writer.try_push(first), "SHM ring overwrote an unread slot.");
     std::vector<std::byte> received;
     require(reader.try_pop(received) && received == first, "SHM ring first slot is incorrect.");
+    require(reader.try_pop(received) && received == second, "SHM ring second slot is incorrect.");
+
+    const std::array direct_source{
+        std::byte{9}, std::byte{8}, std::byte{7}, std::byte{6}};
+    require(writer.try_push(direct_source), "SHM direct slot was not published.");
+    std::array<std::byte, 2> direct_first{};
+    std::array<std::byte, 2> direct_second{};
+    std::size_t direct_size = 0;
+    bool direct_complete = false;
+    require(
+        reader.try_read_into(
+            direct_first, 0, direct_size, direct_complete)
+            && direct_size == direct_first.size()
+            && !direct_complete,
+        "SHM direct partial read released its slot early.");
+    require(
+        reader.try_read_into(
+            direct_second, direct_size, direct_size, direct_complete)
+            && direct_size == direct_second.size()
+            && direct_complete
+            && direct_first[0] == direct_source[0]
+            && direct_first[1] == direct_source[1]
+            && direct_second[0] == direct_source[2]
+            && direct_second[1] == direct_source[3],
+        "SHM direct partial destination read is incorrect.");
     require(writer.try_push(first), "SHM ring did not reuse a released slot.");
 }
 

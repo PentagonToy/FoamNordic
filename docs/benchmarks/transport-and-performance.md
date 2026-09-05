@@ -205,6 +205,48 @@ and the resident model remained correct. The production loader detects its
 supported Joblib interface and retains the staged mmap path as a compatibility
 fallback.
 
+## 2026-09-05: Roihu direct SHM reads
+
+A Release build ran on one AMD EPYC 9965 Roihu `small` node with eight
+allocated CPU cores. Each run completed 10,000 blocking round trips carrying
+three 400-cell float64 inputs and one 400-cell float64 output. Nine baseline
+and direct-read runs were alternated on the same node. The table reports the
+median and retains the existing Rune framing, atomic publication, and wake
+protocol in both variants.
+
+| SHM path | Baseline exchanges/s | Direct exchanges/s | Change |
+|---|---:|---:|---:|
+| Same process | 283,816 | 290,620 | +2.4% |
+| Separate processes | 232,409 | 237,277 | +2.1% |
+
+The direct path copies a published slot into the caller's final destination
+and keeps a partially consumed slot owned by the reader until its final byte.
+It removes the intermediate `std::vector` allocation and second full-payload
+copy without changing the public API or wire protocol. The cross-process Linux
+SHM correctness test and the complete macOS native test suite passed.
+
+## 2026-09-05: compiled estimator CPU scaling
+
+The same Roihu node evaluated a generated C++ ExtraTrees regressor with 64
+trees, maximum depth 16, ten inputs, and one output. Each timing is the median
+of repeated calls. The parallel call created its worker threads per invocation;
+therefore the small-batch rows include thread creation and joining.
+
+| Rows/call | Serial | 8-thread | Speedup |
+|---:|---:|---:|---:|
+| 256 | 6.298 ms | 2.621 ms | 2.40x |
+| 1,000 | 26.149 ms | 7.341 ms | 3.56x |
+| 10,000 | 240.529 ms | 46.810 ms | 5.14x |
+| 100,000 | 2,293.838 ms | 153.637 ms | 14.93x |
+
+The 100,000-row path also changes from row-major serial evaluation to the
+generated tree-major batch kernel, so its result is not a pure eight-core
+scaling number. That path differed from serial accumulation by at most
+`1.33e-15` absolute and passed `rtol=1e-12, atol=1e-12`; the smaller paths were
+bitwise identical. These results do not justify a persistent worker-pool
+dependency: the current generated path already benefits at 256 rows while
+remaining deterministic within the documented floating-point tolerance.
+
 ## Release performance gate
 
 The microbenchmarks detect transport regressions. The scientific release gate

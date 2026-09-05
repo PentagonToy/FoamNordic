@@ -162,31 +162,30 @@ public:
     void read_all(std::span<std::byte> bytes) override {
         std::size_t offset = 0;
         while (offset < bytes.size()) {
-            if (pending_offset_ == pending_.size()) {
-                pending_.clear();
-                pending_offset_ = 0;
-                while (!inbound_.try_pop(pending_)) {
-                    require_open("reading");
-                    wait_for_data(std::nullopt);
-                }
-                notify_space(inbound_index_);
+            std::size_t received = 0;
+            bool complete = false;
+            while (!inbound_.try_read_into(
+                bytes.subspan(offset), pending_offset_, received, complete)) {
+                require_open("reading");
+                wait_for_data(std::nullopt);
             }
-            const auto count = std::min(bytes.size() - offset, pending_.size() - pending_offset_);
-            std::memcpy(bytes.data() + offset, pending_.data() + pending_offset_, count);
-            offset += count;
-            pending_offset_ += count;
+            if (complete) {
+                pending_offset_ = 0;
+                notify_space(inbound_index_);
+            } else {
+                pending_offset_ += received;
+            }
+            offset += received;
         }
     }
 
     bool wait_readable(std::chrono::milliseconds timeout) override {
-        if (pending_offset_ < pending_.size()) {
+        if (inbound_.readable()) {
             return true;
         }
         const auto deadline = std::chrono::steady_clock::now() + timeout;
         while (true) {
-            if (inbound_.try_pop(pending_)) {
-                pending_offset_ = 0;
-                notify_space(inbound_index_);
+            if (inbound_.readable()) {
                 return true;
             }
             require_open("waiting");
@@ -313,7 +312,6 @@ private:
     std::size_t inbound_index_;
     std::unique_ptr<FjordChannel> wake_channel_;
     std::array<std::uint32_t, 5> pending_wakes_{};
-    std::vector<std::byte> pending_;
     std::size_t pending_offset_{0};
 };
 

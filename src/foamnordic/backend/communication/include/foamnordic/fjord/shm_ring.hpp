@@ -34,6 +34,11 @@ public:
 
     [[nodiscard]] bool try_push(std::span<const std::byte> message);
     [[nodiscard]] bool try_pop(std::vector<std::byte>& message);
+    [[nodiscard]] bool try_read_into(
+        std::span<std::byte> destination,
+        std::size_t message_offset,
+        std::size_t& copied,
+        bool& complete);
     [[nodiscard]] bool readable() const noexcept;
     [[nodiscard]] bool writable() const noexcept;
 

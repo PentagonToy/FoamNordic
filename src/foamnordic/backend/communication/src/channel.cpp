@@ -101,32 +101,33 @@ public:
     void read_all(std::span<std::byte> bytes) override {
         std::size_t written = 0;
         while (written < bytes.size()) {
-            if (pending_offset_ == pending_.size()) {
-                pending_.clear();
-                pending_offset_ = 0;
-                while (!inbound_.try_pop(pending_)) {
-                    if (owner_->closed.load(std::memory_order_acquire)) {
-                        throw std::runtime_error("SHM channel closed while reading.");
-                    }
-                    const auto epoch = owner_->data_epoch[inbound_index_].load(
-                        std::memory_order_acquire);
-                    if (!inbound_.readable()) {
-                        owner_->data_epoch[inbound_index_].wait(
-                            epoch, std::memory_order_acquire);
-                    }
+            std::size_t received = 0;
+            bool complete = false;
+            while (!inbound_.try_read_into(
+                bytes.subspan(written), pending_offset_, received, complete)) {
+                if (owner_->closed.load(std::memory_order_acquire)) {
+                    throw std::runtime_error("SHM channel closed while reading.");
                 }
+                const auto epoch = owner_->data_epoch[inbound_index_].load(
+                    std::memory_order_acquire);
+                if (!inbound_.readable()) {
+                    owner_->data_epoch[inbound_index_].wait(
+                        epoch, std::memory_order_acquire);
+                }
+            }
+            if (complete) {
+                pending_offset_ = 0;
                 owner_->space_epoch[inbound_index_].fetch_add(1, std::memory_order_release);
                 owner_->space_epoch[inbound_index_].notify_one();
+            } else {
+                pending_offset_ += received;
             }
-            const auto count = std::min(bytes.size() - written, pending_.size() - pending_offset_);
-            std::memcpy(bytes.data() + written, pending_.data() + pending_offset_, count);
-            written += count;
-            pending_offset_ += count;
+            written += received;
         }
     }
 
     bool wait_readable(std::chrono::milliseconds timeout) override {
-        if (pending_offset_ < pending_.size()) {
+        if (inbound_.readable()) {
             return true;
         }
         const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -140,13 +141,7 @@ public:
             return false;
         }
         owner_->timed_waiters.fetch_sub(1, std::memory_order_release);
-        if (!inbound_.try_pop(pending_)) {
-            return false;
-        }
-        pending_offset_ = 0;
-        owner_->space_epoch[inbound_index_].fetch_add(1, std::memory_order_release);
-        owner_->space_epoch[inbound_index_].notify_one();
-        return true;
+        return inbound_.readable();
     }
 
     void interrupt() noexcept override {
@@ -171,7 +166,6 @@ private:
     SharedSlotRing inbound_;
     std::size_t outbound_index_;
     std::size_t inbound_index_;
-    std::vector<std::byte> pending_;
     std::size_t pending_offset_{0};
 };
 

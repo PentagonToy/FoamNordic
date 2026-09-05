@@ -142,6 +142,37 @@ bool SharedSlotRing::try_pop(std::vector<std::byte>& message) {
     return true;
 }
 
+bool SharedSlotRing::try_read_into(
+    std::span<std::byte> destination,
+    std::size_t message_offset,
+    std::size_t& copied,
+    bool& complete) {
+    const auto position = header_->read_position.load(std::memory_order_relaxed);
+    auto* current = slot(position);
+    if (current->sequence.load(std::memory_order_acquire) != position + 1) {
+        return false;
+    }
+    if (current->size > header_->payload_bytes) {
+        throw std::runtime_error("SHM slot contains an invalid message size.");
+    }
+    if (message_offset > current->size) {
+        throw std::out_of_range("SHM slot read offset exceeds its message size.");
+    }
+    copied = std::min<std::size_t>(
+        destination.size(),
+        static_cast<std::size_t>(current->size) - message_offset);
+    std::memcpy(
+        destination.data(),
+        reinterpret_cast<std::byte*>(current) + sizeof(Slot) + message_offset,
+        copied);
+    complete = message_offset + copied == current->size;
+    if (complete) {
+        current->sequence.store(position + header_->slots, std::memory_order_release);
+        header_->read_position.store(position + 1, std::memory_order_relaxed);
+    }
+    return true;
+}
+
 bool SharedSlotRing::readable() const noexcept {
     const auto position = header_->read_position.load(std::memory_order_relaxed);
     return slot(position)->sequence.load(std::memory_order_acquire) == position + 1;
