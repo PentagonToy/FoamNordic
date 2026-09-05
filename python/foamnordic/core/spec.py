@@ -572,6 +572,7 @@ class Longship:
         *,
         readiness_timeout: float = 120.0,
         termination_grace: float = 30.0,
+        orphan_timeout: float = 30.0,
         start_timeout: float | None = None,
         verbose: bool | None = None,
     ) -> Run:
@@ -584,10 +585,13 @@ class Longship:
         selected_verbose = self.verbose if verbose is None else verbose
         if start_timeout is not None and start_timeout <= 0:
             raise ValueError("start_timeout must be positive")
+        if orphan_timeout < 0:
+            raise ValueError("orphan_timeout must not be negative")
         run = launch(
             self,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
+            orphan_timeout=orphan_timeout,
             verbose=selected_verbose,
         )
         if selected_verbose:

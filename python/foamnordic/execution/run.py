@@ -424,6 +424,7 @@ class Run:
         cleanup_paths: Sequence[Path] = (),
         observation_sources: int = 1,
         started_at: datetime | None = None,
+        owner_descriptor: int | None = None,
     ) -> None:
         self._process = process
         self._started = started
@@ -440,6 +441,7 @@ class Run:
         self._cleanup_paths = tuple(Path(path) for path in cleanup_paths)
         self._observation_sources = observation_sources
         self._started_at = started_at or datetime.now().astimezone()
+        self._owner_descriptor = owner_descriptor
         identity_source = (
             f"{self._started_at.isoformat()}:{process.pid}:{work_dir}"
         ).encode("utf-8")
@@ -559,8 +561,25 @@ class Run:
 
         with self._lock:
             self._detached = True
+            self._release_owner("detach\n")
         _ACTIVE_RUNS.discard(self)
         return self
+
+    def _release_owner(self, message: str | None = None) -> None:
+        descriptor = self._owner_descriptor
+        if descriptor is None:
+            return
+        self._owner_descriptor = None
+        try:
+            if message is not None:
+                os.write(descriptor, message.encode("ascii"))
+        except OSError:
+            pass
+        finally:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
 
     def _wait_for_start(
         self,
@@ -735,6 +754,7 @@ class Run:
             partition=self._partition,
             node=socket.gethostname(),
         )
+        self._release_owner("complete\n")
         _ACTIVE_RUNS.discard(self)
         return self._result
 
@@ -761,6 +781,7 @@ class Run:
             self._process.terminate()
         except OSError:
             pass
+        self._release_owner()
 
     def _finalize_log_names(self, job_id: str | None = None) -> None:
         identity = job_id or self._local_identity
@@ -1030,6 +1051,7 @@ def _launch_process(
     cleanup_paths: Sequence[Path] = (),
     observation_sources: int = 1,
     environment: Mapping[str, str] | None = None,
+    orphan_timeout: float | None = None,
 ) -> Run:
     """Start a lifecycle-owning process and bind it to the public Run handle."""
 
@@ -1038,17 +1060,38 @@ def _launch_process(
     _initialize_harbor_log(host_log, name)
     mode = "ab" if process_log == longship_log else "wb"
     stream = process_log.open(mode)
+    owner_reader: int | None = None
+    owner_writer: int | None = None
+    child_environment = None if environment is None else dict(environment)
+    pass_fds: tuple[int, ...] = ()
+    if orphan_timeout is not None:
+        if os.name != "posix":
+            stream.close()
+            raise RuntimeError("owner-loss monitoring requires a POSIX platform")
+        owner_reader, owner_writer = os.pipe()
+        child_environment = (
+            dict(os.environ) if child_environment is None else child_environment
+        )
+        child_environment["FOAMNORDIC_OWNER_FD"] = str(owner_reader)
+        child_environment["FOAMNORDIC_ORPHAN_TIMEOUT"] = str(orphan_timeout)
+        pass_fds = (owner_reader,)
     try:
         process = subprocess.Popen(
             [str(value) for value in arguments],
             stdout=stream,
             stderr=subprocess.STDOUT,
             start_new_session=True,
-            env=None if environment is None else dict(environment),
+            env=child_environment,
+            pass_fds=pass_fds,
         )
     except Exception:
         stream.close()
+        for descriptor in (owner_reader, owner_writer):
+            if descriptor is not None:
+                os.close(descriptor)
         raise
+    if owner_reader is not None:
+        os.close(owner_reader)
     return Run(
         process,
         started=monotonic(),
@@ -1065,4 +1108,5 @@ def _launch_process(
         cleanup_paths=cleanup_paths,
         observation_sources=observation_sources,
         started_at=started_at,
+        owner_descriptor=owner_writer,
     )

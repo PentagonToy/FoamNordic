@@ -246,6 +246,8 @@ class SlurmRenderingTests(unittest.TestCase):
             script = wrapper.read_text(encoding="utf-8")
         self.assertEqual(wrapper.parent.name, "slurm")
         self.assertIn('scancel "$job_id"', script)
+        self.assertIn('read -r -u "$FOAMNORDIC_OWNER_FD"', script)
+        self.assertIn('FOAMNORDIC_ORPHAN_TIMEOUT:-30', script)
         self.assertIn(".foamnordic/job.id", script)
         self.assertIn('SLURM_*|SBATCH_*|SRUN_*) unset "$key"', script)
         self.assertIn('"${job_id}.batch" "$job_id"', script)
@@ -254,9 +256,67 @@ class SlurmRenderingTests(unittest.TestCase):
             'while squeue --noheader --job "$job_id"',
             script,
         )
+        self.assertNotIn("seq 1 300", script)
 
 
 class SubmissionWrapperTests(unittest.TestCase):
+    def test_owner_pipe_eof_cancels_without_waiting_for_allocation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".foamnordic").mkdir()
+            wrapper = write_submission_wrapper(root, root / "slurm/longship.sbatch")
+            commands = root / "commands"
+            commands.mkdir()
+            cancelled = root / "cancelled"
+            scripts = {
+                "sbatch": "#!/bin/bash\nprintf '12345\\n'\n",
+                "sacct": (
+                    "#!/bin/bash\n"
+                    "if [[ -f \"$FNO_CANCELLED\" ]]; then\n"
+                    "  printf 'CANCELLED|\\n'\n"
+                    "fi\n"
+                ),
+                "squeue": "#!/bin/bash\nprintf '12345 running\\n'\n",
+                "scancel": "#!/bin/bash\n: > \"$FNO_CANCELLED\"\n",
+            }
+            for name, contents in scripts.items():
+                path = commands / name
+                path.write_text(contents, encoding="utf-8")
+                path.chmod(0o750)
+            reader, writer = os.pipe()
+            environment = dict(os.environ)
+            environment.update(
+                {
+                    "PATH": f"{commands}:{environment['PATH']}",
+                    "FNO_CANCELLED": str(cancelled),
+                    "FOAMNORDIC_OWNER_FD": str(reader),
+                    "FOAMNORDIC_ORPHAN_TIMEOUT": "0",
+                }
+            )
+            try:
+                process = subprocess.Popen(
+                    (wrapper,),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=environment,
+                    pass_fds=(reader,),
+                )
+                os.close(reader)
+                reader = -1
+                os.close(writer)
+                writer = -1
+                _, stderr = process.communicate(timeout=3)
+            finally:
+                if reader >= 0:
+                    os.close(reader)
+                if writer >= 0:
+                    os.close(writer)
+            was_cancelled = cancelled.is_file()
+
+        self.assertEqual(process.returncode, 130, stderr)
+        self.assertTrue(was_cancelled)
+
     def test_terminal_batch_step_does_not_wait_for_allocation_epilog(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

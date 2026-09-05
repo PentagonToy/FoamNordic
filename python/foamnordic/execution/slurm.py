@@ -186,16 +186,8 @@ def force_cancel(work_dir: Path) -> None:
         time.sleep(0.05)
     if not job_id:
         raise RuntimeError("Slurm job identity was not published within 5 seconds")
-    subprocess.run(["scancel", "--signal=KILL", job_id], check=True)
-    deadline = time.monotonic() + 300.0
-    while time.monotonic() < deadline:
-        active = subprocess.run(
-            ["squeue", "--noheader", "--job", job_id],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if not active.stdout.strip():
-            return
-        time.sleep(1.0)
-    raise TimeoutError(f"Slurm job {job_id} remained active after force cancellation")
+    subprocess.run(
+        ["scancel", "--signal=KILL", job_id],
+        check=True,
+        timeout=5.0,
+    )

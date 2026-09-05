@@ -96,6 +96,8 @@ and each later activation.
   matching marked paths.
 - `Run.stop()` returns one immutable `Result`; `run.detach()` deliberately
   releases lifecycle ownership.
+- Slurm runs cancel after a 30-second ownership grace if their Python or
+  Jupyter process disappears abnormally.
 - Completed fields remain on disk and are independent from live observations.
 
 ## Tests

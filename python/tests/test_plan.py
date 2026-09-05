@@ -476,6 +476,8 @@ class PlanTests(unittest.TestCase):
             example_longship().launch(verbose="yes")
         with self.assertRaisesRegex(ValueError, "start_timeout"):
             example_longship().launch(start_timeout=0)
+        with self.assertRaisesRegex(ValueError, "orphan_timeout"):
+            example_longship().launch(orphan_timeout=-1)
 
     def test_launch_reports_background_sailing_unless_quiet(self) -> None:
         expected = Mock()
