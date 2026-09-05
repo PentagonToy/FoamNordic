@@ -11,7 +11,6 @@ solver or model framework.
 | `backend/inference/` | FNOM parsing, preprocessing, model runners, and resident workers |
 | `backend/connectors/` | native model connectors only |
 | `openfoam/` | field bridge, function object, equation adapters, and expressions |
-| `template/` | packaged OpenFOAM, shell, and Slurm generation inputs |
 
 The dependency direction is deliberate:
 

@@ -25,6 +25,7 @@ from .run import (
     _sailing_paths,
 )
 from .shell import quote_command, toolchain_shell
+from .templates import render as render_template
 
 if TYPE_CHECKING:
     from ..core.spec import Closure, Longship, Transform
@@ -143,7 +144,7 @@ def _default_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/turbulenceProperties.fjord.in"
+        / "tools/template/openfoam/turbulenceProperties.fjord.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -156,7 +157,7 @@ def _observation_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/observation.in"
+        / "tools/template/openfoam/observation.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -169,7 +170,7 @@ def _transform_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/fjordExchange.in"
+        / "tools/template/openfoam/fjordExchange.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -184,7 +185,7 @@ def _decomposition_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/decomposeParDict.in"
+        / "tools/template/openfoam/decomposeParDict.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -215,10 +216,15 @@ def _prepare_decomposition(path: Path, ranks: int) -> bool:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        _decomposition_template()
-        .replace("@NUMBER_OF_SUBDOMAINS@", str(ranks))
-        .replace("@DECOMPOSITION_METHOD@", "scotch")
-        .replace("@METHOD_COEFFICIENTS@", ""),
+        render_template(
+            _decomposition_template(),
+            {
+                "NUMBER_OF_SUBDOMAINS": ranks,
+                "DECOMPOSITION_METHOD": "scotch",
+                "METHOD_COEFFICIENTS": "",
+            },
+            kind="OpenFOAM decomposition",
+        ),
         encoding="utf-8",
     )
     return True
@@ -230,7 +236,7 @@ def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
     )
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/derivedSchemes.json"
+        / "tools/template/openfoam/derivedSchemes.json"
     )
     path = packaged if packaged.is_file() else source
     if not path.is_file():
@@ -304,10 +310,9 @@ def _observation_block(longship: Longship, path: Path) -> str:
         "FOAMNORDIC_OBSERVATION_MAX_BYTES": 256 * 1024,
         "FOAMNORDIC_OBSERVATION_OVERFLOW": "dropOldest",
     }
-    rendered = _observation_template()
-    for name, value in values.items():
-        rendered = rendered.replace(f"@{name}@", str(value))
-    return rendered.strip()
+    return render_template(
+        _observation_template(), values, kind="OpenFOAM observation"
+    ).strip()
 
 
 def _expression(value: object) -> str:
@@ -350,43 +355,16 @@ def _closure_body(
     shared: bool,
     observation: str = "",
 ) -> str:
-    values = _closure_values(closure, address, shared, observation)
-    return f'''address          "{values["FOAMNORDIC_ADDRESS"]}";
-        sessionId        1;
-        sharedMemory     {values["FOAMNORDIC_SHARED_MEMORY"]};
-        ucx              false;
-
-        inputs
-        (
-                {values["FOAMNORDIC_INPUT_KEYS"]}
-        );
-
-        inputExpressions
-        (
-                {values["FOAMNORDIC_INPUT_EXPRESSIONS"]}
-        );
-
-        inputPatches
-        (
-                {values["FOAMNORDIC_INPUT_PATCHES"]}
-        );
-
-        outputs
-        (
-                {values["FOAMNORDIC_OUTPUT_FIELDS"]}
-        );
-
-        outputKeys
-        (
-                {values["FOAMNORDIC_OUTPUT_KEYS"]}
-        );
-
-        outputPatches
-        (
-                {values["FOAMNORDIC_OUTPUT_PATCHES"]}
-        );
-
-        {values["FOAMNORDIC_OBSERVATION_BLOCK"]}'''.strip()
+    packaged = files("foamnordic").joinpath("templates/openfoam/closureBody.in")
+    source = _REPOSITORY_ROOT / "tools/template/openfoam/closureBody.in"
+    path = packaged if packaged.is_file() else source
+    if not path.is_file():
+        raise RuntimeError("FoamNordic closure-body template is unavailable")
+    return render_template(
+        path.read_text(encoding="utf-8"),
+        _closure_values(closure, address, shared, observation),
+        kind="OpenFOAM closure body",
+    ).strip()
 
 
 def render_dictionary(
@@ -450,12 +428,7 @@ def render_dictionary(
         ),
         **custom,
     }
-    rendered = template
-    for name, value in variables.items():
-        rendered = rendered.replace(f"@{name}@", value)
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved OpenFOAM template variables: {unresolved}")
+    rendered = render_template(template, variables, kind="OpenFOAM")
     return destination, rendered
 
 
@@ -501,13 +474,9 @@ def render_transform_dictionary(
         ),
         "FOAMNORDIC_OBSERVATION_BLOCK": observation_block,
     }
-    rendered = _transform_template()
-    for name, value in values.items():
-        rendered = rendered.replace(f"@{name}@", str(value))
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved OpenFOAM transform variables: {unresolved}")
-    return rendered.strip()
+    return render_template(
+        _transform_template(), values, kind="OpenFOAM transform"
+    ).strip()
 
 
 _FIELD_LAYOUTS = {

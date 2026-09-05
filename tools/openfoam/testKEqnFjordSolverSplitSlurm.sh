@@ -56,7 +56,7 @@ case_dir="$work_dir/case"
 cp -R "$source_case" "$case_dir"
 
 if [[ ! -f "$case_dir/0/k" ]]; then
-    k_template=${FOAMNORDIC_K_FIELD_TEMPLATE:-$repository/src/foamnordic/template/openfoam/k.cavity.in}
+    k_template=${FOAMNORDIC_K_FIELD_TEMPLATE:-$repository/tools/template/openfoam/k.cavity.in}
     [[ -f "$k_template" ]] \
         || fail "the source case lacks 0/k and its fallback template is unavailable"
     cp "$k_template" "$case_dir/0/k"
@@ -110,7 +110,7 @@ port=${FOAMNORDIC_UCX_CONTROL_PORT:-$((24000 + (SLURM_JOB_ID + $$) % 20000))}
 address="tcp://$server_node:$port"
 
 cmake \
-    -DINPUT="$repository/src/foamnordic/template/openfoam/turbulenceProperties.kEqnFjord.in" \
+    -DINPUT="$repository/tools/template/openfoam/turbulenceProperties.kEqnFjord.in" \
     -DOUTPUT="$case_dir/constant/turbulenceProperties" \
     -DFOAMNORDIC_ADDRESS="$address" \
     -DFOAMNORDIC_SESSION_ID=1 \
@@ -120,7 +120,7 @@ sed \
     -e "s/@NUMBER_OF_SUBDOMAINS@/$ranks/g" \
     -e 's/@DECOMPOSITION_METHOD@/scotch/g' \
     -e 's/@METHOD_COEFFICIENTS@//g' \
-    "$repository/src/foamnordic/template/openfoam/decomposeParDict.in" \
+    "$repository/tools/template/openfoam/decomposeParDict.in" \
     >"$case_dir/system/decomposeParDict"
 rm -rf "$case_dir"/processor*
 decomposePar -case "$case_dir" -force >"$work_dir/decompose.log" 2>&1

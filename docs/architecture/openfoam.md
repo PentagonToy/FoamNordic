@@ -224,7 +224,7 @@ features are still evaluated by `OperationFrame` at that exact call site. It
 contains no socket, SHM, sequencing, scaler, bypass, or inference code.
 
 The canonical coefficient body is
-`src/foamnordic/template/openfoam/nutFjordCoeffs.in`. Its initial contract is
+`tools/template/openfoam/nutFjordCoeffs.in`. Its initial contract is
 `grad(U), delta -> nut`. This deliberately establishes the smallest useful LES
 closure boundary before k-equation and combustion adapters are added. A model
 adapter may bind solver-owned fields that are not registered in the mesh, but
@@ -297,7 +297,7 @@ dilatation, molecular diffusion, relaxation, and equation sources stay in the
 OpenFOAM-owned k equation.
 
 The canonical coefficient body is
-`src/foamnordic/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this
+`tools/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this
 model must also provide the normal OpenFOAM `k` field and boundary conditions.
 
 The native fixture generator emits one self-contained `kEqnFjord.fnom` for
@@ -358,7 +358,7 @@ with `foamnordic_openfoam_echo`, this tests expression evaluation, UDS-to-SHM
 negotiation, per-call sequencing, atomic publication, output application, and
 shutdown without a Python process.
 
-`src/foamnordic/template/openfoam/closureDict.in` is the canonical source for
+`tools/template/openfoam/closureDict.in` is the canonical source for
 that dictionary. Generated cases substitute the address, session identity,
 SHM policy, ordered transport keys, ordered OpenFOAM expressions, and output
 fields without embedding those choices into a turbulence or combustion model.

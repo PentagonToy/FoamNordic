@@ -66,7 +66,7 @@ def _banner() -> str:
         return packaged.read_text(encoding="utf-8").rstrip()
     source = (
         Path(__file__).resolve().parents[3]
-        / "src/foamnordic/template/large_banner.txt"
+        / "tools/template/large_banner.txt"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8").rstrip()

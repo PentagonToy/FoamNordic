@@ -18,7 +18,7 @@ add_test(
     NAME openfoam.closure_dictionary
     COMMAND
         ${CMAKE_COMMAND}
-        -DINPUT=${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/closureDict.in
+        -DINPUT=${PROJECT_SOURCE_DIR}/tools/template/openfoam/closureDict.in
         -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/foamnordicClosureDict
         -DCONFIGURE_SCRIPT=${PROJECT_SOURCE_DIR}/tools/openfoam/configureClosureDict.cmake
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_closure_dictionary.cmake)

@@ -43,4 +43,4 @@ Every adapter must remain thin and must have a solver-integrated acceptance
 case. A successful generic `Transform` smoke test is evidence for the shared
 field bridge, not evidence that a new equation-level model adapter is needed.
 The non-compilable starting scaffold is in
-`src/foamnordic/template/openfoam/model-adapter/`.
+`tools/template/openfoam/model-adapter/`.

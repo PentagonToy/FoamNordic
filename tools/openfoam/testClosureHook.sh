@@ -85,7 +85,7 @@ configure_probe()
     local patch=${7:-none}
 
     cmake \
-        -DINPUT="$repository/src/foamnordic/template/openfoam/closureDict.in" \
+        -DINPUT="$repository/tools/template/openfoam/closureDict.in" \
         -DOUTPUT="$case_dir/system/foamnordicClosureDict" \
         -DFOAMNORDIC_ADDRESS="$address" \
         -DFOAMNORDIC_SESSION_ID=1 \
@@ -274,7 +274,7 @@ run_mpi_probe()
         -e "s/@NUMBER_OF_SUBDOMAINS@/$mpi_ranks/g" \
         -e 's/@DECOMPOSITION_METHOD@/scotch/g' \
         -e 's/@METHOD_COEFFICIENTS@//g' \
-        "$repository/src/foamnordic/template/openfoam/decomposeParDict.in" \
+        "$repository/tools/template/openfoam/decomposeParDict.in" \
         >"$case_dir/system/decomposeParDict"
     rm -rf "$case_dir"/processor*
     decomposePar -case "$case_dir" -force \
@@ -436,7 +436,7 @@ run_split_ucx_onnx_probe()
             -e "s/@NUMBER_OF_SUBDOMAINS@/$central_ranks/g" \
             -e 's/@DECOMPOSITION_METHOD@/scotch/g' \
             -e 's/@METHOD_COEFFICIENTS@//g' \
-            "$repository/src/foamnordic/template/openfoam/decomposeParDict.in" \
+            "$repository/tools/template/openfoam/decomposeParDict.in" \
             >"$case_dir/system/decomposeParDict"
         rm -rf "$case_dir"/processor*
         decomposePar -case "$case_dir" -force \

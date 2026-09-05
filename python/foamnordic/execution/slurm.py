@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
-import re
 import subprocess
 import time
 from typing import Mapping, Sequence, TYPE_CHECKING
@@ -12,6 +11,7 @@ from typing import Mapping, Sequence, TYPE_CHECKING
 from .run import _internal_path, _longship_executable, _sailing_paths
 from .resources import SHM_MIB_PER_RANK_PROGRAM, memory_bytes, slurm_memory
 from .shell import quote_command
+from .templates import render as render_template
 
 if TYPE_CHECKING:
     from ..core.spec import Longship
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 def _template(name: str) -> str:
     source = (
         Path(__file__).resolve().parents[3]
-        / f"src/foamnordic/template/slurm/{name}"
+        / f"tools/template/slurm/{name}"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -31,13 +31,7 @@ def _template(name: str) -> str:
 
 
 def _render(name: str, variables: Mapping[str, object]) -> str:
-    rendered = _template(name)
-    for key, value in variables.items():
-        rendered = rendered.replace(f"@{key}@", str(value))
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved Slurm template variables: {unresolved}")
-    return rendered
+    return render_template(_template(name), variables, kind="Slurm")
 
 
 def write_batch(
