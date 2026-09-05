@@ -16,7 +16,6 @@ from .validation import require_nonempty, require_positive
 from ..random import Key, key as random_key
 
 if TYPE_CHECKING:
-    from ..combustion.progress_variable import ProgressVariable
     from ..execution.run import Run
 
 
@@ -503,7 +502,6 @@ class Longship:
     placement: Attached = dataclass_field(default_factory=Attached)
     scheduler: Slurm | None = None
     name: str | None = None
-    combustion: ProgressVariable | None = None
     verbose: bool = False
 
     def __post_init__(self) -> None:
@@ -517,16 +515,6 @@ class Longship:
         object.__setattr__(self, "observations", tuple(self.observations))
         if not isinstance(self.verbose, bool):
             raise TypeError("verbose must be a boolean")
-        if self.combustion is not None:
-            from ..combustion.progress_variable import ProgressVariable
-
-            if not isinstance(self.combustion, ProgressVariable):
-                raise TypeError("combustion must be a Combustion.ProgressVariable")
-            if self.closures:
-                raise ValueError(
-                    "combustion owns its reaction-rate and manifold closures; "
-                    "do not also pass closures"
-                )
         programs = self.field_programs
         names = [program.name for program in programs]
         if len(names) != len(set(names)):
@@ -551,9 +539,7 @@ class Longship:
 
     @property
     def closure_programs(self) -> tuple[Closure, ...]:
-        if self.combustion is None:
-            return self.closures
-        return self.combustion.programs(self.case)
+        return self.closures
 
     @property
     def field_programs(self) -> tuple[Closure | Transform, ...]:
@@ -569,9 +555,6 @@ class Longship:
             "case": self.case.to_plan(),
             "closures": [closure.to_plan() for closure in self.closure_programs],
             "transforms": [transform.to_plan() for transform in self.transforms],
-            "combustion": (
-                None if self.combustion is None else self.combustion.to_plan()
-            ),
             "observations": [item.to_plan() for item in self.observations],
             "placement": self.placement.to_plan(),
             "scheduler": None if self.scheduler is None else self.scheduler.to_plan(),
@@ -589,6 +572,7 @@ class Longship:
         *,
         readiness_timeout: float = 120.0,
         termination_grace: float = 30.0,
+        orphan_timeout: float = 30.0,
         start_timeout: float | None = None,
         verbose: bool | None = None,
     ) -> Run:
@@ -601,10 +585,13 @@ class Longship:
         selected_verbose = self.verbose if verbose is None else verbose
         if start_timeout is not None and start_timeout <= 0:
             raise ValueError("start_timeout must be positive")
+        if orphan_timeout < 0:
+            raise ValueError("orphan_timeout must not be negative")
         run = launch(
             self,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
+            orphan_timeout=orphan_timeout,
             verbose=selected_verbose,
         )
         if selected_verbose:

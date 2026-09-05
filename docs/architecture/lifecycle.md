@@ -56,7 +56,7 @@ attached placement; central GPU placement must use an explicit later plan and
 will never be silently folded into the attached policy.
 
 The canonical Slurm skeleton is
-`src/foamnordic/template/slurm/longship.sbatch.in`. The Python launch path
+`tools/template/slurm/longship.sbatch.in`. The Python launch path
 renders and submits it after the native planner validates the resource
 arithmetic. It reserves the complete per-node CPU budget in one allocation,
 starts separate exclusive host and solver steps, waits for host readiness, and

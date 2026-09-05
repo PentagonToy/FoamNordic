@@ -165,6 +165,11 @@ int main(int argc, char* argv[]) {
 
     const auto probeExpression = configuration.get<string>("probeExpression");
     const auto probeOutput = configuration.get<word>("probeOutput");
+    auto probePatch = configuration.getOrDefault<word>(
+        "probePatch", word());
+    if (probePatch == "none") {
+        probePatch.clear();
+    }
     const auto probeScale = configuration.getOrDefault<scalar>(
         "probeScale", 1.0);
     const auto probeSeed = configuration.getOrDefault<scalar>(
@@ -176,19 +181,26 @@ int main(int argc, char* argv[]) {
             "FoamNordic probeScale and probeSeed must be finite.");
     }
     if (probeSeed != 0.0) {
-        seedField(
-            Foam::foamNordic::outputFieldView(
-                mesh, probeOutput, 0, runTime.value()),
+        seedField(probePatch.empty()
+            ? Foam::foamNordic::outputFieldView(
+                mesh, probeOutput, 0, runTime.value())
+            : Foam::foamNordic::outputPatchView(
+                mesh, probeOutput, probePatch, 0, runTime.value()),
             probeSeed);
-        Foam::foamNordic::correctFieldBoundary(mesh, probeOutput);
+        if (probePatch.empty()) {
+            Foam::foamNordic::correctFieldBoundary(mesh, probeOutput);
+        }
         Foam::Info
             << "[FoamNordic] Seeded " << probeOutput
             << " in memory for deterministic verification" << Foam::nl;
     }
     Foam::foamNordic::ClosureHook closure(configuration);
     if (probeExpectFailure) {
-        const auto beforeView = Foam::foamNordic::inputFieldView(
-            mesh, probeOutput, 0, runTime.value());
+        const auto beforeView = probePatch.empty()
+            ? Foam::foamNordic::inputFieldView(
+                mesh, probeOutput, 0, runTime.value())
+            : Foam::foamNordic::inputPatchView(
+                mesh, probeOutput, probePatch, 0, runTime.value());
         std::vector<std::byte> before(
             beforeView.bytes.begin(), beforeView.bytes.end());
         auto ownedBefore = beforeView;
@@ -196,8 +208,11 @@ int main(int argc, char* argv[]) {
         try {
             static_cast<void>(closure.invoke(mesh, runTime));
         } catch (const std::exception&) {
-            const auto after = Foam::foamNordic::inputFieldView(
-                mesh, probeOutput, 0, runTime.value());
+            const auto after = probePatch.empty()
+                ? Foam::foamNordic::inputFieldView(
+                    mesh, probeOutput, 0, runTime.value())
+                : Foam::foamNordic::inputPatchView(
+                    mesh, probeOutput, probePatch, 0, runTime.value());
             requireIdentity(after, ownedBefore);
             Foam::Info
                 << "[FoamNordic] Rejected closure left " << probeOutput
@@ -210,8 +225,14 @@ int main(int argc, char* argv[]) {
     }
     for (std::uint64_t expectedIndex = 0; expectedIndex < 2; ++expectedIndex) {
         Foam::foamNordic::operations::OperationFrame reference(mesh);
-        const auto expectedView = reference.view(
-            "reference", probeExpression.c_str());
+        const auto expectedView = probePatch.empty()
+            ? reference.view("reference", probeExpression.c_str())
+            : Foam::foamNordic::inputPatchView(
+                mesh,
+                word(probeExpression),
+                probePatch,
+                expectedIndex,
+                runTime.value());
         std::vector<std::byte> expected(
             expectedView.bytes.begin(), expectedView.bytes.end());
         if (probeScale != 1.0
@@ -225,8 +246,15 @@ int main(int argc, char* argv[]) {
         ownedExpected.bytes = std::span<const std::byte>(expected);
 
         const auto exchangeIndex = closure.invoke(mesh, runTime);
-        const auto actual = Foam::foamNordic::inputFieldView(
-            mesh, probeOutput, exchangeIndex, runTime.value());
+        const auto actual = probePatch.empty()
+            ? Foam::foamNordic::inputFieldView(
+                mesh, probeOutput, exchangeIndex, runTime.value())
+            : Foam::foamNordic::inputPatchView(
+                mesh,
+                probeOutput,
+                probePatch,
+                exchangeIndex,
+                runTime.value());
         requireIdentity(actual, ownedExpected);
         if (exchangeIndex != expectedIndex) {
             throw std::runtime_error(

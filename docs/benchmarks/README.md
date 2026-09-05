@@ -8,10 +8,10 @@ not confused with architectural promises.
 |---|---|
 | [Transport and performance](transport-and-performance.md) | macOS and Roihu transport measurements plus the OpenFOAM performance gate |
 | [HPC transport](hpc-transport.md) | Implemented data planes, UCX environment, and portable site checks |
-| [OpenFOAM cases](openfoam-cases.md) | Laminar, RAS, LES, combustion, and copied-case compatibility evidence |
+| [OpenFOAM cases](openfoam-cases.md) | Laminar, RAS, LES, and copied-case compatibility evidence |
 | [Closure validation](closure-validation.md) | Mathematical parity and learned-closure accuracy and timing |
 | [Compiled estimator](compiled-estimator.md) | Compiled C++ versus Joblib startup, memory, parity, and batch-size crossover |
-| [Acceptance status](acceptance.md) | Completed software gates and remaining combustion acceptance work |
+| [Acceptance status](acceptance.md) | Completed solver-agnostic software and HPC gates |
 
 Measurements are development records, not portable performance guarantees.
 Each entry must retain its platform, allocation, payload, build, and numerical

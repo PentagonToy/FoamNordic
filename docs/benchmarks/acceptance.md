@@ -1,28 +1,14 @@
 # Acceptance status
 
-The transport and turbulence foundation already has Linux HPC evidence for
-cross-node TCP, fabric-backed UCX, central ModelHost lifecycle, two OpenFOAM
-ranks, `nutFjord`, and `kEqnFjord`. Those gates do not need to be repeated for
-the combustion milestone.
-
-The locally validated combustion additions still need OpenFOAM v2512/Linux
-HPC evidence:
-
-| Gate | Purpose | Default allocation |
-| --- | --- | --- |
-| Stock reacting solver, volumetric rate | Adapter-owned source field and `[kg/m3/s]` equation boundary | 1 node, 1 rank |
-| Stock reacting solver, specific rate | `[1/s]` source and native density conversion | 1 node, 1 rank |
-| Full progress-variable coordinator, volumetric rate | Three-step reaction model, manifold, transport, and thermodynamic ordering | 1 node, 1 rank |
-| Full progress-variable coordinator, specific rate | Same three-step coordinator with `rho*omega` conversion | 1 node, 1 rank |
-| Full progress-variable coordinator, specific rate MPI | Three-step decomposition, rank identity, two resident sessions, and reconstructed postprocessing | 1 node, 2 ranks |
-
-The attached multi-node identity gate is complete and recorded below. It is no
-longer part of the remaining-gates table.
+The solver-agnostic foundation has Linux HPC evidence for cross-node TCP,
+fabric-backed UCX, attached ModelHost lifecycle, two OpenFOAM ranks,
+`nutFjord`, and `kEqnFjord`. Domain-specific equation and physics acceptance
+belongs to each solver repository; FoamNordic's acceptance matrix stops at the
+adapter contract and exact field transport boundary.
 
 The runnable entry points are in [`tools/hpc/`](../../tools/hpc/). They accept
 site paths, account, partition, and environment through variables rather than
-embedding a user or project identity. Results are isolated by Slurm job and
-UTC timestamp.
+embedding a user or project identity.
 
 ## Multi-node acceptance
 

@@ -18,5 +18,5 @@ add_test(
     NAME runtime.longship_template
     COMMAND
         ${CMAKE_COMMAND}
-        -DTEMPLATE=${PROJECT_SOURCE_DIR}/src/foamnordic/template/slurm/longship.sbatch.in
+        -DTEMPLATE=${PROJECT_SOURCE_DIR}/tools/template/slurm/longship.sbatch.in
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_longship_template.cmake)

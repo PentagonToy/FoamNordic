@@ -29,12 +29,26 @@ namespace Foam::foamNordic {
     double physicalTime,
     scalarField* scratch = nullptr);
 
+[[nodiscard]] foamnordic::fjord::TensorView inputPatchView(
+    const fvMesh& mesh,
+    const word& name,
+    const word& patch,
+    std::uint64_t exchangeIndex,
+    double physicalTime);
+
 [[nodiscard]] foamnordic::fjord::MutableTensorView outputFieldView(
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
     double physicalTime,
     scalarField* scratch = nullptr);
+
+[[nodiscard]] foamnordic::fjord::MutableTensorView outputPatchView(
+    const fvMesh& mesh,
+    const word& name,
+    const word& patch,
+    std::uint64_t exchangeIndex,
+    double physicalTime);
 
 void commitOutputField(
     const fvMesh& mesh,

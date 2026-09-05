@@ -1,0 +1,24 @@
+{
+    type            foamNordicExchange;
+
+    enabled         true;
+    executeControl  @EXECUTE_CONTROL@;
+    executeInterval @EXECUTE_INTERVAL@;
+    writeControl    @WRITE_CONTROL@;
+
+    address         "@FJORD_ADDRESS@";
+    sessionId       @SESSION_ID@;
+    sharedMemory    @SHARED_MEMORY@;
+    ucx             @UCX@;
+    exchangeControl timeStep;
+    exchangeStage   @EXCHANGE_STAGE@;
+
+    inputKeys       (@INPUT_KEYS@);
+    inputs          (@INPUT_FIELDS@);
+    inputPatches    (@INPUT_PATCHES@);
+    outputKeys      (@OUTPUT_KEYS@);
+    outputs         (@OUTPUT_FIELDS@);
+    outputPatches   (@OUTPUT_PATCHES@);
+
+    @FOAMNORDIC_OBSERVATION_BLOCK@
+}

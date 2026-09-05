@@ -10,14 +10,62 @@ v2606 on macOS arm64 is the development compatibility target. The adapter uses
 only APIs common to those releases: `fvMeshFunctionObject`,
 `lookupObjectRef`, and `primitiveFieldRef`.
 
+## External solver adapters
+
+`foamnordic build` installs a small ABI-specific SDK rather than a bundled
+solver. Its public OpenFOAM headers are below the active runtime's
+`include/foamnordic/openfoam` directory, and the exact integration library is
+below `lib`. Build systems can obtain stable, one-line paths with:
+
+```bash
+foamnordic dir --runtime
+foamnordic dir --include
+foamnordic dir --openfoam-library
+```
+
+A solver project owns its equations, correction order, thermodynamics, and
+domain model selection. Its optional FoamNordic adapter includes
+`closureHook.H`, calls `ClosureHook::invoke()` at the solver-owned evaluation
+site, and links the exact library reported above. FoamNordic neither discovers
+nor builds that solver. This one-way dependency lets the same runtime serve
+stock OpenFOAM applications and unrelated custom solvers without importing
+their physical semantics.
+
 ## Field path
 
-The OpenFOAM bridge supports internal `volScalarField`, `volVectorField`,
-`volSphericalTensorField`, `volSymmTensorField`, and `volTensorField` storage.
+The OpenFOAM bridge supports internal scalar, vector, spherical-tensor,
+symmetric-tensor, and tensor storage for both volume and surface geometric
+fields.
 Inputs become read-only native views over `primitiveField()` and outputs become
 mutable views over `primitiveFieldRef()`. Python does not participate and the
 field is not copied merely to cross the OpenFOAM/closure boundary. Rune/Harbor
 transport owns any copy required by the selected channel.
+
+Boundary storage is selected explicitly rather than encoded into a field
+name. Python declarations use `Field.patch("U", "inlet")`; generated solver
+dictionaries carry aligned `inputPatches` and `outputPatches` lists. `none`
+selects internal storage. A patch view is resolved from the current mesh on
+every invocation, so moving-mesh updates cannot leave a cached boundary
+pointer in Smedja or the OpenFOAM hook. A rank on which the named patch has
+zero faces participates with a valid zero-length tensor instead of skipping
+the atomic exchange.
+
+Patch outputs are committed directly to the selected boundary storage. The
+bridge does not call whole-field `correctBoundaryConditions()` afterward,
+because that could overwrite the explicit patch result. The owning solver
+remains responsible for the subsequent boundary/equation update order.
+
+The `foamnordicOpenFOAMMovingMeshProbe` development gate constructs the
+active `dynamicFvMesh`, updates it before every closure invocation, and then
+exchanges a real boundary patch over SHM. OpenFOAM v2512 validation uses the
+official `moveDynamicMesh/twistingColumn` fixture. This proves per-invocation
+patch rebinding across geometry changes; topology-changing size variation is
+covered independently by the dynamic Smedja and chunked-SHM conformance tests.
+The v2512 MPI gate decomposes the same 32-cell fixture in the motion direction:
+the `top` patch has zero faces on rank 0 and four faces on rank 1. Both ranks
+complete three SHM exchanges after mesh updates, confirming that an empty
+rank remains in the atomic protocol rather than deadlocking or skipping a
+collective closure call.
 
 Returned tensors remain staged until `AtomicFieldExchange` validates the full
 commit. Only then are outputs copied into their solver-owned views and followed
@@ -176,7 +224,7 @@ features are still evaluated by `OperationFrame` at that exact call site. It
 contains no socket, SHM, sequencing, scaler, bypass, or inference code.
 
 The canonical coefficient body is
-`src/foamnordic/template/openfoam/nutFjordCoeffs.in`. Its initial contract is
+`tools/template/openfoam/nutFjordCoeffs.in`. Its initial contract is
 `grad(U), delta -> nut`. This deliberately establishes the smallest useful LES
 closure boundary before k-equation and combustion adapters are added. A model
 adapter may bind solver-owned fields that are not registered in the mesh, but
@@ -249,7 +297,7 @@ dilatation, molecular diffusion, relaxation, and equation sources stay in the
 OpenFOAM-owned k equation.
 
 The canonical coefficient body is
-`src/foamnordic/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this
+`tools/template/openfoam/kEqnFjordCoeffs.in`. A case selecting this
 model must also provide the normal OpenFOAM `k` field and boundary conditions.
 
 The native fixture generator emits one self-contained `kEqnFjord.fnom` for
@@ -310,7 +358,7 @@ with `foamnordic_openfoam_echo`, this tests expression evaluation, UDS-to-SHM
 negotiation, per-call sequencing, atomic publication, output application, and
 shutdown without a Python process.
 
-`src/foamnordic/template/openfoam/closureDict.in` is the canonical source for
+`tools/template/openfoam/closureDict.in` is the canonical source for
 that dictionary. Generated cases substitute the address, session identity,
 SHM policy, ordered transport keys, ordered OpenFOAM expressions, and output
 fields without embedding those choices into a turbulence or combustion model.

@@ -185,6 +185,27 @@ class CliTests(unittest.TestCase):
         self.assertIn("Python package", report)
         self.assertIn("Native module", report)
 
+    def test_dir_prints_scriptable_sdk_paths(self) -> None:
+        selected = SimpleNamespace(runtime_dir=Path("/opt/foamnordic/runtime"))
+        with patch("foamnordic._cli.profile", return_value=selected):
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main(["dir", "--include"]), 0)
+        self.assertEqual(output.getvalue().strip(), "/opt/foamnordic/runtime/include")
+
+    def test_dir_selects_exact_openfoam_library(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            library = runtime / "lib/libfoamnordicOpenFOAM.so"
+            library.parent.mkdir()
+            library.touch()
+            selected = SimpleNamespace(runtime_dir=runtime)
+            with patch("foamnordic._cli.profile", return_value=selected):
+                output = StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(main(["dir", "--openfoam-library"]), 0)
+            self.assertEqual(output.getvalue().strip(), str(library.resolve()))
+
     def test_doctor_reports_fast_read_only_environment_checks(self) -> None:
         with (
             patch("foamnordic._cli.profile", return_value=None),
@@ -264,13 +285,13 @@ class CliTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(status, 0)
-            self.assertIn("[Step 1/6]", output.getvalue())
+            self.assertIn("[Step 1/5]", output.getvalue())
             self.assertIn("Configure native SDK", output.getvalue())
             self.assertIn("foamnordic_model_worker", output.getvalue())
             self.assertIn("Install native runtime tools", output.getvalue())
             self.assertIn("foamnordic-longship", output.getvalue())
             self.assertIn("Build OpenFOAM integration", output.getvalue())
-            self.assertIn("Build progress-variable solver", output.getvalue())
+            self.assertNotIn("Build progress-variable solver", output.getvalue())
             self.assertFalse(build_dir.exists())
             self.assertFalse(prefix.exists())
 
@@ -289,6 +310,8 @@ class CliTests(unittest.TestCase):
         self.assertIn("src/foamnordic/backend/inference", packaging)
         self.assertIn("src/foamnordic/backend/connectors", packaging)
         self.assertIn("tools/resident", packaging)
+        self.assertIn("src/foamnordic/openfoam/closureHook.H", buildkit)
+        self.assertNotIn("tools/openfoam/progressVariableFoam", packaging)
 
     def test_build_refreshes_only_marker_owned_cache_from_another_source(self) -> None:
         repository = Path(__file__).resolve().parents[2]
@@ -336,6 +359,8 @@ class CliTests(unittest.TestCase):
                 )
             self.assertEqual(status, 0)
             self.assertIn("Would refresh build cache", output.getvalue())
+            self.assertIn("foamnordic_inference", output.getvalue())
+            self.assertNotIn("foamnordic_model_worker", output.getvalue())
             self.assertTrue((build_dir / "CMakeCache.txt").is_file())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")

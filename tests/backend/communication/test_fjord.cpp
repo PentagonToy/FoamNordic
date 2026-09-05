@@ -413,6 +413,43 @@ void test_channel_interrupt() {
         foamnordic::fjord::shared_memory_channel_pair(2, 64));
 }
 
+void test_shm_stream_accepts_dynamic_payload_sizes() {
+    auto channels = foamnordic::fjord::shared_memory_channel_pair(2, 64);
+    Harbor sender(std::move(channels.first));
+    Harbor receiver(std::move(channels.second));
+    const std::array<std::size_t, 3> sizes{16, 4096, 80};
+
+    std::thread consumer([&] {
+        for (const auto size : sizes) {
+            const auto tensor = receiver.receive();
+            require(
+                tensor.bytes.size() == size,
+                "SHM stream changed a dynamic tensor payload size.");
+            for (std::size_t index = 0; index < size; ++index) {
+                require(
+                    tensor.bytes[index] == static_cast<std::byte>(index % 251),
+                    "SHM stream corrupted a dynamically sized payload.");
+            }
+        }
+    });
+
+    for (std::size_t exchange = 0; exchange < sizes.size(); ++exchange) {
+        std::vector<std::byte> bytes(sizes[exchange]);
+        for (std::size_t index = 0; index < bytes.size(); ++index) {
+            bytes[index] = static_cast<std::byte>(index % 251);
+        }
+        sender.send({
+            "dynamic",
+            Element::int32,
+            {static_cast<std::uint64_t>(bytes.size() / sizeof(std::int32_t))},
+            bytes,
+            static_cast<std::uint64_t>(exchange + 1),
+            0.1 * static_cast<double>(exchange + 1),
+        });
+    }
+    consumer.join();
+}
+
 }  // namespace
 
 int main() {
@@ -429,5 +466,6 @@ int main() {
     test_ucx_upgrade();
 #endif
     test_channel_interrupt();
+    test_shm_stream_accepts_dynamic_payload_sizes();
     std::cout << "FoamNordic Fjord round trip: PASS\n";
 }

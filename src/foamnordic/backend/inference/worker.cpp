@@ -211,6 +211,9 @@ void ModelWorker::run() {
     }
 
     SynchronizedKernel synchronized(*kernel_);
+    ModelKernel& execution_kernel = kernel_->owns_backend_synchronization()
+                                       ? *kernel_
+                                       : static_cast<ModelKernel&>(synchronized);
     std::mutex failure_mutex;
     std::exception_ptr failure;
     std::vector<std::thread> runners;
@@ -223,7 +226,7 @@ void ModelWorker::run() {
                         *peer,
                         artifact_.contract,
                         bypass_,
-                        synchronized);
+                        execution_kernel);
                     runner.run();
                 } catch (...) {
                     {

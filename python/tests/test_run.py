@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import os
+import sys
 import tempfile
 import time
 import unittest
@@ -246,6 +247,35 @@ class RunTests(unittest.TestCase):
             termination_grace=0.1,
             plan_digest="sha256:test",
         ), ready
+
+    def test_detach_releases_the_submission_owner_pipe(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "owner.log"
+            run = _launch_process(
+                (
+                    sys.executable,
+                    "-c",
+                    (
+                        "import os; "
+                        "fd = int(os.environ['FOAMNORDIC_OWNER_FD']); "
+                        "print(os.read(fd, 64).decode(), end='')"
+                    ),
+                ),
+                work_dir=root,
+                process_log=output,
+                longship_log=root / "longship.log",
+                host_log=root / "host.log",
+                solver_log=root / "solver.log",
+                environment=os.environ,
+                orphan_timeout=0,
+            )
+
+            run.detach()
+            result = run.stop(timeout=3)
+
+            self.assertTrue(result.success)
+            self.assertEqual(output.read_text(encoding="utf-8"), "detach\n")
 
     def test_stop_returns_successful_durable_result(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

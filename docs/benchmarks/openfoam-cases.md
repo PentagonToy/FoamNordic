@@ -116,40 +116,14 @@ The gate is reproducible with
 It prepares an isolated mesh, writes all runs beneath the selected output
 directory, and emits `combustion-field-parity.json`.
 
-### Equation-level boundary
+### Historical equation-level prototype
 
-The generic parity gate was followed by a native `reactionRateFjord`
-`ThermoCombustion` adapter. It now evaluates a learned scalar source at the
-combustion model's correction site and validates its solver-owned field and
-dimensions. A generic `Transform` remains appropriate for deliberate field
-modification, while this adapter establishes the source-evaluation boundary.
-
-The boundary was then extended with `progressVariableFjord`: two resident FNOM
-programs are lowered from the public combustion declaration, `Y_*` output
-families are expanded before launch, and the native coordinator executes
-reaction rate, manifold, and one thermodynamic correction in that order. The
-model compiles and registers for both `psiReactionThermo` and
-`rhoReactionThermo` with OpenFOAM.com v2606.
-
-The equation boundary now also exposes the configured source through
-`combustion->R(progress)`. A compiled v2606 probe checked the resulting matrix
-on all 16,384 cells of the cavity mesh: dimensions matched the configured
-volumetric source times cell volume, the positive right-hand-side convention
-was preserved, and the maximum difference from `V*omega_c` was zero. The
-cavity is only a mesh-level source gate, not a combustion validation case.
-
-The local complete-combustion integration now includes a solver-integrated
-beta-FDF artifact fixture, an atomic field trajectory, a stock reacting-solver
-adapter gate, and exact volumetric/specific source probes. The remaining
-software acceptance is the Linux HPC/OpenFOAM v2512 matrix documented in
-`acceptance.md`. Boundary conservation, realizability, failure
-policy, and a physically representative trained artifact remain scientific
-acceptance work.
-
-The shared Fjord, resident, artifact, scaling, observation, lifecycle,
-reaction-rate, source-matrix, and manifold-dispatch layers are now present.
-Solver-specific transport equations and their physical acceptance trajectory
-remain.
+Earlier FoamNordic revisions also carried progress-variable equations and
+combustion-model registrations. Those tests established the feasibility of an
+atomic reaction-rate exchange, but the code crossed the solver/runtime
+boundary. The equations, reaction-rate semantics, heat release, and their
+physical acceptance now belong to the domain solver project. FoamNordic keeps
+only the generic field, transport, FNOM, observation, and lifecycle evidence.
 
 ## Known local limitation
 

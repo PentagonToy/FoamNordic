@@ -82,9 +82,10 @@ configure_probe()
     local scale=$4
     local seed=$5
     local expect_failure=$6
+    local patch=${7:-none}
 
     cmake \
-        -DINPUT="$repository/src/foamnordic/template/openfoam/closureDict.in" \
+        -DINPUT="$repository/tools/template/openfoam/closureDict.in" \
         -DOUTPUT="$case_dir/system/foamnordicClosureDict" \
         -DFOAMNORDIC_ADDRESS="$address" \
         -DFOAMNORDIC_SESSION_ID=1 \
@@ -92,9 +93,12 @@ configure_probe()
         -DFOAMNORDIC_UCX="$closure_ucx" \
         -DFOAMNORDIC_INPUT_KEYS="$key" \
         -DFOAMNORDIC_INPUT_EXPRESSIONS="\"$expression\"" \
+        -DFOAMNORDIC_INPUT_PATCHES="$patch" \
         -DFOAMNORDIC_OUTPUT_FIELDS="$output" \
+        -DFOAMNORDIC_OUTPUT_PATCHES="$patch" \
         -DFOAMNORDIC_PROBE_EXPRESSION="$expression" \
         -DFOAMNORDIC_PROBE_OUTPUT="$output" \
+        -DFOAMNORDIC_PROBE_PATCH="$patch" \
         -DFOAMNORDIC_PROBE_SCALE="$scale" \
         -DFOAMNORDIC_PROBE_SEED="$seed" \
         -DFOAMNORDIC_PROBE_EXPECT_FAILURE="$expect_failure" \
@@ -270,7 +274,7 @@ run_mpi_probe()
         -e "s/@NUMBER_OF_SUBDOMAINS@/$mpi_ranks/g" \
         -e 's/@DECOMPOSITION_METHOD@/scotch/g' \
         -e 's/@METHOD_COEFFICIENTS@//g' \
-        "$repository/src/foamnordic/template/openfoam/decomposeParDict.in" \
+        "$repository/tools/template/openfoam/decomposeParDict.in" \
         >"$case_dir/system/decomposeParDict"
     rm -rf "$case_dir"/processor*
     decomposePar -case "$case_dir" -force \
@@ -432,7 +436,7 @@ run_split_ucx_onnx_probe()
             -e "s/@NUMBER_OF_SUBDOMAINS@/$central_ranks/g" \
             -e 's/@DECOMPOSITION_METHOD@/scotch/g' \
             -e 's/@METHOD_COEFFICIENTS@//g' \
-            "$repository/src/foamnordic/template/openfoam/decomposeParDict.in" \
+            "$repository/tools/template/openfoam/decomposeParDict.in" \
             >"$case_dir/system/decomposeParDict"
         rm -rf "$case_dir"/processor*
         decomposePar -case "$case_dir" -force \
@@ -617,6 +621,14 @@ run_echo_probe p 1.0 "$work_dir/derived.log"
 echo "[FoamNordic] Verifying non-identity native field replacement"
 configure_probe U U U 1.005 0.25 false
 run_echo_probe U 1.005 "$work_dir/scaled.log"
+
+if [[ -n "${FOAMNORDIC_TEST_PATCH:-}" ]]; then
+    echo "[FoamNordic] Verifying boundary patch exchange"
+    configure_probe \
+        U U U 1.0 0.0 false \
+        "$FOAMNORDIC_TEST_PATCH"
+    run_echo_probe U 1.0 "$work_dir/patch.log"
+fi
 
 echo "[FoamNordic] Verifying atomic worker rejection"
 configure_probe U U U 1.0 0.25 true

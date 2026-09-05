@@ -13,29 +13,26 @@ set_target_properties(_native PROPERTIES CXX_EXTENSIONS OFF)
 install(TARGETS _native LIBRARY DESTINATION foamnordic COMPONENT Python)
 install(
     FILES
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/observation.in
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/derivedSchemes.json
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/decomposeParDict.in
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/fjordExchange.in
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/turbulenceProperties.fjord.in
+        ${PROJECT_SOURCE_DIR}/tools/template/openfoam/observation.in
+        ${PROJECT_SOURCE_DIR}/tools/template/openfoam/derivedSchemes.json
+        ${PROJECT_SOURCE_DIR}/tools/template/openfoam/decomposeParDict.in
+        ${PROJECT_SOURCE_DIR}/tools/template/openfoam/fjordExchange.in
+        ${PROJECT_SOURCE_DIR}/tools/template/openfoam/closureBody.in
+        ${PROJECT_SOURCE_DIR}/tools/template/openfoam/turbulenceProperties.fjord.in
     DESTINATION foamnordic/templates/openfoam
     COMPONENT Python)
 install(
-    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/model-adapter
+    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/template/openfoam/model-adapter
     DESTINATION foamnordic/templates/openfoam
     COMPONENT Python)
 install(
-    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/combustion-model
-    DESTINATION foamnordic/templates/openfoam
-    COMPONENT Python)
-install(
-    FILES ${PROJECT_SOURCE_DIR}/src/foamnordic/template/large_banner.txt
+    FILES ${PROJECT_SOURCE_DIR}/tools/template/large_banner.txt
     DESTINATION foamnordic/templates
     COMPONENT Python)
 install(
     FILES
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/slurm/sailing.sbatch.in
-        ${PROJECT_SOURCE_DIR}/src/foamnordic/template/slurm/submit.sh.in
+        ${PROJECT_SOURCE_DIR}/tools/template/slurm/sailing.sbatch.in
+        ${PROJECT_SOURCE_DIR}/tools/template/slurm/submit.sh.in
     DESTINATION foamnordic/templates/slurm
     COMPONENT Python)
 
@@ -87,13 +84,6 @@ install(
 install(
     DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/openfoam
     DESTINATION foamnordic/buildkit/src/foamnordic
-    COMPONENT Python
-    PATTERN "linux*" EXCLUDE
-    PATTERN "darwin*" EXCLUDE
-    PATTERN "lnInclude" EXCLUDE)
-install(
-    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/openfoam/progressVariableFoam
-    DESTINATION foamnordic/buildkit/tools/openfoam
     COMPONENT Python
     PATTERN "linux*" EXCLUDE
     PATTERN "darwin*" EXCLUDE

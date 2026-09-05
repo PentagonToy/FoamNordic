@@ -459,9 +459,14 @@ result = run.stop(force=False)
 group or issues Slurm `scancel KILL`, then returns the resulting cancelled
 state. There is no separate public `wait()` or `raise_for_status()` step.
 
-An orderly Python or Jupyter shutdown performs best-effort cleanup of owned
-workloads. `run.detach()` explicitly allows a job to outlive that kernel.
-Abrupt process death and node loss cannot guarantee cleanup.
+An orderly Python or Jupyter shutdown performs immediate best-effort cleanup
+of owned workloads. Scheduled runs also retain an ownership pipe: if the
+Python process disappears through OOM, `SIGKILL`, or another abnormal exit,
+the submission wrapper waits 30 seconds and then issues `scancel`. Set
+`launch(orphan_timeout=SECONDS)` to change that abnormal-exit grace; zero
+cancels immediately. `run.detach()` explicitly releases the pipe and allows a
+job to outlive that kernel. A login-node failure can still prevent its local
+watchdog from issuing the cancellation.
 
 `result.summary(style="short")` and `"compact"` display Job ID, Name, Status,
 Partition, Node, and Elapsed through Onsaemiro. `"long"` and `"expanded"` also

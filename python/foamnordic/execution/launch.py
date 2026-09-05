@@ -324,12 +324,15 @@ def launch(
     *,
     readiness_timeout: float = 120.0,
     termination_grace: float = 30.0,
+    orphan_timeout: float = 30.0,
     verbose: bool = True,
 ) -> Run:
     """Compile, prepare, and start one non-blocking coupled workload."""
 
     if readiness_timeout <= 0 or termination_grace <= 0:
         raise ValueError("lifecycle timeouts must be positive")
+    if orphan_timeout < 0:
+        raise ValueError("orphan_timeout must not be negative")
     validate_case(longship)
     plan = longship.compile()
     runtime = plan.as_dict()["runtime"]
@@ -426,4 +429,5 @@ def launch(
         force_cancel=lambda: force_cancel(work_dir),
         observation_sources=longship.case.ranks,
         environment=_submission_environment(),
+        orphan_timeout=orphan_timeout,
     )

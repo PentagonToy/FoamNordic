@@ -88,8 +88,8 @@ void CellInferenceExchange::begin(
     if (has_previous_exchange_ && exchange_index <= previous_exchange_index_) {
         throw std::invalid_argument("Model exchange indices must increase monotonically.");
     }
-    if (!std::isfinite(physical_time) || cell_count == 0) {
-        throw std::invalid_argument("Model exchange time and cell count are invalid.");
+    if (!std::isfinite(physical_time)) {
+        throw std::invalid_argument("Model exchange time must be finite.");
     }
     exchange_index_ = exchange_index;
     physical_time_ = physical_time;

@@ -168,7 +168,7 @@ def _prepare_sources(root: Path, source: Path, end_time: float) -> dict[str, Pat
         )
         if model == "kEqn":
             shutil.copyfile(
-                repository / "src/foamnordic/template/openfoam/k.cavity.in",
+                repository / "tools/template/openfoam/k.cavity.in",
                 destination / "0/k",
             )
             _foam_set(

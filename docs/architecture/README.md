@@ -8,7 +8,7 @@ components own every repeated field exchange.
 Python declaration
     -> immutable execution plan
     -> Longship lifecycle
-    -> OpenFOAM adapter <-> Fjord transport <-> ModelHost
+    -> OpenFOAM adapter <-> Fjord transport <-> ModelHost Smedja
     -> Result and observations
 ```
 
@@ -20,12 +20,12 @@ Python declaration
 | Longship | placement, startup, readiness, shutdown, logs | equations and model semantics |
 | OpenFOAM adapter | field selection, equation hook, result commit | model loading and scheduling |
 | Fjord | versioned tensor transport | OpenFOAM or ML objects |
-| ModelHost | FNOM loading and inference | solver state |
+| ModelHost Smedja | request-local packing, FNOM loading, and inference | solver state and persistent OpenFOAM pointers |
 | Solver/model adapter | equations, correction order, thermodynamics | orchestration |
 
-This boundary also applies to combustion. A solver transports progress,
-variance, enthalpy, or mixture-fraction fields; FoamNordic evaluates a declared
-source or manifold; a thin solver adapter validates and commits the result.
+This boundary also applies to domain solvers. A solver owns its transported
+variables and equations; FoamNordic evaluates a declared model; a thin solver
+adapter validates and commits the result.
 
 ## Control and data planes
 
@@ -62,9 +62,8 @@ backend-neutral.
 | [Native transport](transport.md) | Rune, Fjord, Harbor, UDS, SHM, TCP, UCX, and MPI layout |
 | [FNOM](fnom.md) | Artifact encoding, compatibility, preprocessing, and trust |
 | [OpenFOAM integration](openfoam.md) | Field bridge, equation adapters, and native build contract |
-| [Combustion](combustion.md) | Progress-variable and manifold ownership and acceptance gates |
 | [Lifecycle](lifecycle.md) | Node-local placement, resource plans, startup, and shutdown |
-| [Observations](observations-and-retention.md) | Monitoring, reduction, retention, and backpressure |
+| [Observations](observations.md) | Monitoring, reduction, retention, and backpressure |
 
 Measured behavior belongs in [benchmarks and validation](../benchmarks/README.md),
 not in architecture promises.

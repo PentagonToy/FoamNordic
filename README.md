@@ -6,8 +6,8 @@
 
 FoamNordic couples OpenFOAM fields to mathematical and machine-learning
 operators without making Python part of the solver loop. The same `Longship`
-interface runs an unchanged OpenFOAM case, a field transform, an equation-level
-closure, or a progress-variable combustion model.
+interface runs an unchanged OpenFOAM case, a field transform, or an
+equation-level closure supplied by any compatible solver adapter.
 
 FNOM is FoamNordic's self-contained model artifact. It stores the executable
 payload together with tensor contracts, scaling, runtime requirements, and
@@ -96,8 +96,9 @@ environment.
 ## Couple a model or function
 
 `Transform` mutates ordinary registered fields at a solver stage. `Closure`
-enters an equation-specific adapter such as `nutFjord`, `kEqnFjord`, or
-`reactionRateFjord`.
+enters an equation-specific adapter. FoamNordic ships generic field hooks and
+two LES adapters (`nutFjord` and `kEqnFjord`) as integration examples; domain
+solvers own their conservation equations and physical closure semantics.
 
 ```python
 transform = fno.Transform(

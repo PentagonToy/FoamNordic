@@ -25,6 +25,7 @@ from .run import (
     _sailing_paths,
 )
 from .shell import quote_command, toolchain_shell
+from .templates import render as render_template
 
 if TYPE_CHECKING:
     from ..core.spec import Closure, Longship, Transform
@@ -36,12 +37,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def validate_case(longship: Longship) -> None:
     closures = longship.closure_programs
     programs = longship.field_programs
-    if longship.combustion is not None and longship.case.integration is not None:
-        raise ValueError(
-            "progress-variable combustion owns constant/combustionProperties; "
-            "do not also pass an OpenFOAM integration template"
-        )
-    if longship.combustion is None and len(closures) > 1:
+    if len(closures) > 1:
         raise NotImplementedError(
             "one solver closure may be active at a time; use multiple Transform "
             "programs for independent field exchanges"
@@ -113,6 +109,11 @@ def _validate_observation_fields(longship: Longship) -> None:
         "volSphericalTensorField",
         "volSymmTensorField",
         "volTensorField",
+        "surfaceScalarField",
+        "surfaceVectorField",
+        "surfaceSphericalTensorField",
+        "surfaceSymmTensorField",
+        "surfaceTensorField",
     }
     available = {
         name
@@ -143,7 +144,7 @@ def _default_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/turbulenceProperties.fjord.in"
+        / "tools/template/openfoam/turbulenceProperties.fjord.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -156,7 +157,7 @@ def _observation_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/observation.in"
+        / "tools/template/openfoam/observation.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -169,7 +170,7 @@ def _transform_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/fjordExchange.in"
+        / "tools/template/openfoam/fjordExchange.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -184,7 +185,7 @@ def _decomposition_template() -> str:
         return packaged.read_text(encoding="utf-8")
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/decomposeParDict.in"
+        / "tools/template/openfoam/decomposeParDict.in"
     )
     if source.is_file():
         return source.read_text(encoding="utf-8")
@@ -215,51 +216,18 @@ def _prepare_decomposition(path: Path, ranks: int) -> bool:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        _decomposition_template()
-        .replace("@NUMBER_OF_SUBDOMAINS@", str(ranks))
-        .replace("@DECOMPOSITION_METHOD@", "scotch")
-        .replace("@METHOD_COEFFICIENTS@", ""),
+        render_template(
+            _decomposition_template(),
+            {
+                "NUMBER_OF_SUBDOMAINS": ranks,
+                "DECOMPOSITION_METHOD": "scotch",
+                "METHOD_COEFFICIENTS": "",
+            },
+            kind="OpenFOAM decomposition",
+        ),
         encoding="utf-8",
     )
     return True
-
-
-def _combustion_template() -> str:
-    source = (
-        _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/combustion-model"
-        / "progressVariableFjordProperties.in"
-    )
-    if source.is_file():
-        return source.read_text(encoding="utf-8")
-    relative = (
-        "templates/openfoam/combustion-model/"
-        "progressVariableFjordProperties.in"
-    )
-    packaged = files("foamnordic").joinpath(relative)
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
-    raise RuntimeError("FoamNordic combustion dictionary template is unavailable")
-
-
-def _combustion_transport_template() -> str:
-    source = (
-        _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/combustion-model"
-        / "progressVariableTransportProperties.in"
-    )
-    if source.is_file():
-        return source.read_text(encoding="utf-8")
-    relative = (
-        "templates/openfoam/combustion-model/"
-        "progressVariableTransportProperties.in"
-    )
-    packaged = files("foamnordic").joinpath(relative)
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
-    raise RuntimeError(
-        "FoamNordic progress-variable transport template is unavailable"
-    )
 
 
 def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
@@ -268,7 +236,7 @@ def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
     )
     source = (
         _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/derivedSchemes.json"
+        / "tools/template/openfoam/derivedSchemes.json"
     )
     path = packaged if packaged.is_file() else source
     if not path.is_file():
@@ -342,10 +310,9 @@ def _observation_block(longship: Longship, path: Path) -> str:
         "FOAMNORDIC_OBSERVATION_MAX_BYTES": 256 * 1024,
         "FOAMNORDIC_OBSERVATION_OVERFLOW": "dropOldest",
     }
-    rendered = _observation_template()
-    for name, value in values.items():
-        rendered = rendered.replace(f"@{name}@", str(value))
-    return rendered.strip()
+    return render_template(
+        _observation_template(), values, kind="OpenFOAM observation"
+    ).strip()
 
 
 def _expression(value: object) -> str:
@@ -368,10 +335,16 @@ def _closure_values(
         "FOAMNORDIC_INPUT_EXPRESSIONS": "\n                ".join(
             _expression(value) for value in closure.inputs.values()
         ),
+        "FOAMNORDIC_INPUT_PATCHES": "\n                ".join(
+            value.patch_name or "none" for value in closure.inputs.values()
+        ),
         "FOAMNORDIC_OUTPUT_FIELDS": "\n                ".join(
             str(value.field_name) for value in closure.outputs.values()
         ),
         "FOAMNORDIC_OUTPUT_KEYS": "\n                ".join(closure.outputs),
+        "FOAMNORDIC_OUTPUT_PATCHES": "\n                ".join(
+            value.patch_name or "none" for value in closure.outputs.values()
+        ),
         "FOAMNORDIC_OBSERVATION_BLOCK": observation,
     }
 
@@ -382,133 +355,16 @@ def _closure_body(
     shared: bool,
     observation: str = "",
 ) -> str:
-    values = _closure_values(closure, address, shared, observation)
-    return f'''address          "{values["FOAMNORDIC_ADDRESS"]}";
-        sessionId        1;
-        sharedMemory     {values["FOAMNORDIC_SHARED_MEMORY"]};
-        ucx              false;
-
-        inputs
-        (
-                {values["FOAMNORDIC_INPUT_KEYS"]}
-        );
-
-        inputExpressions
-        (
-                {values["FOAMNORDIC_INPUT_EXPRESSIONS"]}
-        );
-
-        outputs
-        (
-                {values["FOAMNORDIC_OUTPUT_FIELDS"]}
-        );
-
-        outputKeys
-        (
-                {values["FOAMNORDIC_OUTPUT_KEYS"]}
-        );
-
-        {values["FOAMNORDIC_OBSERVATION_BLOCK"]}'''.strip()
-
-
-def _dimensions(value: object) -> str:
-    if not isinstance(value, (str, bytes)):
-        try:
-            exponents = tuple(value)
-        except TypeError:
-            exponents = ()
-        if len(exponents) == 7 and all(
-            isinstance(item, (int, float)) for item in exponents
-        ):
-            return "[" + " ".join(str(item) for item in exponents) + "]"
-    text = str(value).strip()
-    numbers = re.findall(
-        r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text
-    )
-    if len(numbers) != 7:
-        raise ValueError(
-            "reaction-rate field dimensions must contain seven OpenFOAM "
-            f"exponents, got {value!r}"
-        )
-    return "[" + " ".join(numbers) + "]"
-
-
-def render_combustion_dictionary(
-    longship: Longship,
-    reaction_rate: Closure,
-    manifold: Closure,
-    reaction_address: str,
-    manifold_address: str,
-    shared: bool,
-    observation_path: Path | None = None,
-) -> tuple[Path, str]:
-    combustion = longship.combustion
-    if combustion is None:
-        raise ValueError("a progress-variable combustion declaration is required")
-    source = reaction_rate.outputs["reaction_rate"]
-    assert source.field_name is not None
-    progress = reaction_rate.inputs["progress"]
-    if progress.operation != "field" or progress.field_name is None:
-        raise ValueError("reaction-rate progress input must bind to a scalar field")
-    progress_metadata = longship.case.field(progress.field_name)
-    if progress_metadata.field_class != "volScalarField":
-        raise ValueError("reaction-rate progress input must be a volScalarField")
-    metadata = longship.case.field(source.field_name)
-    if metadata.field_class != "volScalarField":
-        raise ValueError("reaction-rate output must be a volScalarField")
-    observation = (
-        ""
-        if observation_path is None
-        else _observation_block(longship, observation_path)
-    )
-    values = {
-        "PROGRESS_FIELD": progress.field_name,
-        "REACTION_RATE_FIELD": source.field_name,
-        "REACTION_RATE_DIMENSIONS": _dimensions(metadata.dimensions),
-        "REACTION_RATE_BASIS": {
-            "volumetric_mass": "volumetricMass",
-            "specific": "specific",
-        }[combustion.coupling.reaction_rate_basis],
-        "CORRECT_THERMO": str(combustion.coupling.thermo_correction).lower(),
-        "REACTION_RATE_CLOSURE": _closure_body(
-            reaction_rate, reaction_address, shared
-        ),
-        "MANIFOLD_CLOSURE": _closure_body(
-            manifold, manifold_address, shared, observation
-        ),
-    }
-    rendered = _combustion_template()
-    for name, value in values.items():
-        rendered = rendered.replace(f"@{name}@", str(value))
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved combustion template variables: {unresolved}")
-    return Path("constant/combustionProperties"), rendered
-
-
-def render_combustion_transport_dictionary(
-    longship: Longship,
-    reaction_rate: Closure,
-) -> tuple[Path, str]:
-    """Render the portable scalar-transport defaults for the reference solver."""
-
-    if longship.combustion is None:
-        raise ValueError("a progress-variable combustion declaration is required")
-    variance = reaction_rate.inputs["variance"]
-    if variance.operation != "field" or variance.field_name is None:
-        raise ValueError("reaction-rate variance input must bind to a scalar field")
-    metadata = longship.case.field(variance.field_name)
-    if metadata.field_class != "volScalarField":
-        raise ValueError("reaction-rate variance input must be a volScalarField")
-    rendered = _combustion_transport_template().replace(
-        "@VARIANCE_FIELD@", variance.field_name
-    )
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(
-            f"unresolved combustion transport variables: {unresolved}"
-        )
-    return Path("constant/progressVariableTransportProperties"), rendered
+    packaged = files("foamnordic").joinpath("templates/openfoam/closureBody.in")
+    source = _REPOSITORY_ROOT / "tools/template/openfoam/closureBody.in"
+    path = packaged if packaged.is_file() else source
+    if not path.is_file():
+        raise RuntimeError("FoamNordic closure-body template is unavailable")
+    return render_template(
+        path.read_text(encoding="utf-8"),
+        _closure_values(closure, address, shared, observation),
+        kind="OpenFOAM closure body",
+    ).strip()
 
 
 def render_dictionary(
@@ -547,6 +403,18 @@ def render_dictionary(
             "an integration template with logical output names must place "
             "@FOAMNORDIC_OUTPUT_KEYS@ beside @FOAMNORDIC_OUTPUT_FIELDS@"
         )
+    selected_patches = any(
+        value.patch_name is not None
+        for value in (*closure.inputs.values(), *closure.outputs.values())
+    )
+    if selected_patches and (
+        "@FOAMNORDIC_INPUT_PATCHES@" not in template
+        or "@FOAMNORDIC_OUTPUT_PATCHES@" not in template
+    ):
+        raise ValueError(
+            "an integration template with patch fields must place both "
+            "@FOAMNORDIC_INPUT_PATCHES@ and @FOAMNORDIC_OUTPUT_PATCHES@"
+        )
     variables = {
         "FOAMNORDIC_MODEL": closure.name,
         "FOAMNORDIC_MODEL_CONFIGURATION": model_configuration,
@@ -560,12 +428,7 @@ def render_dictionary(
         ),
         **custom,
     }
-    rendered = template
-    for name, value in variables.items():
-        rendered = rendered.replace(f"@{name}@", value)
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved OpenFOAM template variables: {unresolved}")
+    rendered = render_template(template, variables, kind="OpenFOAM")
     return destination, rendered
 
 
@@ -599,19 +462,21 @@ def render_transform_dictionary(
         "INPUT_FIELDS": " ".join(
             str(value.field_name) for value in transform.inputs.values()
         ),
+        "INPUT_PATCHES": " ".join(
+            value.patch_name or "none" for value in transform.inputs.values()
+        ),
         "OUTPUT_KEYS": " ".join(transform.outputs),
         "OUTPUT_FIELDS": " ".join(
             str(value.field_name) for value in transform.outputs.values()
         ),
+        "OUTPUT_PATCHES": " ".join(
+            value.patch_name or "none" for value in transform.outputs.values()
+        ),
         "FOAMNORDIC_OBSERVATION_BLOCK": observation_block,
     }
-    rendered = _transform_template()
-    for name, value in values.items():
-        rendered = rendered.replace(f"@{name}@", str(value))
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved OpenFOAM transform variables: {unresolved}")
-    return rendered.strip()
+    return render_template(
+        _transform_template(), values, kind="OpenFOAM transform"
+    ).strip()
 
 
 _FIELD_LAYOUTS = {
@@ -620,6 +485,11 @@ _FIELD_LAYOUTS = {
     "volSphericalTensorField": "spherical_tensor",
     "volSymmTensorField": "symm_tensor",
     "volTensorField": "tensor",
+    "surfaceScalarField": "scalar",
+    "surfaceVectorField": "vector",
+    "surfaceSphericalTensorField": "spherical_tensor",
+    "surfaceSymmTensorField": "symm_tensor",
+    "surfaceTensorField": "tensor",
 }
 
 
@@ -946,39 +816,17 @@ def prepare_case(
     if longship.observations:
         observations.mkdir(parents=True, exist_ok=True)
     if closures:
-        if longship.combustion is None:
-            closure_runtime = prepared[0]
-            destination, contents = render_dictionary(
-                longship,
-                closures[0],
-                f"unix://{closure_runtime.socket}",
-                longship.placement.data_path != "uds",
-                observations / "observations.{rank}.jsonl",
-            )
-        else:
-            destination, contents = render_combustion_dictionary(
-                longship,
-                closures[0],
-                closures[1],
-                f"unix://{prepared[0].socket}",
-                f"unix://{prepared[1].socket}",
-                longship.placement.data_path != "uds",
-                observations / "observations.{rank}.jsonl",
-            )
+        closure_runtime = prepared[0]
+        destination, contents = render_dictionary(
+            longship,
+            closures[0],
+            f"unix://{closure_runtime.socket}",
+            longship.placement.data_path != "uds",
+            observations / "observations.{rank}.jsonl",
+        )
         output = case_dir / destination
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(contents, encoding="utf-8")
-        if longship.combustion is not None:
-            transport_destination = (
-                case_dir / "constant/progressVariableTransportProperties"
-            )
-            if not transport_destination.exists():
-                _, transport_contents = render_combustion_transport_dictionary(
-                    longship, closures[0]
-                )
-                transport_destination.write_text(
-                    transport_contents, encoding="utf-8"
-                )
 
     transform_dictionaries: list[tuple[Transform, str]] = []
     closure_offset = len(closures)

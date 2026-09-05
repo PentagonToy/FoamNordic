@@ -45,6 +45,7 @@ class FieldExpression:
     operation: str
     field_name: str | None = None
     arguments: tuple["FieldExpression", ...] = ()
+    patch_name: str | None = None
 
     def __post_init__(self) -> None:
         operation = require_nonempty(self.operation, "operation")
@@ -59,7 +60,16 @@ class FieldExpression:
                 "field_name",
                 _field_name(self.field_name),
             )
+            if self.patch_name is not None:
+                object.__setattr__(
+                    self,
+                    "patch_name",
+                    _field_name(self.patch_name),
+                )
             return
+
+        if self.patch_name is not None:
+            raise ValueError("patch selection is only valid for stored fields")
 
         if operation == "filter_width":
             if self.field_name is not None or self.arguments:
@@ -123,6 +133,8 @@ class FieldExpression:
             value["arguments"] = [
                 argument.to_plan() for argument in self.arguments
             ]
+        if self.patch_name is not None:
+            value["patch"] = self.patch_name
         return value
 
 
@@ -157,6 +169,12 @@ def field(name: str) -> FieldExpression:
     """Bind a logical tensor to an OpenFOAM field."""
 
     return FieldExpression("field", name)
+
+
+def patch(name: str, patch_name: str) -> FieldExpression:
+    """Bind a logical tensor to one OpenFOAM boundary patch."""
+
+    return FieldExpression("field", name, patch_name=patch_name)
 
 
 def fields(pattern: str) -> FieldSelection:
@@ -212,6 +230,7 @@ class Field:
         return field(name)
 
     field = staticmethod(field)
+    patch = staticmethod(patch)
     fields = staticmethod(fields)
     grad = staticmethod(grad)
     delta = staticmethod(filter_width)

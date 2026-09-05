@@ -15,7 +15,6 @@ handling. A Python callback is never inserted into a production solver loop.
 | [Run control](run-control-api.md) | cases, closures, transforms, observations, Slurm, and lifecycle |
 | [Models and FNOM](model-artifact-api.md) | ONNX, sklearn, Equinox, preprocessing, inspection, and validation |
 | [Numerics](numerics.md) | `fno.Math`, OpenFOAM expressions, and reproducible random keys |
-| [Combustion](combustion-api.md) | progress-variable and beta-FDF declarations |
 | [Postprocessing](postprocess-api.md) | stored fields, statistics, and case comparisons |
 
 Public declarations are compiled before the solver starts. Explicit transport

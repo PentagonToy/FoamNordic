@@ -11,7 +11,10 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "foamnordic/backend/inference/artifact.hpp"
+#include "foamnordic/backend/inference/smedja.hpp"
 #include "foamnordic/backend/inference/runner.hpp"
 
 namespace foamnordic::inference {
@@ -38,18 +41,15 @@ public:
         double physical_time,
         std::uint32_t rank = 0) override;
 
+    [[nodiscard]] bool owns_backend_synchronization() const noexcept override;
+
     [[nodiscard]] const ModelArtifact& artifact() const noexcept;
 
 private:
-    [[nodiscard]] fjord::Tensor pack_inputs(
-        const TensorMap& inputs,
-        const std::vector<std::uint64_t>& active_cells,
-        std::uint64_t exchange_index,
-        double physical_time) const;
-    [[nodiscard]] TensorMap unpack_outputs(fjord::Tensor packed) const;
-
     ModelArtifact artifact_;
     PackedModelKernel& kernel_;
+    Smedja smedja_;
+    std::mutex backend_mutex_;
 };
 
 }  // namespace foamnordic::inference

@@ -55,6 +55,10 @@ bool fjordExchange::read(const dictionary& dict) {
     fvMeshFunctionObject::read(dict);
     dict.readEntry("inputs", inputs_);
     dict.readEntry("outputs", outputs_);
+    inputPatches_ = dict.getOrDefault<wordList>(
+        "inputPatches", wordList(inputs_.size(), "none"));
+    outputPatches_ = dict.getOrDefault<wordList>(
+        "outputPatches", wordList(outputs_.size(), "none"));
     inputKeys_ = dict.getOrDefault<wordList>("inputKeys", inputs_);
     outputKeys_ = dict.getOrDefault<wordList>("outputKeys", outputs_);
     dict.readEntry("address", address_);
@@ -91,7 +95,9 @@ bool fjordExchange::read(const dictionary& dict) {
     }
     if (inputs_.empty() || outputs_.empty() || sessionId_ == 0
         || inputKeys_.size() != inputs_.size()
-        || outputKeys_.size() != outputs_.size()) {
+        || outputKeys_.size() != outputs_.size()
+        || inputPatches_.size() != inputs_.size()
+        || outputPatches_.size() != outputs_.size()) {
         FatalIOErrorInFunction(dict)
             << "matching non-empty keys/fields and a positive sessionId are required"
             << exit(FatalIOError);
@@ -139,28 +145,44 @@ bool fjordExchange::exchange() {
         forAll(inputs_, index) {
             const auto& name = inputs_[index];
             const auto& key = inputKeys_[index];
-            auto view = foamNordic::inputFieldView(
-                mesh_,
-                name,
-                exchangeIndex,
-                physicalTime,
-                &inputScratch_[index]);
+            auto view = inputPatches_[index] == "none"
+                ? foamNordic::inputFieldView(
+                    mesh_,
+                    name,
+                    exchangeIndex,
+                    physicalTime,
+                    &inputScratch_[index])
+                : foamNordic::inputPatchView(
+                    mesh_,
+                    name,
+                    inputPatches_[index],
+                    exchangeIndex,
+                    physicalTime);
             view.name = key.c_str();
             inputs.emplace(key.c_str(), std::move(view));
         }
         forAll(outputs_, index) {
             const auto& name = outputs_[index];
             const auto& key = outputKeys_[index];
-            auto view = foamNordic::outputFieldView(
-                mesh_, name, exchangeIndex, physicalTime, &outputScratch_[index]);
+            auto view = outputPatches_[index] == "none"
+                ? foamNordic::outputFieldView(
+                    mesh_, name, exchangeIndex, physicalTime, &outputScratch_[index])
+                : foamNordic::outputPatchView(
+                    mesh_,
+                    name,
+                    outputPatches_[index],
+                    exchangeIndex,
+                    physicalTime);
             view.name = key.c_str();
             outputs.emplace(key.c_str(), std::move(view));
         }
         exchange_->execute(exchangeIndex, physicalTime, inputs, outputs);
         forAll(outputs_, index) {
-            foamNordic::commitOutputField(
-                mesh_, outputs_[index], &outputScratch_[index]);
-            foamNordic::correctFieldBoundary(mesh_, outputs_[index]);
+            if (outputPatches_[index] == "none") {
+                foamNordic::commitOutputField(
+                    mesh_, outputs_[index], &outputScratch_[index]);
+                foamNordic::correctFieldBoundary(mesh_, outputs_[index]);
+            }
         }
         if (observation_) {
             const auto exchangeWait = std::chrono::duration<double>(

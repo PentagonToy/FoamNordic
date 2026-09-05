@@ -11,13 +11,8 @@ EXE_INC = \
     -I$(LIB_SRC)/TurbulenceModels/compressible/lnInclude \
     -I$(LIB_SRC)/thermophysicalModels/basic/lnInclude \
     -I$(LIB_SRC)/thermophysicalModels/specie/lnInclude \
-    -I$(LIB_SRC)/thermophysicalModels/reactionThermo/lnInclude \
-    -I$(LIB_SRC)/combustionModels/lnInclude \
     -Imodels/nutFjord \
     -Imodels/kEqnFjord \
-    -Imodels/reactionRateFjord \
-    -Imodels/progressVariableFjord \
-    -Icombustion \
     -I$(FOAMNORDIC_SOURCE)/src \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
 
@@ -37,6 +32,4 @@ LIB_LIBS = \
     -lcompressibleTransportModels \
     -lcompressibleTurbulenceModels \
     -lfluidThermophysicalModels \
-    -lreactionThermophysicalModels \
-    -lspecie \
-    -lcombustionModels
+    -lspecie
