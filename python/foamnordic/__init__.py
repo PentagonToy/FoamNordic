@@ -12,6 +12,7 @@ from .core.expressions import (
     fields,
     filter_width,
     grad,
+    patch,
 )
 from .core.plan import CompiledPlan
 from .execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
@@ -71,6 +72,7 @@ __all__ = [
     "grad",
     "models",
     "openfoam",
+    "patch",
     "postprocess",
     "random",
     "runtime",

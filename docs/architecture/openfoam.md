@@ -33,12 +33,39 @@ their physical semantics.
 
 ## Field path
 
-The OpenFOAM bridge supports internal `volScalarField`, `volVectorField`,
-`volSphericalTensorField`, `volSymmTensorField`, and `volTensorField` storage.
+The OpenFOAM bridge supports internal scalar, vector, spherical-tensor,
+symmetric-tensor, and tensor storage for both volume and surface geometric
+fields.
 Inputs become read-only native views over `primitiveField()` and outputs become
 mutable views over `primitiveFieldRef()`. Python does not participate and the
 field is not copied merely to cross the OpenFOAM/closure boundary. Rune/Harbor
 transport owns any copy required by the selected channel.
+
+Boundary storage is selected explicitly rather than encoded into a field
+name. Python declarations use `Field.patch("U", "inlet")`; generated solver
+dictionaries carry aligned `inputPatches` and `outputPatches` lists. `none`
+selects internal storage. A patch view is resolved from the current mesh on
+every invocation, so moving-mesh updates cannot leave a cached boundary
+pointer in Smedja or the OpenFOAM hook. A rank on which the named patch has
+zero faces participates with a valid zero-length tensor instead of skipping
+the atomic exchange.
+
+Patch outputs are committed directly to the selected boundary storage. The
+bridge does not call whole-field `correctBoundaryConditions()` afterward,
+because that could overwrite the explicit patch result. The owning solver
+remains responsible for the subsequent boundary/equation update order.
+
+The `foamnordicOpenFOAMMovingMeshProbe` development gate constructs the
+active `dynamicFvMesh`, updates it before every closure invocation, and then
+exchanges a real boundary patch over SHM. OpenFOAM v2512 validation uses the
+official `moveDynamicMesh/twistingColumn` fixture. This proves per-invocation
+patch rebinding across geometry changes; topology-changing size variation is
+covered independently by the dynamic Smedja and chunked-SHM conformance tests.
+The v2512 MPI gate decomposes the same 32-cell fixture in the motion direction:
+the `top` patch has zero faces on rank 0 and four faces on rank 1. Both ranks
+complete three SHM exchanges after mesh updates, confirming that an empty
+rank remains in the atomic protocol rather than deadlocking or skipping a
+collective closure call.
 
 Returned tensors remain staged until `AtomicFieldExchange` validates the full
 commit. Only then are outputs copied into their solver-owned views and followed

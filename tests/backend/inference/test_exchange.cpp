@@ -141,10 +141,31 @@ void test_in_place_field_contract() {
     require(rejected, "Duplicate fields within one direction were accepted.");
 }
 
+void test_empty_rank_local_field_is_a_valid_exchange() {
+    foamnordic::inference::CellInferenceExchange exchange({
+        "empty-patch",
+        {{"patch", Element::float64, 1}},
+        {{"result", Element::float64, 1}},
+    });
+    exchange.begin(7, 0.5, 0);
+    exchange.add_input(scalar_field("patch", {}, 7, 0.5));
+    exchange.seal_inputs();
+    foamnordic::inference::EvaluateAllCells policy;
+    require(
+        exchange.prepare(policy).empty(),
+        "An empty rank-local patch produced active cells.");
+    exchange.add_output(scalar_field("result", {}, 7, 0.5));
+    exchange.seal_outputs(policy);
+    require(
+        exchange.finish().at("result").bytes.empty(),
+        "An empty rank-local output gained payload bytes.");
+}
+
 }  // namespace
 
 int main() {
     test_combustion_bypass();
     test_incomplete_exchange_is_rejected();
     test_in_place_field_contract();
+    test_empty_rank_local_field_is_a_valid_exchange();
 }

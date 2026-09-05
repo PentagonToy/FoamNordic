@@ -24,15 +24,26 @@ inputExpressions
     @FOAMNORDIC_INPUT_EXPRESSIONS@
 );
 
+inputPatches
+(
+    @FOAMNORDIC_INPUT_PATCHES@
+);
+
 // Solver-owned fields replaced only after a complete atomic response.
 outputs
 (
     @FOAMNORDIC_OUTPUT_FIELDS@
 );
 
+outputPatches
+(
+    @FOAMNORDIC_OUTPUT_PATCHES@
+);
+
 // Development probe reference; production model adapters ignore these keys.
 probeExpression  "@FOAMNORDIC_PROBE_EXPRESSION@";
 probeOutput      @FOAMNORDIC_PROBE_OUTPUT@;
+probePatch       @FOAMNORDIC_PROBE_PATCH@;
 probeScale       @FOAMNORDIC_PROBE_SCALE@;
 probeSeed        @FOAMNORDIC_PROBE_SEED@;
 probeExpectFailure @FOAMNORDIC_PROBE_EXPECT_FAILURE@;

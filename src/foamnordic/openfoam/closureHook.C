@@ -25,9 +25,15 @@ std::vector<ClosureInput> ClosureHook::readInputs(const dictionary& dict) {
     const auto names = dict.get<wordList>("inputs");
     const auto expressions = dict.getOrDefault<List<string>>(
         "inputExpressions", List<string>());
+    const auto patches = dict.getOrDefault<wordList>(
+        "inputPatches", wordList());
     if (!expressions.empty() && expressions.size() != names.size()) {
         throw std::invalid_argument(
             "FoamNordic inputExpressions must have the same length as inputs.");
+    }
+    if (!patches.empty() && patches.size() != names.size()) {
+        throw std::invalid_argument(
+            "FoamNordic inputPatches must have the same length as inputs.");
     }
 
     std::vector<ClosureInput> result;
@@ -43,7 +49,16 @@ std::vector<ClosureInput> ClosureHook::readInputs(const dictionary& dict) {
                 "FoamNordic closure input keys and expressions must be "
                 "non-empty, with unique keys.");
         }
-        result.push_back({key, expression});
+        const word patch = patches.empty() || patches[index] == "none"
+            ? word()
+            : patches[index];
+        if (!patch.empty()
+            && expression.find_first_of("(),") != std::string::npos) {
+            throw std::invalid_argument(
+                "FoamNordic patch inputs must name a stored field, not a "
+                "derived expression.");
+        }
+        result.push_back({key, expression, patch});
     }
     if (result.empty()) {
         throw std::invalid_argument(
@@ -55,6 +70,8 @@ std::vector<ClosureInput> ClosureHook::readInputs(const dictionary& dict) {
 std::vector<ClosureOutput> ClosureHook::readOutputs(const dictionary& dict) {
     const auto fields = dict.get<wordList>("outputs");
     const auto keys = dict.getOrDefault<wordList>("outputKeys", wordList());
+    const auto patches = dict.getOrDefault<wordList>(
+        "outputPatches", wordList());
     if (fields.empty()) {
         throw std::invalid_argument(
             "FoamNordic closure requires at least one output field.");
@@ -62,6 +79,10 @@ std::vector<ClosureOutput> ClosureHook::readOutputs(const dictionary& dict) {
     if (!keys.empty() && keys.size() != fields.size()) {
         throw std::invalid_argument(
             "FoamNordic outputKeys must have the same length as outputs.");
+    }
+    if (!patches.empty() && patches.size() != fields.size()) {
+        throw std::invalid_argument(
+            "FoamNordic outputPatches must have the same length as outputs.");
     }
     std::vector<ClosureOutput> result;
     result.reserve(fields.size());
@@ -73,7 +94,10 @@ std::vector<ClosureOutput> ClosureHook::readOutputs(const dictionary& dict) {
             throw std::invalid_argument(
                 "FoamNordic closure output keys must be non-empty and unique.");
         }
-        result.push_back({key, fields[index]});
+        const word patch = patches.empty() || patches[index] == "none"
+            ? word()
+            : patches[index];
+        result.push_back({key, fields[index], patch});
     }
     return result;
 }
@@ -122,10 +146,23 @@ std::uint64_t ClosureHook::invoke(
     }
     auto invocation = session_.begin(time);
     for (const auto& input : inputs_) {
-        frame.provide(invocation, input.key, input.expression);
+        if (input.patch.empty()) {
+            frame.provide(invocation, input.key, input.expression);
+        } else {
+            auto view = inputPatchView(
+                mesh,
+                word(input.expression),
+                input.patch,
+                0,
+                0.0);
+            view.name = input.key;
+            invocation.provide(std::move(view));
+        }
     }
     for (const auto& output : outputs_) {
-        auto view = outputFieldView(mesh, output.field, 0, 0.0);
+        auto view = output.patch.empty()
+            ? outputFieldView(mesh, output.field, 0, 0.0)
+            : outputPatchView(mesh, output.field, output.patch, 0, 0.0);
         view.name = output.key;
         invocation.receive(std::move(view));
     }
@@ -135,7 +172,9 @@ std::uint64_t ClosureHook::invoke(
     const auto closureWait = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - closureStarted).count();
     for (const auto& output : outputs_) {
-        correctFieldBoundary(mesh, output.field);
+        if (output.patch.empty()) {
+            correctFieldBoundary(mesh, output.field);
+        }
     }
     if (observation_) {
         observation_->publish(mesh, time, exchangeIndex, closureWait);

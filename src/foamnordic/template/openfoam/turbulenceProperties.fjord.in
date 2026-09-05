@@ -41,6 +41,11 @@ LES
                 @FOAMNORDIC_INPUT_EXPRESSIONS@
             );
 
+            inputPatches
+            (
+                @FOAMNORDIC_INPUT_PATCHES@
+            );
+
             outputs
             (
                 @FOAMNORDIC_OUTPUT_FIELDS@
@@ -49,6 +54,11 @@ LES
             outputKeys
             (
                 @FOAMNORDIC_OUTPUT_KEYS@
+            );
+
+            outputPatches
+            (
+                @FOAMNORDIC_OUTPUT_PATCHES@
             );
 
             @FOAMNORDIC_OBSERVATION_BLOCK@

@@ -26,6 +26,16 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   Smedja packing, with a specialized three-scalar float64-to-float32 path.
 - Verified that changing payload sizes, including tensors larger than one SHM
   slot, stream through one session without unsafe shared-region replacement.
+- Added internal surface-field dispatch alongside the existing volume-field
+  bridge and accepted zero-cell rank-local exchanges as valid no-op batches.
+- Added first-class boundary-patch metadata for closures and transforms.
+  Patch storage is rebound from the current mesh for every invocation, empty
+  rank-local patches remain valid, and explicit patch outputs are not replaced
+  by an implicit whole-field boundary correction.
+- Added an OpenFOAM `dynamicFvMesh` conformance probe that updates the mesh
+  before each patch exchange and verifies repeated rank-local SHM rebinding.
+- Verified the moving-mesh probe under MPI with a zero-face patch on one rank
+  and a non-empty copy of the same patch on its peer.
 - Fixed fresh `foamnordic build --without-onnx` installations by building the
   always-installed native inference core independently of the ONNX ModelHost.
 

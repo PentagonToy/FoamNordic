@@ -815,6 +815,23 @@ class PlanTests(unittest.TestCase):
         self.assertIn("outputs         (U);", rendered)
         self.assertEqual(transform.to_plan()["key"]["entropy"], [7, 0])
 
+    def test_transform_renders_patch_selection_separately_from_fields(self) -> None:
+        transform = fno.Transform(
+            name="patchVelocity",
+            operator=fno.Operator.model("velocity.fnom"),
+            inputs={"velocity": fno.Field.patch("U", "inlet")},
+            outputs={"velocity": fno.Field.patch("U", "outlet")},
+        )
+        rendered = render_transform_dictionary(
+            transform,
+            "unix:///tmp/transform.sock",
+            True,
+        )
+        self.assertIn("inputs          (U);", rendered)
+        self.assertIn("inputPatches    (inlet);", rendered)
+        self.assertIn("outputs         (U);", rendered)
+        self.assertIn("outputPatches   (outlet);", rendered)
+
     def test_transform_declares_all_solver_stages_without_aliasing_them(self) -> None:
         expected = {
             "time_step_start": "timeStepStart",
@@ -880,6 +897,33 @@ class PlanTests(unittest.TestCase):
         self.assertIn('"div(phi,U)"', rendered)
         self.assertIn('"laplacian(nu,U)"', rendered)
         self.assertIn('"dev(symm(grad(U)))"', rendered)
+
+    def test_boundary_patches_are_first_class_closure_metadata(self) -> None:
+        example = example_longship()
+        inlet = fno.Field.patch("U", "inlet")
+        outlet = fno.Field.patch("U", "outlet")
+        closure = fno.Closure(
+            name="patchVelocity",
+            artifact="patch.fnom",
+            inputs={"inlet_velocity": inlet},
+            outputs={"outlet_velocity": outlet},
+        )
+        _, rendered = render_dictionary(
+            fno.Longship(case=example.case, closures=(closure,)),
+            closure,
+            "unix:///tmp/patch.sock",
+            True,
+        )
+        self.assertEqual(
+            inlet.to_plan(),
+            {"operation": "field", "field": "U", "patch": "inlet"},
+        )
+        self.assertRegex(rendered, r"inputPatches\s*\(\s*inlet\s*\)")
+        self.assertRegex(rendered, r"outputPatches\s*\(\s*outlet\s*\)")
+
+    def test_patch_selection_rejects_derived_operations(self) -> None:
+        with self.assertRaisesRegex(ValueError, "only valid for stored fields"):
+            fno.FieldExpression("grad", "U", patch_name="inlet")
 
     def test_python_artifact_selects_managed_resident_automatically(self) -> None:
         example = example_longship()

@@ -33,11 +33,13 @@ class OperationFrame;
 struct ClosureInput final {
     std::string key;
     std::string expression;
+    word patch;
 };
 
 struct ClosureOutput final {
     std::string key;
     word field;
+    word patch;
 };
 
 class ClosureHook final {

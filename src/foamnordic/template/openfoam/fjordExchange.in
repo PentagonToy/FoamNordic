@@ -15,8 +15,10 @@
 
     inputKeys       (@INPUT_KEYS@);
     inputs          (@INPUT_FIELDS@);
+    inputPatches    (@INPUT_PATCHES@);
     outputKeys      (@OUTPUT_KEYS@);
     outputs         (@OUTPUT_FIELDS@);
+    outputPatches   (@OUTPUT_PATCHES@);
 
     @FOAMNORDIC_OBSERVATION_BLOCK@
 }

@@ -39,8 +39,10 @@ namespace Foam::functionObjects {
 class fjordExchange final : public fvMeshFunctionObject {
     wordList inputKeys_;
     wordList inputs_;
+    wordList inputPatches_;
     wordList outputKeys_;
     wordList outputs_;
+    wordList outputPatches_;
     string address_;
     bool sharedMemory_{true};
     bool ucx_{false};

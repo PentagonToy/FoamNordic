@@ -108,6 +108,11 @@ def _validate_observation_fields(longship: Longship) -> None:
         "volSphericalTensorField",
         "volSymmTensorField",
         "volTensorField",
+        "surfaceScalarField",
+        "surfaceVectorField",
+        "surfaceSphericalTensorField",
+        "surfaceSymmTensorField",
+        "surfaceTensorField",
     }
     available = {
         name
@@ -325,10 +330,16 @@ def _closure_values(
         "FOAMNORDIC_INPUT_EXPRESSIONS": "\n                ".join(
             _expression(value) for value in closure.inputs.values()
         ),
+        "FOAMNORDIC_INPUT_PATCHES": "\n                ".join(
+            value.patch_name or "none" for value in closure.inputs.values()
+        ),
         "FOAMNORDIC_OUTPUT_FIELDS": "\n                ".join(
             str(value.field_name) for value in closure.outputs.values()
         ),
         "FOAMNORDIC_OUTPUT_KEYS": "\n                ".join(closure.outputs),
+        "FOAMNORDIC_OUTPUT_PATCHES": "\n                ".join(
+            value.patch_name or "none" for value in closure.outputs.values()
+        ),
         "FOAMNORDIC_OBSERVATION_BLOCK": observation,
     }
 
@@ -355,6 +366,11 @@ def _closure_body(
                 {values["FOAMNORDIC_INPUT_EXPRESSIONS"]}
         );
 
+        inputPatches
+        (
+                {values["FOAMNORDIC_INPUT_PATCHES"]}
+        );
+
         outputs
         (
                 {values["FOAMNORDIC_OUTPUT_FIELDS"]}
@@ -363,6 +379,11 @@ def _closure_body(
         outputKeys
         (
                 {values["FOAMNORDIC_OUTPUT_KEYS"]}
+        );
+
+        outputPatches
+        (
+                {values["FOAMNORDIC_OUTPUT_PATCHES"]}
         );
 
         {values["FOAMNORDIC_OBSERVATION_BLOCK"]}'''.strip()
@@ -403,6 +424,18 @@ def render_dictionary(
         raise ValueError(
             "an integration template with logical output names must place "
             "@FOAMNORDIC_OUTPUT_KEYS@ beside @FOAMNORDIC_OUTPUT_FIELDS@"
+        )
+    selected_patches = any(
+        value.patch_name is not None
+        for value in (*closure.inputs.values(), *closure.outputs.values())
+    )
+    if selected_patches and (
+        "@FOAMNORDIC_INPUT_PATCHES@" not in template
+        or "@FOAMNORDIC_OUTPUT_PATCHES@" not in template
+    ):
+        raise ValueError(
+            "an integration template with patch fields must place both "
+            "@FOAMNORDIC_INPUT_PATCHES@ and @FOAMNORDIC_OUTPUT_PATCHES@"
         )
     variables = {
         "FOAMNORDIC_MODEL": closure.name,
@@ -456,9 +489,15 @@ def render_transform_dictionary(
         "INPUT_FIELDS": " ".join(
             str(value.field_name) for value in transform.inputs.values()
         ),
+        "INPUT_PATCHES": " ".join(
+            value.patch_name or "none" for value in transform.inputs.values()
+        ),
         "OUTPUT_KEYS": " ".join(transform.outputs),
         "OUTPUT_FIELDS": " ".join(
             str(value.field_name) for value in transform.outputs.values()
+        ),
+        "OUTPUT_PATCHES": " ".join(
+            value.patch_name or "none" for value in transform.outputs.values()
         ),
         "FOAMNORDIC_OBSERVATION_BLOCK": observation_block,
     }
@@ -477,6 +516,11 @@ _FIELD_LAYOUTS = {
     "volSphericalTensorField": "spherical_tensor",
     "volSymmTensorField": "symm_tensor",
     "volTensorField": "tensor",
+    "surfaceScalarField": "scalar",
+    "surfaceVectorField": "vector",
+    "surfaceSphericalTensorField": "spherical_tensor",
+    "surfaceSymmTensorField": "symm_tensor",
+    "surfaceTensorField": "tensor",
 }
 
 
