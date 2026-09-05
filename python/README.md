@@ -25,13 +25,13 @@ result = run.stop(progress=True)
 post = result.postprocess
 ```
 
-`fno.OpenFOAM`, `fno.Combustion`, `fno.Export`, `fno.Models`,
+`fno.OpenFOAM`, `fno.Export`, `fno.Models`,
 `fno.Postprocess`, and `fno.Runtime` are the canonical grouped namespaces.
 Existing lowercase aliases remain part of the supported API. Filesystem
 arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
 
 See the [API index](../docs/api/README.md) for closures, transforms, Slurm,
-observations, model export, combustion, and postprocessing.
+observations, model export, and postprocessing.
 
 ## Package layout
 
@@ -40,7 +40,6 @@ observations, model export, combustion, and postprocessing.
 | `core/` | declarations, expressions, field metadata, plans, and validation |
 | `execution/` | case preparation, launch, MPI, Slurm, lifecycle, and resident workers |
 | `models/` | FNOM inspection and compiled-estimator generation |
-| `combustion/` | progress-variable and manifold declarations |
 | `postprocess/` | stored-field reading, statistics, and comparisons |
 | `contracts/` | shipped OpenFOAM adapter contracts |
 | `build/` | native compiler and ONNX Runtime acquisition helpers |

@@ -5,6 +5,42 @@ Version 1.0.5 establishes the documented distribution baseline; its feature
 summary consolidates earlier development rather than claiming every feature
 was introduced in this patch. Publication dates are recorded by GitHub releases.
 
+## Unreleased
+
+### Native model execution
+
+- Added the Smedja model-execution boundary. Immutable tensor layouts are
+  compiled once, while tensor addresses and shapes are rebound and validated
+  for every invocation so dynamic OpenFOAM storage remains safe.
+- Moved field-name lookup outside the hot cell loop and added a zero-copy
+  ownership transfer for compatible single-output staging buffers.
+- Narrowed artifact-kernel serialization to backend evaluation; request-local
+  packing, scaling, validation, and staging no longer share the worker lock.
+- Reused rank-local input workspace capacity across stable invocations, with
+  automatic downsizing after large dynamic-mesh requests.
+- Added a contiguous-cell Smedja packing path while preserving the general
+  sparse gather path and per-invocation topology validation.
+- Reused packed backend staging for the widest field during multi-output
+  unpacking, removing one full-field allocation without exposing aliases.
+- Allowed floating-point solver/model dtype differences to be converted during
+  Smedja packing, with a specialized three-scalar float64-to-float32 path.
+- Verified that changing payload sizes, including tensors larger than one SHM
+  slot, stream through one session without unsafe shared-region replacement.
+- Fixed fresh `foamnordic build --without-onnx` installations by building the
+  always-installed native inference core independently of the ONNX ModelHost.
+
+### Solver boundary
+
+- FoamNordic now builds and installs only the solver-agnostic native runtime,
+  ModelHost, field hooks, and OpenFOAM adapter SDK. The bundled
+  progress-variable solver and combustion-model registrations moved out of
+  the common runtime and are owned by their domain solver project.
+- `Longship` uses one closure/transform contract for stock and custom solvers;
+  the progress-variable-specific `combustion=` branch was removed.
+- `foamnordic dir --runtime`, `--include`, and `--openfoam-library` provide
+  scriptable ABI-specific SDK paths, allowing external solver adapters to
+  build without a FoamNordic source checkout.
+
 ## [1.0.5]
 
 FoamNordic 1.0.5 establishes the reference release baseline for packaging,

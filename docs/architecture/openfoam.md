@@ -10,6 +10,27 @@ v2606 on macOS arm64 is the development compatibility target. The adapter uses
 only APIs common to those releases: `fvMeshFunctionObject`,
 `lookupObjectRef`, and `primitiveFieldRef`.
 
+## External solver adapters
+
+`foamnordic build` installs a small ABI-specific SDK rather than a bundled
+solver. Its public OpenFOAM headers are below the active runtime's
+`include/foamnordic/openfoam` directory, and the exact integration library is
+below `lib`. Build systems can obtain stable, one-line paths with:
+
+```bash
+foamnordic dir --runtime
+foamnordic dir --include
+foamnordic dir --openfoam-library
+```
+
+A solver project owns its equations, correction order, thermodynamics, and
+domain model selection. Its optional FoamNordic adapter includes
+`closureHook.H`, calls `ClosureHook::invoke()` at the solver-owned evaluation
+site, and links the exact library reported above. FoamNordic neither discovers
+nor builds that solver. This one-way dependency lets the same runtime serve
+stock OpenFOAM applications and unrelated custom solvers without importing
+their physical semantics.
+
 ## Field path
 
 The OpenFOAM bridge supports internal `volScalarField`, `volVectorField`,

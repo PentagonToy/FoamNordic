@@ -120,6 +120,12 @@ is not used across processes because the C++ standard does not guarantee that
 an implementation will wake an atomic object in a separately mapped process.
 Busy polling is not part of the production design.
 
+SHM slot capacity is a streaming chunk size, not a mesh-size contract. Rune
+keeps the complete tensor length while the channel splits larger payloads over
+as many ring slots as required. Consecutive exchanges may therefore grow or
+shrink without replacing the shared region. Only the negotiated Harbor safety
+limit bounds a complete tensor; mid-session SHM renegotiation is unnecessary.
+
 The support order is deliberate:
 
 1. Linux x86-64: primary HPC data plane, SHM plus futex;

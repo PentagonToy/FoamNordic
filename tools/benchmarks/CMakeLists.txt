@@ -3,3 +3,6 @@ target_link_libraries(foamnordic_fjord_benchmark PRIVATE FoamNordic::fjord)
 
 add_executable(foamnordic_field_benchmark field.cpp)
 target_link_libraries(foamnordic_field_benchmark PRIVATE FoamNordic::adapter)
+
+add_executable(foamnordic_smedja_benchmark smedja.cpp)
+target_link_libraries(foamnordic_smedja_benchmark PRIVATE FoamNordic::inference)

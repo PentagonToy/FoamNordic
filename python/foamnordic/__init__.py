@@ -2,7 +2,7 @@
 
 __version__ = "1.0.5"
 
-from . import combustion, export, math, models, openfoam, postprocess, random, runtime
+from . import export, math, models, openfoam, postprocess, random, runtime
 from .export import Tensor
 from .core.expressions import (
     Field,
@@ -29,7 +29,6 @@ from .math import Math
 from .random import Random
 
 OpenFOAM = openfoam
-Combustion = combustion
 Export = export
 Models = models
 Runtime = runtime
@@ -38,7 +37,6 @@ Postprocess = postprocess
 __all__ = [
     "Attached",
     "Closure",
-    "Combustion",
     "CompiledPlan",
     "FieldExpression",
     "FieldSelection",
@@ -72,7 +70,6 @@ __all__ = [
     "filter_width",
     "grad",
     "models",
-    "combustion",
     "openfoam",
     "postprocess",
     "random",

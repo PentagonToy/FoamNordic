@@ -49,3 +49,17 @@ install(
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/backend/adapter
     COMPONENT Development
     FILES_MATCHING PATTERN "*.hpp")
+install(
+    FILES
+        src/foamnordic/openfoam/closureHook.H
+        src/foamnordic/openfoam/fieldBridge.H
+        src/foamnordic/openfoam/fieldProgramObservation.H
+        src/foamnordic/openfoam/fieldProgramSession.H
+        src/foamnordic/openfoam/fjordExchange.H
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/openfoam
+    COMPONENT Development)
+install(
+    DIRECTORY src/foamnordic/openfoam/operations/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/openfoam/operations
+    COMPONENT Development
+    FILES_MATCHING PATTERN "*.H")

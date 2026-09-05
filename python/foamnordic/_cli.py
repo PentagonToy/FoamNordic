@@ -133,9 +133,22 @@ def _default_jobs() -> int:
     return min(os.cpu_count() or 1, 8)
 
 
-def _directories(stream: TextIO) -> int:
-    terminal = _Terminal(stream)
-    terminal.section("FoamNordic directories")
+def _installed_openfoam_library(runtime: Path) -> Path:
+    candidates = (
+        *sorted(runtime.glob("lib/libfoamnordicOpenFOAM-*.dylib")),
+        runtime / "lib/libfoamnordicOpenFOAM.so",
+        runtime / "lib/libfoamnordicOpenFOAM.dylib",
+    )
+    library = next((path for path in candidates if path.is_file()), None)
+    if library is None:
+        raise RuntimeError(
+            "the OpenFOAM integration is not installed for the active ABI; "
+            "run foamnordic build first"
+        )
+    return library.resolve()
+
+
+def _directories(args: argparse.Namespace, stream: TextIO) -> int:
     package = Path(__file__).resolve().parent
     source = _source_root(None)
     try:
@@ -146,6 +159,21 @@ def _directories(stream: TextIO) -> int:
         native_file = None
 
     selected = profile(required=False)
+    if args.runtime or args.include or args.openfoam_library:
+        if selected is None:
+            raise RuntimeError(
+                "an active OpenFOAM environment is required for SDK path lookup"
+            )
+        if args.runtime:
+            print(selected.runtime_dir, file=stream)
+        elif args.include:
+            print(selected.runtime_dir / "include", file=stream)
+        else:
+            print(_installed_openfoam_library(selected.runtime_dir), file=stream)
+        return 0
+
+    terminal = _Terminal(stream)
+    terminal.section("FoamNordic directories")
     rows = (
         ("Python environment", Path(sys.prefix).resolve()),
         ("Python package", package),
@@ -271,7 +299,6 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
                 ("WARN", "Longship", "runtime ABI not selected"),
                 ("WARN", "OpenFOAM adapter", "runtime ABI not selected"),
                 ("WARN", "ModelHost", "runtime ABI not selected"),
-                ("WARN", "Reference solver", "runtime ABI not selected"),
             )
         )
         return checks
@@ -317,16 +344,6 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
             str(model_host)
             if model_host.is_file()
             else "not installed (optional without ONNX)",
-        )
-    )
-    solver = runtime / "bin/foamnordicProgressVariableFoam"
-    checks.append(
-        (
-            "PASS"
-            if solver.is_file() and os.access(solver, os.X_OK)
-            else "FAIL",
-            "Reference solver",
-            str(solver) if solver.is_file() else f"missing below {runtime / 'bin'}",
         )
     )
     return checks
@@ -512,7 +529,6 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             )
 
     adapter_source = build_dir / "openfoam"
-    solver_source = build_dir / "progressVariableFoam"
     library_dir = prefix / "lib"
     application_dir = prefix / "bin"
     environment = _native_build_environment()
@@ -544,7 +560,14 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         f"-DFOAMNORDIC_ONNX_RUNTIME={'ON' if onnxruntime else 'OFF'}",
         f"-DFOAMNORDIC_RESIDENT_TOOLS={'ON' if onnxruntime else 'OFF'}",
     ]
-    runtime_targets = ["foamnordic_adapter", "foamnordic-longship"]
+    # Development installation always exports the inference core, including
+    # Smedja and non-ONNX kernels. Build it even when the optional ONNX-backed
+    # resident executable is disabled.
+    runtime_targets = [
+        "foamnordic_adapter",
+        "foamnordic_inference",
+        "foamnordic-longship",
+    ]
     if onnxruntime is not None:
         configure.extend(
             (
@@ -588,12 +611,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             [cmake, "--install", str(build_dir), "--component", "Runtime"],
         )
     )
-    commands.extend(
-        [
-            ("Build OpenFOAM integration", [wmake, "libso"]),
-            ("Build progress-variable solver", [wmake]),
-        ]
-    )
+    commands.append(("Build OpenFOAM integration", [wmake, "libso"]))
 
     if args.dry_run:
         log: TextIO = stream
@@ -601,19 +619,12 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
             with terminal.step(index, len(commands), description):
                 if description == "Build OpenFOAM integration":
                     print(f"$ cd {shlex.quote(str(adapter_source))}", file=log)
-                elif description == "Build progress-variable solver":
-                    print(f"$ cd {shlex.quote(str(solver_source))}", file=log)
                 _run_command(command, log, dry_run=True)
     else:
         try:
             if adapter_source.exists():
                 shutil.rmtree(adapter_source)
-            if solver_source.exists():
-                shutil.rmtree(solver_source)
             shutil.copytree(source / "src/foamnordic/openfoam", adapter_source)
-            shutil.copytree(
-                source / "tools/openfoam/progressVariableFoam", solver_source
-            )
             library_dir.mkdir(parents=True, exist_ok=True)
             application_dir.mkdir(parents=True, exist_ok=True)
             generic_macos_library = library_dir / "libfoamnordicOpenFOAM.dylib"
@@ -633,15 +644,6 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                             )
                             if sys.platform == "darwin":
                                 _finalize_macos_openfoam_library(library_dir, log)
-                        elif description == "Build progress-variable solver":
-                            subprocess.run(
-                                command,
-                                cwd=solver_source,
-                                env=environment,
-                                check=True,
-                                stdout=log,
-                                stderr=subprocess.STDOUT,
-                            )
                         else:
                             _run_command(
                                 command,
@@ -674,11 +676,6 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         )
         if integration is None:
             raise RuntimeError("wmake completed without installing the OpenFOAM library")
-        solver = prefix / "bin/foamnordicProgressVariableFoam"
-        if not solver.is_file():
-            raise RuntimeError(
-                "wmake completed without installing the progress-variable solver"
-            )
         cache_text = (
             cache.read_text(encoding="utf-8", errors="ignore")
             if cache.is_file()
@@ -693,7 +690,6 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
                 metadata={"platform": selected.platform, "openfoam": selected.openfoam},
             )
         print(f"Build log:  {log_path}", file=stream)
-        print(f"Reference solver: {solver}", file=stream)
         if onnxruntime is not None:
             worker = prefix / "bin/foamnordic_model_worker"
             if not worker.is_file():
@@ -895,10 +891,22 @@ def _parser() -> argparse.ArgumentParser:
         metavar="[command]",
         required=True,
     )
-    subcommands.add_parser(
+    directories = subcommands.add_parser(
         "dir",
         help="show the active package, environment, and native directories",
         description="Show the directories used by the active FoamNordic installation.",
+    )
+    directory_paths = directories.add_mutually_exclusive_group()
+    directory_paths.add_argument(
+        "--runtime", action="store_true", help="print only the active runtime prefix"
+    )
+    directory_paths.add_argument(
+        "--include", action="store_true", help="print only the installed SDK include path"
+    )
+    directory_paths.add_argument(
+        "--openfoam-library",
+        action="store_true",
+        help="print only the exact ABI-matched OpenFOAM integration library",
     )
     subcommands.add_parser(
         "doctor",
@@ -991,7 +999,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     if args.command == "dir":
-        return _directories(sys.stdout)
+        try:
+            return _directories(args, sys.stdout)
+        except RuntimeError as error:
+            print(f"foamnordic: error: {error}", file=sys.stderr)
+            return 1
     if args.command == "doctor":
         return _doctor(sys.stdout)
     if args.command == "build":

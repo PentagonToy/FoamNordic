@@ -11,15 +11,9 @@ The current adapters include LES closures:
 - `nutFjord` replaces the modeled eddy-viscosity evaluation.
 - `kEqnFjord` replaces the one-equation SGS closure terms.
 
-The combustion adapters are:
-
-- `reactionRateFjord`, a narrow one-source producer exposed through
-  `combustion->R(progress)` for custom solver wiring.
-- `progressVariableFjord`, which invokes reaction-rate and pre-integrated
-  manifold programs in order and then corrects thermodynamics once. It still
-  relies on a custom solver to assemble and solve the transported progress
-  and variance equations. The shared source matrix fixes sign, volume scaling,
-  and dimensions but deliberately does not prescribe transport terms.
+Domain-specific reaction-rate, heat-release, and transported-scalar models
+belong to their solver projects. They consume `ClosureHook` from FoamNordic's
+installed OpenFOAM SDK instead of being registered in this common library.
 
 Generic field programs do not require a turbulence-model adapter.
 `foamNordicExchange` can transform or observe registered fields in laminar,
@@ -37,8 +31,8 @@ Choose an integration family by the equation entry point, not by the label in
 - An iLES stress or learned momentum source enters momentum-equation assembly,
   normally through a dedicated solver hook or an appropriate `fvModel`. A
   fake laminar turbulence model would put the closure at the wrong boundary.
-- A combustion closure enters reaction-rate, chemistry, or scalar-source
-  evaluation and owns the table fields required by that contract.
+- A combustion closure enters the reaction-rate or chemistry boundary owned
+  by a combustion solver project.
 
 Introduce category subdirectories only when their native contracts are real
 and distinct. A new RAS, momentum-source, or combustion adapter must enter its

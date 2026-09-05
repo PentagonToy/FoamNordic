@@ -23,6 +23,13 @@ class ModelKernel {
 public:
     virtual ~ModelKernel() = default;
 
+    // False keeps the conservative worker-wide serialization used for
+    // arbitrary stateful kernels. A kernel returning true must synchronize
+    // only its non-reentrant backend resources itself.
+    [[nodiscard]] virtual bool owns_backend_synchronization() const noexcept {
+        return false;
+    }
+
     [[nodiscard]] virtual TensorMap evaluate(
         const TensorMap& inputs,
         const std::vector<std::uint64_t>& active_cells,

@@ -36,12 +36,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def validate_case(longship: Longship) -> None:
     closures = longship.closure_programs
     programs = longship.field_programs
-    if longship.combustion is not None and longship.case.integration is not None:
-        raise ValueError(
-            "progress-variable combustion owns constant/combustionProperties; "
-            "do not also pass an OpenFOAM integration template"
-        )
-    if longship.combustion is None and len(closures) > 1:
+    if len(closures) > 1:
         raise NotImplementedError(
             "one solver closure may be active at a time; use multiple Transform "
             "programs for independent field exchanges"
@@ -224,44 +219,6 @@ def _prepare_decomposition(path: Path, ranks: int) -> bool:
     return True
 
 
-def _combustion_template() -> str:
-    source = (
-        _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/combustion-model"
-        / "progressVariableFjordProperties.in"
-    )
-    if source.is_file():
-        return source.read_text(encoding="utf-8")
-    relative = (
-        "templates/openfoam/combustion-model/"
-        "progressVariableFjordProperties.in"
-    )
-    packaged = files("foamnordic").joinpath(relative)
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
-    raise RuntimeError("FoamNordic combustion dictionary template is unavailable")
-
-
-def _combustion_transport_template() -> str:
-    source = (
-        _REPOSITORY_ROOT
-        / "src/foamnordic/template/openfoam/combustion-model"
-        / "progressVariableTransportProperties.in"
-    )
-    if source.is_file():
-        return source.read_text(encoding="utf-8")
-    relative = (
-        "templates/openfoam/combustion-model/"
-        "progressVariableTransportProperties.in"
-    )
-    packaged = files("foamnordic").joinpath(relative)
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
-    raise RuntimeError(
-        "FoamNordic progress-variable transport template is unavailable"
-    )
-
-
 def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
     packaged = files("foamnordic").joinpath(
         "templates/openfoam/derivedSchemes.json"
@@ -409,106 +366,6 @@ def _closure_body(
         );
 
         {values["FOAMNORDIC_OBSERVATION_BLOCK"]}'''.strip()
-
-
-def _dimensions(value: object) -> str:
-    if not isinstance(value, (str, bytes)):
-        try:
-            exponents = tuple(value)
-        except TypeError:
-            exponents = ()
-        if len(exponents) == 7 and all(
-            isinstance(item, (int, float)) for item in exponents
-        ):
-            return "[" + " ".join(str(item) for item in exponents) + "]"
-    text = str(value).strip()
-    numbers = re.findall(
-        r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text
-    )
-    if len(numbers) != 7:
-        raise ValueError(
-            "reaction-rate field dimensions must contain seven OpenFOAM "
-            f"exponents, got {value!r}"
-        )
-    return "[" + " ".join(numbers) + "]"
-
-
-def render_combustion_dictionary(
-    longship: Longship,
-    reaction_rate: Closure,
-    manifold: Closure,
-    reaction_address: str,
-    manifold_address: str,
-    shared: bool,
-    observation_path: Path | None = None,
-) -> tuple[Path, str]:
-    combustion = longship.combustion
-    if combustion is None:
-        raise ValueError("a progress-variable combustion declaration is required")
-    source = reaction_rate.outputs["reaction_rate"]
-    assert source.field_name is not None
-    progress = reaction_rate.inputs["progress"]
-    if progress.operation != "field" or progress.field_name is None:
-        raise ValueError("reaction-rate progress input must bind to a scalar field")
-    progress_metadata = longship.case.field(progress.field_name)
-    if progress_metadata.field_class != "volScalarField":
-        raise ValueError("reaction-rate progress input must be a volScalarField")
-    metadata = longship.case.field(source.field_name)
-    if metadata.field_class != "volScalarField":
-        raise ValueError("reaction-rate output must be a volScalarField")
-    observation = (
-        ""
-        if observation_path is None
-        else _observation_block(longship, observation_path)
-    )
-    values = {
-        "PROGRESS_FIELD": progress.field_name,
-        "REACTION_RATE_FIELD": source.field_name,
-        "REACTION_RATE_DIMENSIONS": _dimensions(metadata.dimensions),
-        "REACTION_RATE_BASIS": {
-            "volumetric_mass": "volumetricMass",
-            "specific": "specific",
-        }[combustion.coupling.reaction_rate_basis],
-        "CORRECT_THERMO": str(combustion.coupling.thermo_correction).lower(),
-        "REACTION_RATE_CLOSURE": _closure_body(
-            reaction_rate, reaction_address, shared
-        ),
-        "MANIFOLD_CLOSURE": _closure_body(
-            manifold, manifold_address, shared, observation
-        ),
-    }
-    rendered = _combustion_template()
-    for name, value in values.items():
-        rendered = rendered.replace(f"@{name}@", str(value))
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(f"unresolved combustion template variables: {unresolved}")
-    return Path("constant/combustionProperties"), rendered
-
-
-def render_combustion_transport_dictionary(
-    longship: Longship,
-    reaction_rate: Closure,
-) -> tuple[Path, str]:
-    """Render the portable scalar-transport defaults for the reference solver."""
-
-    if longship.combustion is None:
-        raise ValueError("a progress-variable combustion declaration is required")
-    variance = reaction_rate.inputs["variance"]
-    if variance.operation != "field" or variance.field_name is None:
-        raise ValueError("reaction-rate variance input must bind to a scalar field")
-    metadata = longship.case.field(variance.field_name)
-    if metadata.field_class != "volScalarField":
-        raise ValueError("reaction-rate variance input must be a volScalarField")
-    rendered = _combustion_transport_template().replace(
-        "@VARIANCE_FIELD@", variance.field_name
-    )
-    unresolved = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", rendered)))
-    if unresolved:
-        raise ValueError(
-            f"unresolved combustion transport variables: {unresolved}"
-        )
-    return Path("constant/progressVariableTransportProperties"), rendered
 
 
 def render_dictionary(
@@ -946,39 +803,17 @@ def prepare_case(
     if longship.observations:
         observations.mkdir(parents=True, exist_ok=True)
     if closures:
-        if longship.combustion is None:
-            closure_runtime = prepared[0]
-            destination, contents = render_dictionary(
-                longship,
-                closures[0],
-                f"unix://{closure_runtime.socket}",
-                longship.placement.data_path != "uds",
-                observations / "observations.{rank}.jsonl",
-            )
-        else:
-            destination, contents = render_combustion_dictionary(
-                longship,
-                closures[0],
-                closures[1],
-                f"unix://{prepared[0].socket}",
-                f"unix://{prepared[1].socket}",
-                longship.placement.data_path != "uds",
-                observations / "observations.{rank}.jsonl",
-            )
+        closure_runtime = prepared[0]
+        destination, contents = render_dictionary(
+            longship,
+            closures[0],
+            f"unix://{closure_runtime.socket}",
+            longship.placement.data_path != "uds",
+            observations / "observations.{rank}.jsonl",
+        )
         output = case_dir / destination
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(contents, encoding="utf-8")
-        if longship.combustion is not None:
-            transport_destination = (
-                case_dir / "constant/progressVariableTransportProperties"
-            )
-            if not transport_destination.exists():
-                _, transport_contents = render_combustion_transport_dictionary(
-                    longship, closures[0]
-                )
-                transport_destination.write_text(
-                    transport_contents, encoding="utf-8"
-                )
 
     transform_dictionaries: list[tuple[Transform, str]] = []
     closure_offset = len(closures)

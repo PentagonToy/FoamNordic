@@ -25,10 +25,6 @@ install(
     DESTINATION foamnordic/templates/openfoam
     COMPONENT Python)
 install(
-    DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/template/openfoam/combustion-model
-    DESTINATION foamnordic/templates/openfoam
-    COMPONENT Python)
-install(
     FILES ${PROJECT_SOURCE_DIR}/src/foamnordic/template/large_banner.txt
     DESTINATION foamnordic/templates
     COMPONENT Python)
@@ -87,13 +83,6 @@ install(
 install(
     DIRECTORY ${PROJECT_SOURCE_DIR}/src/foamnordic/openfoam
     DESTINATION foamnordic/buildkit/src/foamnordic
-    COMPONENT Python
-    PATTERN "linux*" EXCLUDE
-    PATTERN "darwin*" EXCLUDE
-    PATTERN "lnInclude" EXCLUDE)
-install(
-    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/openfoam/progressVariableFoam
-    DESTINATION foamnordic/buildkit/tools/openfoam
     COMPONENT Python
     PATTERN "linux*" EXCLUDE
     PATTERN "darwin*" EXCLUDE

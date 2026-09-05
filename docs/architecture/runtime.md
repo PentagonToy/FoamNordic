@@ -90,6 +90,45 @@ An input and output may intentionally share a field name, such as `U -> U`.
 This represents atomic replacement of an OpenFOAM field after native inference;
 names remain unique within the input list and within the output list.
 
+## Smedja execution boundary
+
+Smedja (Swedish for a smithy) is ModelHost's preparation boundary between a
+completed field request and backend invocation. It compiles immutable contract
+metadata—field order, component widths, feature offsets, and element types—once.
+Tensor addresses, shapes, active-cell selections, and local cell counts are
+rebound and validated for every invocation. It never retains an OpenFOAM-owned
+pointer or treats a previous mesh layout as current state.
+
+Each persistent runner thread owns an input workspace. Similar request sizes
+reuse byte capacity, but logical shape, metadata, and contents are reset on
+every call. A request smaller than one quarter of retained capacity releases
+the oversized allocation so a temporary topology does not pin rank-multiplied
+memory for the rest of a run.
+
+Contiguous active-cell ranges use a dedicated packing path. A single input is
+copied as one block, while multi-input packing avoids repeated active-index
+loads in the cell loop. Sparse bypass selections retain the validated gather
+path. This choice is made from the current request and is not cached as mesh
+state.
+
+When solver scalar precision differs from the model contract, Smedja casts
+while packing instead of materializing another complete converted field set.
+The common three-scalar float64-to-float32 closure path uses one specialized
+contiguous loop. Sparse selections retain the same checked conversion rules.
+
+Smedja produces staged outputs; it does not mutate solver fields. The adapter
+validates every declared output before atomic commit. A compatible single
+output transfers ownership of its backend buffer without copying. Multiple
+outputs are deinterleaved into independently validated tensors before publish;
+the widest output compacts into and takes ownership of the backend staging
+allocation, avoiding one additional full-field allocation. The remaining
+outputs receive independent storage, so publication never exposes strided or
+aliased solver data.
+Request-local packing, scaling, validation, and staging remain outside the
+backend lock; only the backend evaluation is serialized for backends that
+require it. Arbitrary stateful kernels retain conservative worker-wide
+serialization.
+
 ## Resident worker
 
 `ModelWorker` owns one native listener and one complete model session.

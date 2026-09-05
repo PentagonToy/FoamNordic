@@ -7,11 +7,8 @@ Templates are grouped by the component that consumes them:
   for ML input expressions; they are added only when neither an exact scheme
   nor a usable section default exists in the copied case. Its
   `model-adapter/` directory is a deliberately non-compilable scaffold for a
-  new equation-level OpenFOAM closure. `combustion-model/` contains guarded
-  solver-equation and beta-FDF implementation scaffolds plus the concrete
-  `reactionRateFjord` and `progressVariableFjord` dictionaries. Their
-  placeholders force each solver family to declare field ownership,
-  dimensions, and native correction order.
+  new equation-level OpenFOAM closure. Domain-specific equation and model
+  templates belong to the solver project that owns those equations.
 - `slurm/` contains scheduler scripts. Solver output belongs in
   `logs/Sailing_<name>_<jobid>.out`; FoamNordic lifecycle output belongs in
   `logs/Sailing_<name>_<jobid>.log`.

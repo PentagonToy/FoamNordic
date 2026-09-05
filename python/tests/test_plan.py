@@ -1168,7 +1168,7 @@ class PlanTests(unittest.TestCase):
                 ),
             )
             closure = fno.Closure(
-                name="reactionRateFjord",
+                name="customReactionRate",
                 artifact="reaction-rate.fnom",
                 inputs={
                     "c_tilde": fno.field("c_tilde"),
@@ -1182,7 +1182,7 @@ class PlanTests(unittest.TestCase):
                 longship, closure, "unix:///tmp/reaction.sock", True
             )
             self.assertEqual(destination, Path("constant/combustionProperties"))
-            self.assertIn("model reactionRateFjord", rendered)
+            self.assertIn("model customReactionRate", rendered)
             self.assertIn("c_tilde", rendered)
             self.assertIn("omega_c", rendered)
             self.assertIn('table "betaFdf.tbl"', rendered)

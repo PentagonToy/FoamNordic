@@ -1,3 +1,0 @@
-progressVariableSourceProbe.C
-
-EXE = $(FOAM_USER_APPBIN)/foamnordicProgressVariableSourceProbe

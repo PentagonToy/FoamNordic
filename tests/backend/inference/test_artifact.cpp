@@ -1,3 +1,5 @@
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -9,10 +11,12 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/affine.hpp"
+#include "foamnordic/backend/inference/smedja.hpp"
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
 
@@ -243,6 +247,21 @@ foamnordic::fjord::Tensor scalar_tensor(
     };
 }
 
+foamnordic::fjord::Tensor float_tensor(
+    std::string name,
+    const std::vector<float>& values) {
+    std::vector<std::byte> bytes(values.size() * sizeof(float));
+    std::memcpy(bytes.data(), values.data(), bytes.size());
+    return {
+        std::move(name),
+        foamnordic::fjord::Element::float32,
+        {static_cast<std::uint64_t>(values.size())},
+        std::move(bytes),
+        9,
+        0.25,
+    };
+}
+
 class InspectingPackedKernel final : public foamnordic::inference::PackedModelKernel {
 public:
     foamnordic::fjord::Tensor evaluate(
@@ -284,6 +303,228 @@ void test_artifact_kernel_packs_scales_and_unpacks() {
     std::vector<double> values(1);
     std::memcpy(values.data(), omega.bytes.data(), omega.bytes.size());
     require_close(values, {16.0}, "Native output inverse scaling or unpacking failed.");
+}
+
+void test_smedja_rebinds_dynamic_input_storage() {
+    foamnordic::inference::Smedja smedja(contract());
+
+    foamnordic::inference::TensorMap first;
+    first.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+    first.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+    first.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+    const auto first_packed = smedja.pack(first, {1}, 9, 0.25);
+    std::vector<double> first_values(3);
+    std::memcpy(
+        first_values.data(),
+        first_packed.bytes.data(),
+        first_packed.bytes.size());
+    require_close(
+        first_values,
+        {0.2, 0.02, 400.0},
+        "Smedja failed its first dynamic input binding.");
+
+    foamnordic::inference::TensorMap second;
+    second.emplace("c_tilde", scalar_tensor("c_tilde", {1.0, 2.0, 3.0}));
+    second.emplace("c_var", scalar_tensor("c_var", {0.1, 0.2, 0.3}));
+    second.emplace("T_tilde", scalar_tensor("T_tilde", {500.0, 600.0, 700.0}));
+    const auto second_packed = smedja.pack(second, {2, 0}, 10, 0.5);
+    std::vector<double> second_values(6);
+    std::memcpy(
+        second_values.data(),
+        second_packed.bytes.data(),
+        second_packed.bytes.size());
+    require_close(
+        second_values,
+        {3.0, 0.3, 700.0, 1.0, 0.1, 500.0},
+        "Smedja retained stale input storage or shape metadata.");
+}
+
+void test_smedja_moves_a_single_output_staging_buffer() {
+    foamnordic::inference::Smedja smedja(contract());
+    auto packed = scalar_tensor("foamnordic.predictions", {1.0, 2.0});
+    packed.shape = {2, 1};
+    const auto* storage = packed.bytes.data();
+
+    auto outputs = smedja.unpack(std::move(packed));
+    const auto& output = outputs.at("omega_c");
+    require(
+        output.bytes.data() == storage
+            && output.shape == std::vector<std::uint64_t>{2},
+        "Smedja copied a compatible single-output staging buffer.");
+}
+
+void test_smedja_reuses_multi_output_staging_for_widest_field() {
+    const foamnordic::inference::ProgramContract multi_output_contract{
+        "multi-output",
+        {{"input", foamnordic::fjord::Element::float64, 1}},
+        {
+            {"scalar", foamnordic::fjord::Element::float64, 1},
+            {"vector", foamnordic::fjord::Element::float64, 2},
+        },
+    };
+    foamnordic::inference::Smedja smedja(multi_output_contract);
+    auto packed = scalar_tensor(
+        "foamnordic.predictions",
+        {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
+    packed.shape = {2, 3};
+    const auto* storage = packed.bytes.data();
+
+    const auto outputs = smedja.unpack(std::move(packed));
+    const auto& scalar = outputs.at("scalar");
+    const auto& vector = outputs.at("vector");
+    std::vector<double> scalar_values(2);
+    std::vector<double> vector_values(4);
+    std::memcpy(
+        scalar_values.data(), scalar.bytes.data(), scalar.bytes.size());
+    std::memcpy(
+        vector_values.data(), vector.bytes.data(), vector.bytes.size());
+
+    require_close(
+        scalar_values,
+        {1.0, 4.0},
+        "Smedja changed a scalar output while compacting staging.");
+    require_close(
+        vector_values,
+        {2.0, 3.0, 5.0, 6.0},
+        "Smedja changed a vector output while compacting staging.");
+    require(
+        vector.bytes.data() == storage,
+        "Smedja did not transfer multi-output staging to its widest field.");
+}
+
+void test_smedja_reuses_and_bounds_workspace_capacity() {
+    foamnordic::inference::Smedja smedja(contract());
+    foamnordic::inference::SmedjaWorkspace workspace;
+    foamnordic::inference::TensorMap inputs;
+    inputs.emplace("c_tilde", scalar_tensor("c_tilde", std::vector<double>(64, 0.1)));
+    inputs.emplace("c_var", scalar_tensor("c_var", std::vector<double>(64, 0.01)));
+    inputs.emplace("T_tilde", scalar_tensor("T_tilde", std::vector<double>(64, 300.0)));
+
+    auto& first = smedja.pack_into(workspace, inputs, {0, 1, 2, 3}, 10, 0.1);
+    const auto* storage = first.bytes.data();
+    auto& second = smedja.pack_into(workspace, inputs, {4, 5, 6, 7}, 11, 0.2);
+    require(
+        second.bytes.data() == storage,
+        "Smedja did not reuse a compatible workspace allocation.");
+
+    std::vector<std::uint64_t> all_cells(64);
+    for (std::uint64_t cell = 0; cell < all_cells.size(); ++cell) {
+        all_cells[cell] = cell;
+    }
+    static_cast<void>(smedja.pack_into(workspace, inputs, all_cells, 12, 0.3));
+    const auto large_capacity = workspace.retained_bytes();
+    static_cast<void>(smedja.pack_into(workspace, inputs, {0}, 13, 0.4));
+    require(
+        workspace.retained_bytes() < large_capacity,
+        "Smedja retained an oversized dynamic-mesh workspace.");
+}
+
+void test_smedja_packs_contiguous_and_sparse_cell_ranges() {
+    const foamnordic::inference::ProgramContract single_input_contract{
+        "single",
+        {{"value", foamnordic::fjord::Element::float64, 1}},
+        {{"result", foamnordic::fjord::Element::float64, 1}},
+    };
+    foamnordic::inference::Smedja smedja(single_input_contract);
+    foamnordic::inference::TensorMap inputs;
+    inputs.emplace("value", scalar_tensor("value", {10.0, 20.0, 30.0, 40.0, 50.0}));
+
+    const auto contiguous = smedja.pack(inputs, {1, 2, 3}, 20, 0.2);
+    std::vector<double> contiguous_values(3);
+    std::memcpy(
+        contiguous_values.data(), contiguous.bytes.data(), contiguous.bytes.size());
+    require_close(
+        contiguous_values,
+        {20.0, 30.0, 40.0},
+        "Smedja contiguous-range packing changed field values.");
+
+    const auto sparse = smedja.pack(inputs, {0, 2, 4}, 21, 0.3);
+    std::vector<double> sparse_values(3);
+    std::memcpy(sparse_values.data(), sparse.bytes.data(), sparse.bytes.size());
+    require_close(
+        sparse_values,
+        {10.0, 30.0, 50.0},
+        "Smedja sparse gather packing changed field values.");
+}
+
+void test_smedja_fuses_float_input_conversion_with_packing() {
+    foamnordic::inference::Smedja smedja(contract());
+    foamnordic::inference::TensorMap inputs;
+    inputs.emplace("c_tilde", float_tensor("c_tilde", {0.25F, 0.5F}));
+    inputs.emplace("c_var", float_tensor("c_var", {0.01F, 0.02F}));
+    inputs.emplace("T_tilde", float_tensor("T_tilde", {300.0F, 400.0F}));
+
+    const auto packed = smedja.pack(inputs, {1, 0}, 22, 0.4);
+    std::vector<double> values(6);
+    std::memcpy(values.data(), packed.bytes.data(), packed.bytes.size());
+    require_close(
+        values,
+        {0.5, static_cast<double>(0.02F), 400.0,
+         0.25, static_cast<double>(0.01F), 300.0},
+        "Smedja did not fuse float32-to-float64 conversion with packing.");
+}
+
+class ConcurrentProbeKernel final : public foamnordic::inference::PackedModelKernel {
+public:
+    foamnordic::fjord::Tensor evaluate(
+        foamnordic::fjord::TensorView features,
+        std::uint64_t exchange_index,
+        double physical_time,
+        std::uint32_t /*rank*/) override {
+        const auto active = active_.fetch_add(1) + 1;
+        auto peak = peak_.load();
+        while (active > peak && !peak_.compare_exchange_weak(peak, active)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        active_.fetch_sub(1);
+        auto output = scalar_tensor(
+            "foamnordic.predictions",
+            std::vector<double>(features.shape.front(), 1.0));
+        output.shape = {features.shape.front(), 1};
+        output.time_index = exchange_index;
+        output.physical_time = physical_time;
+        return output;
+    }
+
+    [[nodiscard]] std::uint32_t peak() const noexcept { return peak_.load(); }
+
+private:
+    std::atomic<std::uint32_t> active_{0};
+    std::atomic<std::uint32_t> peak_{0};
+};
+
+void test_artifact_kernel_owns_a_narrow_backend_lock() {
+    ConcurrentProbeKernel packed_kernel;
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            1,
+            foamnordic::inference::ModelFormat::onnx,
+            "artifact/model.onnx",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+        },
+        packed_kernel);
+    require(
+        kernel.owns_backend_synchronization(),
+        "Artifact kernel did not advertise its backend synchronization boundary.");
+
+    const auto invoke = [&](std::uint64_t exchange_index) {
+        foamnordic::inference::TensorMap inputs;
+        inputs.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+        inputs.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+        inputs.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+        static_cast<void>(kernel.evaluate(inputs, {0, 1}, exchange_index, 0.25));
+    };
+
+    std::thread first([&] { invoke(10); });
+    std::thread second([&] { invoke(11); });
+    first.join();
+    second.join();
+    require(
+        packed_kernel.peak() == 1,
+        "Artifact kernel allowed concurrent access to a serialized backend.");
 }
 
 void test_dense_affine_kernel_float64() {
@@ -577,6 +818,13 @@ int main() {
     test_three_artifact_formats();
     test_scaler_feature_mismatch_is_rejected();
     test_artifact_kernel_packs_scales_and_unpacks();
+    test_smedja_rebinds_dynamic_input_storage();
+    test_smedja_moves_a_single_output_staging_buffer();
+    test_smedja_reuses_multi_output_staging_for_widest_field();
+    test_smedja_reuses_and_bounds_workspace_capacity();
+    test_smedja_packs_contiguous_and_sparse_cell_ranges();
+    test_smedja_fuses_float_input_conversion_with_packing();
+    test_artifact_kernel_owns_a_narrow_backend_lock();
     test_dense_affine_kernel_float64();
     test_dense_affine_kernel_float32();
     test_manifest_round_trip_and_corruption_rejection();

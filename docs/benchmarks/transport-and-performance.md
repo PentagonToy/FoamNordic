@@ -17,6 +17,22 @@ Release build on an Apple Silicon development machine, 10,000 round trips:
 The separate-process result exercises the production POSIX SHM mapping and
 macOS UDS wake path rather than a memory-only ring benchmark.
 
+## 2026-09-05: macOS arm64 Smedja dtype packing
+
+Release build, one million cells, three scalar float64 fields packed into one
+float32 model tensor, 20 repetitions:
+
+| Path | Elapsed | Source throughput |
+|---|---:|---:|
+| Specialized fused Smedja pack | 0.0350 s | 13,074 MiB/s |
+| Idealized handwritten two-pass cast and interleave | 0.0278 s | 16,455 MiB/s |
+
+The fused path was about 21% slower than the idealized loop, but performs the
+real contract lookup, shape validation, active-range validation, metadata
+update, and reusable workspace management and avoids three additional
+full-field float32 staging arrays. This record is a guardrail, not a claim that
+fusion alone accelerates an isolated arithmetic loop.
+
 ## 2026-08-21: HPC cross-node TCP (CSC Roihu example)
 
 The server ran in an `interactive` partition and the client ran on another
