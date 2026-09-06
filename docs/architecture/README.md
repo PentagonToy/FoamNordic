@@ -58,6 +58,7 @@ backend-neutral.
 
 | Document | Contents |
 | --- | --- |
+| [Principles](principles.md) | Ownership, invariants, non-goals, and 1.x compatibility policy |
 | [Native runtime](runtime.md) | Exchanges, resident execution, bypass, and failures |
 | [Native transport](transport.md) | Rune, Fjord, Harbor, UDS, SHM, TCP, UCX, and MPI layout |
 | [FNOM](fnom.md) | Artifact encoding, compatibility, preprocessing, and trust |

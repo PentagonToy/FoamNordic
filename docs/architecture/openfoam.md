@@ -31,6 +31,11 @@ nor builds that solver. This one-way dependency lets the same runtime serve
 stock OpenFOAM applications and unrelated custom solvers without importing
 their physical semantics.
 
+The complete
+[out-of-tree `externalNutFjord` example](../../examples/openfoam/externalNutFjord/README.md)
+is compiled in a temporary directory using only those installed SDK paths. It
+is the reference recipe for solver projects that own a new equation boundary.
+
 ## Field path
 
 The OpenFOAM bridge supports internal scalar, vector, spherical-tensor,

@@ -116,6 +116,10 @@ FNOM selects compiled C++, ONNX, Joblib, or Equinox internally, so model
 loading does not alter the solver-facing API. Stochastic functions use
 `fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
 
+External solvers can add an equation-level adapter without including the
+FoamNordic source tree. See the installed-SDK
+[`externalNutFjord` example](examples/openfoam/externalNutFjord/README.md).
+
 ## Slurm resources
 
 OpenFOAM and the node-local model worker have explicit resource declarations.

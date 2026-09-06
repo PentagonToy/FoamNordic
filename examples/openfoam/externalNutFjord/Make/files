@@ -1,0 +1,4 @@
+makeExternalNutFjord.C
+makeCompressibleExternalNutFjord.C
+
+LIB = $(FOAM_USER_LIBBIN)/libexternalNutFjord
