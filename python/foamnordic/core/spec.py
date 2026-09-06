@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Callable, Mapping
 
 from .. import openfoam
+from ..contracts import infer_model_bindings, infer_transform_bindings
 from .expressions import FieldExpression
 from .native_plan import compile_runtime_plan
 from .paths import PathInput, path_from
@@ -146,10 +147,23 @@ class Closure:
         if (artifact is None) == (operator is None):
             raise ValueError("closure requires exactly one of operator or artifact")
         selected = Operator.model(artifact) if operator is None else operator
+        if inputs is None or outputs is None:
+            if selected.kind != "model":
+                raise ValueError(
+                    "function closures require explicit inputs and outputs"
+                )
+            model_artifact = selected.artifact
+            assert model_artifact is not None
+            inputs, outputs = infer_model_bindings(
+                name,
+                model_artifact,
+                inputs=inputs,
+                outputs=outputs,
+            )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "operator", selected)
-        object.__setattr__(self, "inputs", {} if inputs is None else inputs)
-        object.__setattr__(self, "outputs", {} if outputs is None else outputs)
+        object.__setattr__(self, "inputs", inputs)
+        object.__setattr__(self, "outputs", outputs)
         object.__setattr__(self, "key", _program_key(key, seed, "closure"))
         self.__post_init__()
 
@@ -201,13 +215,25 @@ class Transform:
         self,
         name: str,
         operator: Operator,
-        inputs: Mapping[str, FieldExpression],
-        outputs: Mapping[str, FieldExpression],
+        inputs: Mapping[str, FieldExpression] | None = None,
+        outputs: Mapping[str, FieldExpression] | None = None,
         at: str = "time_step_start",
         key: Key | int | None = None,
         *,
         seed: int | None = None,
     ) -> None:
+        if inputs is None or outputs is None:
+            if operator.kind != "model":
+                raise ValueError(
+                    "function transforms require explicit inputs and outputs"
+                )
+            model_artifact = operator.artifact
+            assert model_artifact is not None
+            inputs, outputs = infer_transform_bindings(
+                model_artifact,
+                inputs=inputs,
+                outputs=outputs,
+            )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "operator", operator)
         object.__setattr__(self, "inputs", inputs)

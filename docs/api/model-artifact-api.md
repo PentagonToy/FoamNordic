@@ -23,6 +23,12 @@ artifact.validate()
 `FnomArtifact` is immutable. `validate()` re-reads the file through the native
 FNOM parser without importing or executing its embedded backend payload.
 
+OpenFOAM scalar precision and model precision may differ. The native exchange
+boundary accepts `float32` and `float64` model contracts with either
+single- or double-precision OpenFOAM, and performs the required conversion
+while packing inputs and committing outputs. Equal-precision fields keep the
+direct copy path; a precision conversion is necessarily not zero-copy.
+
 The equivalent CLI commands are:
 
 ```console

@@ -192,6 +192,24 @@ and mutable output fields. The plan compiler rejects missing fields, component
 count mismatches, duplicate writers, and unsupported expressions before
 submission whenever case metadata is sufficient.
 
+For a model-backed built-in adapter, both mappings may be omitted. FoamNordic
+then reads the FNOM tensor contract and resolves established semantic names
+such as `velocity_grad`, `filter_width`, and `eddy_viscosity` to `grad(U)`,
+`delta`, and `nut`:
+
+```python
+closure = fno.Closure(
+    name="nutFjord",
+    operator=fno.Operator.model(model_dir / "smagorinsky.fnom"),
+)
+```
+
+Inference is deliberately conservative: tensor widths must agree, every port
+must have exactly one meaning, and the adapter name must have a built-in
+contract. Otherwise construction fails before case preparation and asks for
+explicit `inputs` or `outputs`. Supplying either mapping always takes priority,
+so custom solvers and unusual field names keep the fully explicit API.
+
 For direct scientific functions, the same declaration infers native component
 widths for stored fields, coordinates, `grad(...)`, and LES `delta` before it
 packages a resident callable:
@@ -251,6 +269,22 @@ velocity_transform = fno.Transform(
     key=fno.Random.key(42),
 )
 ```
+
+Common stored-field semantics can also be inferred from an FNOM artifact. For
+example, ports named `pressure` and `eddy_viscosity` bind to `p` and `nut`,
+while `predicted_velocity` and `temperature` bind to `U` and `T`:
+
+```python
+field_transform = fno.Transform(
+    name="predictFields",
+    operator=fno.Operator.model(model_dir / "fields.fnom"),
+    at="time_step_start",
+)
+```
+
+The current transform contract replaces its destination fields. Additive,
+blended, equation-source, and coefficient application are not guessed from a
+model port name; those modes require an explicit solver-side contract.
 
 `Operator.model()` accepts only `.fnom`; its metadata selects ONNX, compiled
 C++, Joblib, or Equinox without exposing backend-specific launch classes.

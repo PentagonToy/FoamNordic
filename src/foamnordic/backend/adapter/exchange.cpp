@@ -51,6 +51,37 @@ fjord::MutableTensorView require_field(
     return field;
 }
 
+void copy_values(
+    const fjord::Tensor& source,
+    const fjord::MutableTensorView& destination) {
+    const auto count = source.view().element_count();
+    if (source.element == destination.element) {
+        std::memcpy(
+            destination.bytes.data(), source.bytes.data(), source.bytes.size());
+        return;
+    }
+    if (source.element == fjord::Element::float32
+        && destination.element == fjord::Element::float64) {
+        const auto* input = reinterpret_cast<const float*>(source.bytes.data());
+        auto* output = reinterpret_cast<double*>(destination.bytes.data());
+        std::transform(input, input + count, output, [](float value) {
+            return static_cast<double>(value);
+        });
+        return;
+    }
+    if (source.element == fjord::Element::float64
+        && destination.element == fjord::Element::float32) {
+        const auto* input = reinterpret_cast<const double*>(source.bytes.data());
+        auto* output = reinterpret_cast<float*>(destination.bytes.data());
+        std::transform(input, input + count, output, [](double value) {
+            return static_cast<float>(value);
+        });
+        return;
+    }
+    throw std::runtime_error(
+        "FoamNordic cannot convert the committed model output element type.");
+}
+
 }  // namespace
 
 void ExchangeContract::validate() const {
@@ -198,9 +229,10 @@ void AtomicFieldExchange::execute(
                 "FoamNordic output field metadata is out of sync: " + name);
         }
         const auto& source = prepared.at(name);
-        if (source.element != destination.element
-            || source.shape != destination.shape
-            || source.bytes.size() != destination.bytes.size()) {
+        const auto source_count = source.view().element_count();
+        const auto destination_count = destination.read_only().element_count();
+        if (source.shape != destination.shape
+            || source_count != destination_count) {
             throw std::runtime_error(
                 "FoamNordic committed output does not match its field: " + name);
         }
@@ -208,7 +240,7 @@ void AtomicFieldExchange::execute(
     for (const auto& name : contract_.outputs) {
         const auto destination = output_fields.at(name);
         const auto& source = prepared.at(name);
-        std::memcpy(destination.bytes.data(), source.bytes.data(), source.bytes.size());
+        copy_values(source, destination);
     }
 
     previous_exchange_ = exchange_index;

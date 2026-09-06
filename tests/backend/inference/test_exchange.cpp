@@ -37,6 +37,23 @@ Tensor scalar_field(
     };
 }
 
+Tensor float_scalar_field(
+    std::string name,
+    const std::vector<float>& values,
+    std::uint64_t exchange_index = 1,
+    double physical_time = 0.1) {
+    std::vector<std::byte> bytes(values.size() * sizeof(float));
+    std::memcpy(bytes.data(), values.data(), bytes.size());
+    return {
+        std::move(name),
+        Element::float32,
+        {static_cast<std::uint64_t>(values.size())},
+        std::move(bytes),
+        exchange_index,
+        physical_time,
+    };
+}
+
 std::vector<double> values_of(const Tensor& tensor) {
     std::vector<double> values(tensor.bytes.size() / sizeof(double));
     std::memcpy(values.data(), tensor.bytes.data(), tensor.bytes.size());
@@ -161,6 +178,24 @@ void test_empty_rank_local_field_is_a_valid_exchange() {
         "An empty rank-local output gained payload bytes.");
 }
 
+void test_double_solver_input_is_accepted_by_float_model_contract() {
+    foamnordic::inference::CellInferenceExchange exchange({
+        "float-model",
+        {{"delta", Element::float32, 1}},
+        {{"nut", Element::float32, 1}},
+    });
+    exchange.begin(11, 0.75, 2);
+    exchange.add_input(scalar_field("delta", {0.1, 0.2}, 11, 0.75));
+    exchange.seal_inputs();
+    foamnordic::inference::EvaluateAllCells policy;
+    static_cast<void>(exchange.prepare(policy));
+    exchange.add_output(float_scalar_field("nut", {0.01F, 0.02F}, 11, 0.75));
+    exchange.seal_outputs(policy);
+    require(
+        exchange.finish().at("nut").element == Element::float32,
+        "Float model output element was changed inside model inference.");
+}
+
 }  // namespace
 
 int main() {
@@ -168,4 +203,5 @@ int main() {
     test_incomplete_exchange_is_rejected();
     test_in_place_field_contract();
     test_empty_rank_local_field_is_a_valid_exchange();
+    test_double_solver_input_is_accepted_by_float_model_contract();
 }

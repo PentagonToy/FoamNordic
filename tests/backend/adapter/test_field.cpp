@@ -370,6 +370,61 @@ void test_atomic_field_exchange_applies_only_committed_output() {
         "Committed closure output was not applied atomically.");
 }
 
+void test_atomic_field_exchange_converts_float_model_output() {
+    auto channels = foamnordic::fjord::local_channel_pair();
+    const foamnordic::fjord::HarborOptions options{
+        foamnordic::fjord::HandshakeMode::disabled,
+        std::chrono::milliseconds(1'000),
+    };
+    foamnordic::fjord::Harbor solver(std::move(channels.first), options);
+    foamnordic::fjord::Harbor model(std::move(channels.second), options);
+    foamnordic::adapter::AtomicFieldExchange exchange(
+        solver, {{"delta"}, {"nut"}});
+
+    std::thread worker([&model] {
+        static_cast<void>(model.receive_message());
+        static_cast<void>(model.receive_message());
+        const std::array<float, 2> prediction{0.125F, 0.25F};
+        const foamnordic::fjord::TensorView output{
+            "nut",
+            foamnordic::fjord::Element::float32,
+            {2},
+            foamnordic::fjord::as_bytes(std::span(prediction)),
+            9,
+            0.5,
+            4,
+        };
+        model.publish(9, std::span(&output, 1));
+    });
+
+    std::array<double, 2> delta{0.01, 0.02};
+    std::array<double, 2> nut{-1.0, -1.0};
+    const auto field = [](const char* name, std::array<double, 2>& values) {
+        return foamnordic::fjord::MutableTensorView{
+            name,
+            foamnordic::fjord::Element::float64,
+            {2},
+            foamnordic::fjord::as_writable_bytes(std::span(values)),
+            9,
+            0.5,
+            4,
+        };
+    };
+    const auto delta_field = field("delta", delta);
+    const auto nut_field = field("nut", nut);
+    const foamnordic::adapter::InputFieldMap inputs{
+        {"delta", delta_field.read_only()},
+    };
+    const foamnordic::adapter::OutputFieldMap outputs{
+        {"nut", nut_field},
+    };
+    exchange.execute(9, 0.5, inputs, outputs);
+    worker.join();
+    require(
+        nut == std::array<double, 2>{0.125, 0.25},
+        "Float model output was not converted into the OpenFOAM scalar type.");
+}
+
 void test_incomplete_output_never_modifies_field() {
     auto channels = foamnordic::fjord::local_channel_pair();
     const foamnordic::fjord::HarborOptions options{
@@ -667,6 +722,7 @@ int main() {
     test_native_observation_jsonl_writer();
     test_longship_aggregates_ordered_observation_sources();
     test_atomic_field_exchange_applies_only_committed_output();
+    test_atomic_field_exchange_converts_float_model_output();
     test_incomplete_output_never_modifies_field();
     test_stale_output_never_modifies_field();
     test_worker_error_never_modifies_field(false);

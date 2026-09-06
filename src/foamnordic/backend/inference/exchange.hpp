@@ -108,7 +108,8 @@ private:
     void validate_tensor(
         const fjord::Tensor& tensor,
         const FieldContract& field,
-        std::uint64_t expected_cells) const;
+        std::uint64_t expected_cells,
+        bool allow_floating_conversion = false) const;
     [[nodiscard]] const FieldContract& require_field(
         const std::vector<FieldContract>& fields,
         const std::string& name,
