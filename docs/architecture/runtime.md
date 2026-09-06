@@ -156,10 +156,24 @@ to the bounded context count; ONNX remains one `Run()` at a time because its
 session owns the configured CPU thread budget. Request concurrency therefore
 cannot silently multiply ONNX's intra-operator threads.
 
+For the normal packed ONNX contract, the output feature width is static while
+the cell dimension may change. ModelHost allocates the final FoamNordic tensor
+for the current cell count and binds it as the ONNX output, so Runtime writes
+predictions directly into their published storage. This removes the former
+Runtime-output allocation and full-tensor copy. Models with a genuinely dynamic
+output feature width retain the allocating fallback because their destination
+size is unknowable before evaluation.
+
 At shutdown, ModelHost reports peak active contexts, peak admitted working
 bytes, and retained Smedja workspace bytes. These bounded counters describe
 native execution storage without reading a clock for every stage, tracing
 cells, or placing observation traffic on the solver path.
+
+Stage timing is opt-in and sampled. A disabled sampler performs only a branch;
+an enabled interval records packing, backend inference, and output preparation
+for selected calls, then reports aggregate means at shutdown. This keeps the
+diagnostic useful for small closures without turning every production exchange
+into a profiling event.
 
 ## Resident worker
 

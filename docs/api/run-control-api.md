@@ -133,6 +133,13 @@ internal thread pool remains serial unless it explicitly declares safe
 concurrent evaluation. This separates rank count from inference resources and
 prevents one large workspace per rank.
 
+For targeted diagnosis, `Longship.launch(profile_every=N)` samples one model
+call in every `N` calls and reports mean native `pack`, `infer`, and `output`
+stage times when ModelHost stops. The default is `0`, so production runs do not
+read a clock or update timing counters on the closure path. Sampling changes
+observation only; it does not move computation into Python or alter handshake
+semantics.
+
 `x_scaler` and `y_scaler` accept fitted scikit-learn `StandardScaler`,
 `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or affine
 `FunctionTransformer` instances. Export converts

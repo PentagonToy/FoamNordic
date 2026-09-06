@@ -632,6 +632,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--connections", type=int, default=1)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--profile-every", type=int, default=0)
     parser.add_argument("--ready-file", default="")
     parser.add_argument("--key", default=Key((42, 0)).to_json())
     parser.add_argument("--program", default="model")
@@ -645,6 +646,8 @@ def main(argv: list[str] | None = None) -> int:
             "the managed resident requires a FoamNordic binary wheel"
         )
     arguments = _parser().parse_args(argv)
+    if arguments.profile_every < 0:
+        raise ValueError("profile_every must not be negative")
     model_threads = _configure_model_threads(arguments.threads)
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
@@ -685,6 +688,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.ready_file,
         not arguments.no_shm,
         model_threads,
+        arguments.profile_every,
     )
     return 0
 

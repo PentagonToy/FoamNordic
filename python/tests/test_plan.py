@@ -478,6 +478,10 @@ class PlanTests(unittest.TestCase):
             example_longship().launch(start_timeout=0)
         with self.assertRaisesRegex(ValueError, "orphan_timeout"):
             example_longship().launch(orphan_timeout=-1)
+        with self.assertRaisesRegex(ValueError, "profile_every"):
+            example_longship().launch(profile_every=-1)
+        with self.assertRaisesRegex(TypeError, "profile_every"):
+            example_longship().launch(profile_every=True)
 
     def test_launch_reports_background_sailing_unless_quiet(self) -> None:
         expected = Mock()
@@ -1045,7 +1049,8 @@ class PlanTests(unittest.TestCase):
         )
         budgets = []
 
-        def command(_longship, _prepared, model_threads=1):
+        def command(_longship, _prepared, model_threads=1, profile_every=0):
+            self.assertEqual(profile_every, 0)
             budgets.append(model_threads)
             return ("worker", str(model_threads))
 

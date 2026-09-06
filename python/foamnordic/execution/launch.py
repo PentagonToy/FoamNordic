@@ -172,11 +172,14 @@ def _host_command(
     prepared: PreparedProgram,
     model_threads: int = 1,
     connections: int | None = None,
+    profile_every: int = 0,
 ) -> tuple[str, ...]:
     if model_threads < 1:
         raise ValueError("model_threads must be positive")
     if connections is not None and connections < 1:
         raise ValueError("connections must be positive")
+    if profile_every < 0:
+        raise ValueError("profile_every must not be negative")
     program = prepared.program
     if program.artifact is None and prepared.artifact is None:
         raise RuntimeError("a model-backed field program is required")
@@ -212,6 +215,8 @@ def _host_command(
         str(connections or longship.case.ranks),
         "--threads",
         str(model_threads),
+        "--profile-every",
+        str(profile_every),
         "--ready-file",
         prepared.ready,
     ]
@@ -233,6 +238,7 @@ def _host_group_command(
     work_dir: Path,
     host_cpus: int,
     connections: int | None = None,
+    profile_every: int = 0,
 ) -> tuple[tuple[str, ...], tuple[Path, ...]]:
     if host_cpus < 1:
         raise ValueError("host_cpus must be positive")
@@ -246,13 +252,14 @@ def _host_group_command(
     )
     commands = [
         (
-            _host_command(longship, item, threads)
+            _host_command(longship, item, threads, profile_every=profile_every)
             if connections is None
             else _host_command(
                 longship,
                 item,
                 threads,
                 connections=connections,
+                profile_every=profile_every,
             )
         )
         for item, threads in zip(prepared, thread_budgets, strict=True)
@@ -326,6 +333,7 @@ def launch(
     termination_grace: float = 30.0,
     orphan_timeout: float = 30.0,
     verbose: bool = True,
+    profile_every: int = 0,
 ) -> Run:
     """Compile, prepare, and start one non-blocking coupled workload."""
 
@@ -333,6 +341,8 @@ def launch(
         raise ValueError("lifecycle timeouts must be positive")
     if orphan_timeout < 0:
         raise ValueError("orphan_timeout must not be negative")
+    if profile_every < 0:
+        raise ValueError("profile_every must not be negative")
     validate_case(longship)
     plan = longship.compile()
     runtime = plan.as_dict()["runtime"]
@@ -359,6 +369,7 @@ def launch(
             work_dir,
             int(runtime["host_cpus_per_task"]),
             int(runtime["solver_tasks_per_node"]),
+            profile_every,
         )
         if prepared
         else (None, ())

@@ -105,6 +105,7 @@ LoadedModel load_model(
         ExecutionResources{
             options.execution_contexts,
             options.maximum_working_bytes,
+            options.profile_every,
         });
     return {std::move(artifact), std::move(kernel)};
 }

@@ -681,6 +681,34 @@ void test_artifact_kernel_rejects_an_oversized_working_set() {
         "An oversized request reached the model backend before rejection.");
 }
 
+void test_artifact_kernel_samples_stage_costs_on_request() {
+    ConcurrentProbeKernel packed_kernel(true);
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            2,
+            foamnordic::inference::ModelFormat::compiled,
+            "artifact/model.cpp",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+            "cpp-v1",
+        },
+        packed_kernel,
+        {1, 4096, 2});
+    for (std::uint64_t exchange_index = 40; exchange_index < 43; ++exchange_index) {
+        foamnordic::inference::TensorMap inputs;
+        inputs.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+        inputs.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+        inputs.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+        static_cast<void>(
+            kernel.evaluate(inputs, {0, 1}, exchange_index, 0.25));
+    }
+    require(
+        kernel.execution_snapshot().profile_samples == 2,
+        "Artifact kernel did not honour its profiling sample interval.");
+}
+
 class LoadedProbeKernel final : public foamnordic::inference::PackedModelKernel {
 public:
     foamnordic::fjord::Tensor evaluate(
@@ -1044,6 +1072,7 @@ int main() {
     test_artifact_kernel_owns_a_narrow_backend_lock();
     test_reentrant_backend_uses_bounded_execution_contexts();
     test_artifact_kernel_rejects_an_oversized_working_set();
+    test_artifact_kernel_samples_stage_costs_on_request();
     test_loaded_artifact_preserves_backend_synchronization_ownership();
     test_dense_affine_kernel_float64();
     test_dense_affine_kernel_float32();

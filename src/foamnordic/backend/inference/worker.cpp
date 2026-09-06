@@ -129,6 +129,7 @@ ModelWorker::ModelWorker(
             options_.model_threads,
             std::min(options_.connections, options_.model_threads),
             options_.maximum_working_bytes,
+            options_.profile_every,
         });
     artifact_ = std::move(loaded.artifact);
     owned_kernel_ = std::move(loaded.kernel);
@@ -284,6 +285,18 @@ void ModelWorker::run() {
                 + std::to_string(resources.peak_admitted_bytes)
                 + ", retained_workspace_bytes="
                 + std::to_string(resources.retained_workspace_bytes));
+    }
+    if (resources.profile_samples != 0) {
+        const auto samples = resources.profile_samples;
+        native::log(
+            native::LogLevel::info,
+            "Model sampled stages: samples=" + std::to_string(samples)
+                + ", pack_us="
+                + std::to_string(resources.packing_nanoseconds / samples / 1000)
+                + ", infer_us="
+                + std::to_string(resources.inference_nanoseconds / samples / 1000)
+                + ", output_us="
+                + std::to_string(resources.output_nanoseconds / samples / 1000));
     }
     if (failure) {
         std::rethrow_exception(failure);

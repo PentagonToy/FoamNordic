@@ -24,6 +24,7 @@ namespace foamnordic::inference {
 struct ExecutionResources {
     std::uint32_t contexts{1};
     std::uint64_t maximum_working_bytes{16ULL * 1024ULL * 1024ULL * 1024ULL};
+    std::uint64_t profile_every{0};
 
     void validate() const;
 };
@@ -35,6 +36,10 @@ struct ExecutionSnapshot {
     std::uint64_t admitted_bytes{0};
     std::uint64_t peak_admitted_bytes{0};
     std::uint64_t retained_workspace_bytes{0};
+    std::uint64_t profile_samples{0};
+    std::uint64_t packing_nanoseconds{0};
+    std::uint64_t inference_nanoseconds{0};
+    std::uint64_t output_nanoseconds{0};
 };
 
 class ExecutionContextPool final {

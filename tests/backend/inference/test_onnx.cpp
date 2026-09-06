@@ -87,6 +87,24 @@ int main() {
     assert(std::abs(predictions[0] - (-0.5F)) < 1.0e-6F);
     assert(std::abs(predictions[1] - (-7.5F)) < 1.0e-6F);
 
+    constexpr std::array<float, 2> resized_values{2.0F, 5.0F};
+    foamnordic::fjord::Tensor resized_features{
+        "features",
+        foamnordic::fjord::Element::float32,
+        {1, 2},
+        bytes(resized_values),
+        8,
+        0.5,
+    };
+    const auto resized_output = kernel.evaluate(resized_features.view(), 8, 0.5);
+    assert((resized_output.shape == std::vector<std::uint64_t>{1, 1}));
+    float resized_prediction = 0.0F;
+    std::memcpy(
+        &resized_prediction,
+        resized_output.bytes.data(),
+        sizeof(resized_prediction));
+    assert(std::abs(resized_prediction - (-0.5F)) < 1.0e-6F);
+
     std::vector<std::byte> unaligned_storage(features.bytes.size() + 1);
     std::memcpy(
         unaligned_storage.data() + 1,

@@ -55,6 +55,12 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   worker shutdown.
 - Added `foamnordic diff` for non-executing comparison of validated FNOM
   manifests and streamed embedded-payload digests.
+- Bound static-width ONNX outputs directly to their final FoamNordic tensor
+  storage, removing one allocation and full output copy while preserving the
+  fallback for dynamically sized output features.
+- Added opt-in sampled ModelHost stage timing through
+  `Longship.launch(profile_every=N)`; disabled production runs do not read a
+  clock or update timing counters.
 
 ### Solver boundary
 

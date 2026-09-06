@@ -11,6 +11,7 @@
 
 #include "foamnordic/backend/inference/model.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -62,7 +63,8 @@ ArtifactModelKernel::ArtifactModelKernel(
       kernel_(kernel),
       smedja_(artifact_.contract),
       contexts_(resources),
-      capabilities_(kernel.capabilities()) {
+      capabilities_(kernel.capabilities()),
+      profile_every_(resources.profile_every) {
     artifact_.validate();
 }
 
@@ -72,8 +74,16 @@ TensorMap ArtifactModelKernel::evaluate(
     std::uint64_t exchange_index,
     double physical_time,
     std::uint32_t rank) {
+    const auto sampled = profile_every_ != 0
+                         && profile_sequence_.fetch_add(
+                                1, std::memory_order_relaxed)
+                                % profile_every_
+                                == 0;
     auto context = contexts_.acquire(
         checked_working_bytes(smedja_, active_cells.size()));
+    const auto packing_started = sampled
+                                     ? std::chrono::steady_clock::now()
+                                     : std::chrono::steady_clock::time_point{};
     auto& packed = smedja_.pack_into(
         context.workspace(), inputs, active_cells, exchange_index, physical_time);
     if (artifact_.input_scaler) {
@@ -88,8 +98,11 @@ TensorMap ArtifactModelKernel::evaluate(
         };
         artifact_.input_scaler->transform(mutable_view);
     }
+    const auto inference_started = sampled
+                                       ? std::chrono::steady_clock::now()
+                                       : packing_started;
     if (active_cells.empty()) {
-        return smedja_.unpack({
+        auto outputs = smedja_.unpack({
             "foamnordic.predictions",
             smedja_.output_element(),
             {0, smedja_.output_width()},
@@ -97,6 +110,19 @@ TensorMap ArtifactModelKernel::evaluate(
             exchange_index,
             physical_time,
         });
+        if (sampled) {
+            const auto finished = std::chrono::steady_clock::now();
+            packing_nanoseconds_.fetch_add(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    inference_started - packing_started).count(),
+                std::memory_order_relaxed);
+            output_nanoseconds_.fetch_add(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    finished - inference_started).count(),
+                std::memory_order_relaxed);
+            profile_samples_.fetch_add(1, std::memory_order_relaxed);
+        }
+        return outputs;
     }
     fjord::Tensor predictions;
     if (capabilities_.concurrent_evaluation) {
@@ -112,6 +138,9 @@ TensorMap ArtifactModelKernel::evaluate(
         || predictions.shape.empty() || predictions.shape.front() != active_cells.size()) {
         throw std::invalid_argument("Packed model output does not match its exchange.");
     }
+    const auto output_started = sampled
+                                    ? std::chrono::steady_clock::now()
+                                    : inference_started;
     if (artifact_.output_scaler) {
         auto mutable_view = fjord::MutableTensorView{
             predictions.name,
@@ -124,7 +153,24 @@ TensorMap ArtifactModelKernel::evaluate(
         };
         artifact_.output_scaler->inverse_transform(mutable_view);
     }
-    return smedja_.unpack(std::move(predictions));
+    auto outputs = smedja_.unpack(std::move(predictions));
+    if (sampled) {
+        const auto finished = std::chrono::steady_clock::now();
+        packing_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                inference_started - packing_started).count(),
+            std::memory_order_relaxed);
+        inference_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                output_started - inference_started).count(),
+            std::memory_order_relaxed);
+        output_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                finished - output_started).count(),
+            std::memory_order_relaxed);
+        profile_samples_.fetch_add(1, std::memory_order_relaxed);
+    }
+    return outputs;
 }
 
 const ModelArtifact& ArtifactModelKernel::artifact() const noexcept { return artifact_; }
@@ -134,7 +180,15 @@ bool ArtifactModelKernel::owns_backend_synchronization() const noexcept {
 }
 
 ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
-    return contexts_.snapshot();
+    auto snapshot = contexts_.snapshot();
+    snapshot.profile_samples = profile_samples_.load(std::memory_order_relaxed);
+    snapshot.packing_nanoseconds =
+        packing_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.inference_nanoseconds =
+        inference_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.output_nanoseconds =
+        output_nanoseconds_.load(std::memory_order_relaxed);
+    return snapshot;
 }
 
 void ArtifactModelKernel::cancel_pending() noexcept { contexts_.cancel(); }

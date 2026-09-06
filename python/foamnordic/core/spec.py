@@ -601,6 +601,7 @@ class Longship:
         orphan_timeout: float = 30.0,
         start_timeout: float | None = None,
         verbose: bool | None = None,
+        profile_every: int = 0,
     ) -> Run:
         """Prepare an isolated case and return a non-blocking native Run."""
 
@@ -613,12 +614,17 @@ class Longship:
             raise ValueError("start_timeout must be positive")
         if orphan_timeout < 0:
             raise ValueError("orphan_timeout must not be negative")
+        if not isinstance(profile_every, int) or isinstance(profile_every, bool):
+            raise TypeError("profile_every must be an integer")
+        if profile_every < 0:
+            raise ValueError("profile_every must not be negative")
         run = launch(
             self,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
             orphan_timeout=orphan_timeout,
             verbose=selected_verbose,
+            profile_every=profile_every,
         )
         if selected_verbose:
             if self.scheduler is None:

@@ -90,6 +90,19 @@ Ort::Value input_tensor(
         shape.size());
 }
 
+template <class Value>
+Ort::Value output_tensor(
+    const Ort::MemoryInfo& memory,
+    std::vector<std::byte>& bytes,
+    const std::vector<std::int64_t>& shape) {
+    return Ort::Value::CreateTensor<Value>(
+        memory,
+        reinterpret_cast<Value*>(bytes.data()),
+        bytes.size() / sizeof(Value),
+        shape.data(),
+        shape.size());
+}
+
 }  // namespace
 
 void OnnxOptions::validate() const {
@@ -176,12 +189,42 @@ public:
         }
         const char* input_names[]{input_name_.c_str()};
         const char* output_names[]{output_name_.c_str()};
-        auto outputs = session_->Run(
-            Ort::RunOptions{nullptr}, input_names, &input, 1, output_names, 1);
-        if (outputs.size() != 1 || !outputs.front().IsTensor()) {
-            throw std::runtime_error("ONNX Runtime did not return one tensor output.");
+        Ort::Value output{nullptr};
+        std::vector<std::byte> bytes;
+        if (output_shape_[1] > 0) {
+            const std::vector<std::int64_t> bound_shape{
+                shape[0], output_shape_[1]};
+            const auto row_bytes = static_cast<std::uint64_t>(output_shape_[1])
+                                   * fjord::element_size(features.element);
+            if (shape[0] < 0
+                || static_cast<std::uint64_t>(shape[0])
+                       > std::numeric_limits<std::size_t>::max() / row_bytes) {
+                throw std::overflow_error("ONNX output allocation exceeds host limits.");
+            }
+            bytes.resize(static_cast<std::size_t>(shape[0]) * row_bytes);
+            if (features.element == fjord::Element::float32) {
+                output = output_tensor<float>(memory_, bytes, bound_shape);
+            } else {
+                output = output_tensor<double>(memory_, bytes, bound_shape);
+            }
+            session_->Run(
+                Ort::RunOptions{nullptr},
+                input_names,
+                &input,
+                1,
+                output_names,
+                &output,
+                1);
+        } else {
+            auto outputs = session_->Run(
+                Ort::RunOptions{nullptr}, input_names, &input, 1, output_names, 1);
+            if (outputs.size() != 1 || !outputs.front().IsTensor()) {
+                throw std::runtime_error(
+                    "ONNX Runtime did not return one tensor output.");
+            }
+            output = std::move(outputs.front());
         }
-        const auto output_info = outputs.front().GetTensorTypeAndShapeInfo();
+        const auto output_info = output.GetTensorTypeAndShapeInfo();
         const auto output_shape = output_info.GetShape();
         if (output_shape.size() != 2 || output_shape[0] != shape[0]
             || output_shape[1] <= 0 || output_info.GetElementType() != element) {
@@ -192,13 +235,15 @@ public:
             throw std::runtime_error(
                 "ONNX Runtime output does not match the model declaration.");
         }
-        const auto byte_count = output_info.GetElementCount()
-                                * fjord::element_size(features.element);
-        std::vector<std::byte> bytes(byte_count);
-        if (features.element == fjord::Element::float32) {
-            std::memcpy(bytes.data(), outputs.front().GetTensorData<float>(), bytes.size());
-        } else {
-            std::memcpy(bytes.data(), outputs.front().GetTensorData<double>(), bytes.size());
+        if (bytes.empty()) {
+            const auto byte_count = output_info.GetElementCount()
+                                    * fjord::element_size(features.element);
+            bytes.resize(byte_count);
+            if (features.element == fjord::Element::float32) {
+                std::memcpy(bytes.data(), output.GetTensorData<float>(), bytes.size());
+            } else {
+                std::memcpy(bytes.data(), output.GetTensorData<double>(), bytes.size());
+            }
         }
         return {
             "foamnordic.predictions",

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <mutex>
 
 #include "foamnordic/backend/inference/artifact.hpp"
@@ -68,6 +69,12 @@ private:
     ExecutionContextPool contexts_;
     BackendCapabilities capabilities_;
     std::mutex backend_mutex_;
+    std::uint64_t profile_every_{0};
+    std::atomic<std::uint64_t> profile_sequence_{0};
+    std::atomic<std::uint64_t> profile_samples_{0};
+    std::atomic<std::uint64_t> packing_nanoseconds_{0};
+    std::atomic<std::uint64_t> inference_nanoseconds_{0};
+    std::atomic<std::uint64_t> output_nanoseconds_{0};
 };
 
 }  // namespace foamnordic::inference
