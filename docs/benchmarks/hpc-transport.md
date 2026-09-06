@@ -208,7 +208,7 @@ unchanged.
 
 Both solver ranks upgraded their independent Fjord sessions to UCX with
 `UCX_TLS=rc,ud,sm,self`. The resident ModelHost evaluated the native ONNX
-artifact for every turbulence correction and published `nut` atomically. The
+artefact for every turbulence correction and published `nut` atomically. The
 parallel `pimpleFoam` run completed times `0.001`, `0.002`, and `0.003`; both
 native runners stopped, Slurm client accounting completed, Longship removed
 its readiness marker, and the gate reported
@@ -267,7 +267,7 @@ and the short pressure solves retained large final residuals. Non-fatal
 function-object warnings also reflected requests for DES and a missing
 processor-periodic patch in a non-DES two-rank smoke. A scientific campaign
 must restore case-owned numerics, control the time step, establish convergence,
-use a trained closure artifact, and compare against a declared baseline.
+use a trained closure artefact, and compare against a declared baseline.
 
 ## Reproducing the site capability check
 

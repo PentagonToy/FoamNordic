@@ -63,7 +63,7 @@ wire version, documented CLI commands, and documented dictionary keys.
   tensor ordering, or changing field-commit timing requires a major release.
 - FNOM and Rune readers reject unsupported newer schema or protocol versions;
   they do not guess.
-- Native artifacts are tied to their declared platform and ABI. Compatibility
+- Native artefacts are tied to their declared platform and ABI. Compatibility
   across an OpenFOAM compiler, precision, label width, or release boundary is
   never inferred from a filename alone.
 - Internal modules, generated build trees, private Python names, and files not

@@ -1,7 +1,7 @@
 # Native transport
 
 FoamNordic separates orchestration from field movement. Python may configure
-an experiment, but it must not copy, concatenate, poll, or serialize every
+an experiment, but it must not copy, concatenate, poll, or serialise every
 OpenFOAM field during each exchange.
 
 The native data plane has three permanent layers:

@@ -17,7 +17,7 @@ resource costs.
 Python has four responsibilities:
 
 1. prepare an isolated OpenFOAM workspace;
-2. bind a versioned model artifact to field expressions;
+2. bind a versioned model artefact to field expressions;
 3. declare Slurm placement, observations, and lifecycle;
 4. inspect bounded observations and durable results.
 
@@ -28,8 +28,8 @@ worker; OpenFOAM still exchanges through the same native Fjord boundary.
 ## Model-build workflow
 
 A training or model-build notebook may use JAX, NumPy, and plotting libraries.
-It exports a self-contained artifact before a solver allocation begins.
-Constants are frozen into the artifact unless the model contract explicitly
+It exports a self-contained artefact before a solver allocation begins.
+Constants are frozen into the artefact unless the model contract explicitly
 declares them as configurable parameters.
 
 ```python
@@ -110,7 +110,7 @@ equinox_artifact = fno.export.equinox(
 worker or managed compiled/Joblib/Equinox resident automatically. All formats
 retain the same Fjord transport and native packing boundary. Callable
 JAX-to-ONNX lowering remains an exporter concern. Every export function is
-quiet by default; `verbose=True` displays an Onsaemiro artifact summary.
+quiet by default; `verbose=True` displays an Onsaemiro artefact summary.
 
 The model CPU declaration is an active runtime budget, not scheduler metadata
 only. Under Slurm, `Slurm.model(cpus_per_task=N)` reserves and passes `N` CPUs
@@ -131,7 +131,7 @@ and Slurm nodes.
 `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or affine
 `FunctionTransformer` instances. Export converts
 their learned arrays into the native FNOM affine contract. The Python scaler
-object is not serialized into the model and is never called during an
+object is not serialised into the model and is never called during an
 OpenFOAM exchange.
 
 The lowering backend must validate its ONNX opset and IR version against the
@@ -176,11 +176,11 @@ closure = fno.Closure(
 `mesh=None` requires an existing `constant/polyMesh` and fails before solver
 launch when it is absent. `mesh="blockMesh"` runs `blockMesh` in the copied
 run case. `validate_mesh=True` follows either path with `checkMesh`. Parallel
-initialization then writes a compatible `decomposeParDict` and decomposes the
+initialisation then writes a compatible `decomposeParDict` and decomposes the
 prepared mesh for the declared ranks.
 
 NACA4412 is a staged validation target rather than the first software gate.
-The native multi-output artifact and a compact `kEqnFjord` cavity run should
+The native multi-output artefact and a compact `kEqnFjord` cavity run should
 pass before its mesh, runtime, and physical settings are introduced. A first
 NACA4412 launch should copy the case, retain its existing `0/k` boundary
 conditions, and use a deliberately short end time; a longer LES campaign is a
@@ -246,7 +246,7 @@ built-in model is exactly `kEqnFjord`, not `KEqnFjord` or `keqnfjord`.
 
 `fno.Field("p")` binds a stored field, `fno.Field.grad("U")` requests a native
 derived expression, `fno.Field.delta()` requests the active LES filter width,
-and `fno.Field.coordinate("x")` requests a synthesized cell-centre coordinate.
+and `fno.Field.coordinate("x")` requests a synthesised cell-centre coordinate.
 The older top-level `field()`, `grad()`, and `filter_width()` functions remain
 compatible aliases.
 
@@ -270,7 +270,7 @@ velocity_transform = fno.Transform(
 )
 ```
 
-Common stored-field semantics can also be inferred from an FNOM artifact. For
+Common stored-field semantics can also be inferred from an FNOM artefact. For
 example, ports named `pressure` and `eddy_viscosity` bind to `p` and `nut`,
 while `predicted_velocity` and `temperature` bind to `U` and `T`:
 
@@ -320,7 +320,7 @@ temporarily.
 copying an entire vector field through Python.
 
 The public reproducibility input is `fno.Random.Key`, defaulting to
-`fno.Random.key(42)`. Equinox materializes it as a JAX key internally.
+`fno.Random.key(42)`. Equinox materialises it as a JAX key internally.
 `scope="global"` gives every rank the same invocation key; `scope="rank"`
 derives independent rank-local keys. See the [numerical APIs](numerics.md).
 
@@ -386,7 +386,7 @@ the submission line appends it as `(est. start: TIMESTAMP)`; the later
 header: `nodes`, `ntasks`, `cpus_per_task`, and `mem_per_cpu`.
 `Slurm.model()` uses the same CPU and memory vocabulary. A model host is always
 exactly one ModelHost task per OpenFOAM node, so its task topology is an
-internal invariant rather than another user setting or serialized plan field.
+internal invariant rather than another user setting or serialised plan field.
 In the example, each model host receives eight CPUs and 8 GiB in total. Model
 resources never change the OpenFOAM `ntasks`. With
 `Longship(verbose=True)`, construction prints a four-column resource table:
@@ -408,7 +408,7 @@ retaining their separately declared CPU and memory budgets.
 The same API extends to multiple solver nodes. For example, `nodes=2` and
 `ntasks=16` place eight OpenFOAM ranks and one model host on each node. Each
 host accepts only its eight node-local ranks; all bulk field exchange remains
-in node-local shared memory. The model artifact is loaded once per node, and
+in node-local shared memory. The model artefact is loaded once per node, and
 Longship waits for both node hosts before starting the distributed solver.
 `ntasks` must be divisible by `nodes`.
 
@@ -445,7 +445,7 @@ internally and returns a small non-blocking lifecycle handle after the start
 barrier.
 `longship.compile()` remains an advanced inspection API for validation without
 submission. Its immutable plan contains the stable digest, rank-to-host map,
-model artifact identities, resource arithmetic, and observation limits.
+model artefact identities, resource arithmetic, and observation limits.
 
 ## Read-only observation
 
@@ -545,7 +545,7 @@ fig.tight_layout()
 ```
 
 Full-resolution fields, checkpoints, and VTK products remain filesystem
-artifacts. `result.case`, `result.logs`, and `result.artifacts` expose their
+artefacts. `result.case`, `result.logs`, and `result.artifacts` expose their
 durable paths without copying them into the notebook. `result.postprocess`
 opens the completed OpenFOAM case for field access and numerical comparison;
 see the [Postprocess API](postprocess-api.md). Live snapshots remain for
@@ -555,6 +555,6 @@ bounded monitoring rather than publication-quality result analysis.
 
 FoamNordic validates immutable plans before launch, stages one isolated case
 per run, and keeps declared closure execution inside a resident native
-workload. `Run` and `Result` retain the durable log, case, and artifact paths;
+workload. `Run` and `Result` retain the durable log, case, and artefact paths;
 `run.observe()` carries bounded read-only summaries without participating in
 field mutation.

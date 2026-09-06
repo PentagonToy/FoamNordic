@@ -24,10 +24,10 @@ float32 model tensor, 20 repetitions:
 
 | Path | Elapsed | Source throughput |
 |---|---:|---:|
-| Specialized fused Smedja pack | 0.0350 s | 13,074 MiB/s |
-| Idealized handwritten two-pass cast and interleave | 0.0278 s | 16,455 MiB/s |
+| Specialised fused Smedja pack | 0.0350 s | 13,074 MiB/s |
+| Idealised handwritten two-pass cast and interleave | 0.0278 s | 16,455 MiB/s |
 
-The fused path was about 21% slower than the idealized loop, but performs the
+The fused path was about 21% slower than the idealised loop, but performs the
 real contract lookup, shape validation, active-range validation, metadata
 update, and reusable workspace management and avoids three additional
 full-field float32 staging arrays. This record is a guardrail, not a claim that
@@ -196,7 +196,7 @@ array began 272 bytes into the payload and was mapped at absolute FNOM byte
 | Streamed staging fallback | 10.684 ms | 16 KiB | yes | staged Joblib file |
 | Direct absolute-offset mmap | 0.470 ms | 16 KiB | no | original FNOM bundle |
 
-The observed startup ratio was approximately 22.7 in favor of direct mapping.
+The observed startup ratio was approximately 22.7 in favour of direct mapping.
 The two measurements ran on different Roihu login nodes, so the ratio is a
 development indication rather than a controlled performance claim. More
 importantly, the direct run verified the intended storage semantics on Linux:

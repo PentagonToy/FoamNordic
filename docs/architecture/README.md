@@ -32,7 +32,7 @@ adapter validates and commits the result.
 The control plane may use Python, Slurm, files, and process supervision. The
 data plane carries packed numeric tensors through UDS, SHM, TCP, or UCX. A
 field exchange never passes through a notebook, scheduler command, database,
-or serialized Python object.
+or serialised Python object.
 
 Declarations compile before launch. The native plan fixes program order,
 ports, tensor layouts, stages, keys, placement, and observation schedules.
@@ -61,10 +61,10 @@ backend-neutral.
 | [Principles](principles.md) | Ownership, invariants, non-goals, and 1.x compatibility policy |
 | [Native runtime](runtime.md) | Exchanges, resident execution, bypass, and failures |
 | [Native transport](transport.md) | Rune, Fjord, Harbor, UDS, SHM, TCP, UCX, and MPI layout |
-| [FNOM](fnom.md) | Artifact encoding, compatibility, preprocessing, and trust |
+| [FNOM](fnom.md) | Artefact encoding, compatibility, preprocessing, and trust |
 | [OpenFOAM integration](openfoam.md) | Field bridge, equation adapters, and native build contract |
 | [Lifecycle](lifecycle.md) | Node-local placement, resource plans, startup, and shutdown |
 | [Observations](observations.md) | Monitoring, reduction, retention, and backpressure |
 
-Measured behavior belongs in [benchmarks and validation](../benchmarks/README.md),
+Measured behaviour belongs in [benchmarks and validation](../benchmarks/README.md),
 not in architecture promises.

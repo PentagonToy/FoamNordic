@@ -1,7 +1,7 @@
-# FNOM format and model artifacts
+# FNOM format and model artefacts
 
 **FNOM (FoamNordic Model, pronounced “ef-nom”) is FoamNordic's
-self-contained, backend-neutral execution artifact for deploying analytical
+self-contained, backend-neutral execution artefact for deploying analytical
 and learned model kernels into coupled simulations.** FNOM does not replace
 backend model formats. It binds an ONNX, compiled C++, Joblib, Equinox, or future payload to
 the tensor contract, preprocessing metadata, runtime requirements, and
@@ -44,7 +44,7 @@ All backends consume named packed tensors with the same native scaling and
 atomic publication contract. ONNX executes in the native ModelHost.
 Supported sklearn graphs are lowered to compiled C++; unsupported estimators
 use a persistent Joblib resident. Equinox reconstructs and JIT-compiles its
-trusted PyTree once in a persistent JAX resident. Serialized Python objects are
+trusted PyTree once in a persistent JAX resident. Serialised Python objects are
 never transported during an exchange, and the notebook is never called from
 the solver loop.
 
@@ -87,7 +87,7 @@ The manifest begins with `FNOMAN1\0`, followed by:
 
 1. manifest schema, `u32`;
 2. backend family, `u8` (`1` Equinox, `2` Joblib, `3` ONNX, `4` compiled C++);
-3. backend artifact name string;
+3. backend artefact name string;
 4. program-contract name string;
 5. input field sequence;
 6. output field sequence;
@@ -111,7 +111,7 @@ data.
 
 | Container | Manifest schema | Current reader | Current writer |
 |---|---:|---|---|
-| manifest-only `FNOMAN1` | 1–2 | supported for legacy artifacts | no |
+| manifest-only `FNOMAN1` | 1–2 | supported for legacy artefacts | no |
 | `FNOBND1` | 1–2 | supported | no |
 | `FNOBND2` | 1–2 | supported | yes |
 
@@ -130,10 +130,10 @@ A compiled v1 FNOM stores portable C++ source and runtime identifier `cpp-v1`,
 not a platform-specific shared library. The first worker on a target compiles
 the source with a C++17 compiler. FoamNordic caches the resulting library by
 the SHA-256 digest of the source, code-generator version, operating system,
-architecture, compiler identity, and optimization flags. Subsequent workers
+architecture, compiler identity, and optimisation flags. Subsequent workers
 load the cached library directly.
 
-Keeping target binaries outside FNOM preserves one artifact across macOS
+Keeping target binaries outside FNOM preserves one artefact across macOS
 arm64, Linux x86-64, and Linux arm64. Compilation is never part of an exchange
 hot path. A cache miss does, however, add startup latency and transient compiler
 memory; production deployments should warm the cache before a scheduled run.
@@ -148,7 +148,7 @@ Compiled v1 lowers scalar-output `Ridge`, `Lasso`, `ElasticNet`,
 `XGBRFRegressor`, `LGBMRegressor`, and `VotingRegressor` graphs composed from
 supported estimators. KNN accepts uniform or distance weights with Euclidean or
 Manhattan distance. Boosting exporters accept scalar regression objectives and
-numeric tree splits. Unsupported estimators must remain Joblib artifacts rather
+numeric tree splits. Unsupported estimators must remain Joblib artefacts rather
 than silently changing semantics.
 
 ## Performance and trust
@@ -156,7 +156,7 @@ than silently changing semantics.
 The execution payload is never compressed or encrypted. It is decoded once at
 worker startup, loaded directly from memory where the backend permits, and
 memory-mapped when Joblib provides a compatible interface. There is no JSON
-parsing, mandatory extraction, or per-exchange deserialization in the FNOM
+parsing, mandatory extraction, or per-exchange deserialisation in the FNOM
 hot path.
 
 FNOM is an execution contract, not a security sandbox. Joblib and current

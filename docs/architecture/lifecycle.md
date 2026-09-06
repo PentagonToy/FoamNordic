@@ -12,7 +12,7 @@ Longship keeps the solver and model processes in one schedulable job.
 
 Placement, lifecycle, and data-path selection are separate contracts. A
 scheduler request must not implicitly select a transport or alter Python
-worker behavior.
+worker behaviour.
 
 ## Default: automatic
 
@@ -88,7 +88,7 @@ foamnordic-longship \
 The supervisor removes stale readiness paths before launch, waits for every
 configured host endpoint, starts the solver only afterward, and returns the
 failing component's status. Under Slurm the two commands may be `srun` command
-arrays; the lifecycle behavior remains identical.
+arrays; the lifecycle behaviour remains identical.
 After a successful solver exit, Longship first gives ModelHost one grace
 window to consume protocol shutdown and exit naturally. Only a host that
 remains alive receives `SIGTERM` and, after another bounded grace window,
@@ -106,7 +106,7 @@ from an unresponsive external runtime.
 One resident ModelHost accepts the declared number of solver connections on
 its node and owns one model instance. Every connection retains its global MPI
 rank and an independent Harbor, SHM channel, exchange state machine, and
-shutdown boundary. Model evaluation is initially serialized inside the host;
+shutdown boundary. Model evaluation is initially serialised inside the host;
 this guarantees framework safety without loading one model per rank. A later
 batching policy may combine compatible rank requests without changing their
 individual exchange identities.
@@ -117,7 +117,7 @@ visible to the Longship supervisor. `foamnordic_model_worker` accepts
 from `SLURM_PROCID`, PMI, PMIx, or Open MPI rank metadata. The marker is created
 only after the listener and model are ready and is removed when the worker
 exits. The canonical Slurm template passes all markers to
-`foamnordic-longship`, which alone owns startup and fail-together behavior.
+`foamnordic-longship`, which alone owns startup and fail-together behaviour.
 For a central UCX host, `foamnordic_model_worker` additionally accepts
 `--ucx-host HOST`. This keeps TCP as the advertised control address, creates a
 UCP listener on `HOST`, and requires every declared solver connection to

@@ -14,7 +14,7 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   for every invocation so dynamic OpenFOAM storage remains safe.
 - Moved field-name lookup outside the hot cell loop and added a zero-copy
   ownership transfer for compatible single-output staging buffers.
-- Narrowed artifact-kernel serialization to backend evaluation; request-local
+- Narrowed artefact-kernel serialisation to backend evaluation; request-local
   packing, scaling, validation, and staging no longer share the worker lock.
 - Reused rank-local input workspace capacity across stable invocations, with
   automatic downsizing after large dynamic-mesh requests.
@@ -23,7 +23,7 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 - Reused packed backend staging for the widest field during multi-output
   unpacking, removing one full-field allocation without exposing aliases.
 - Allowed floating-point solver/model dtype differences to be converted during
-  Smedja packing, with a specialized three-scalar float64-to-float32 path.
+  Smedja packing, with a specialised three-scalar float64-to-float32 path.
 - Verified that changing payload sizes, including tensors larger than one SHM
   slot, stream through one session without unsafe shared-region replacement.
 - Added internal surface-field dispatch alongside the existing volume-field
@@ -41,7 +41,7 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 - Made solver-field publication fully transactional across multiple outputs.
   Element conversions and destination-storage aliasing are now rejected before
   any OpenFOAM-owned field is modified.
-- Preserved backend synchronization ownership through the public artifact
+- Preserved backend synchronisation ownership through the public artefact
   loader, keeping request preparation and output staging outside the narrow
   model-evaluation lock.
 - Released retained Smedja packing storage for zero-cell rank partitions while
@@ -69,7 +69,7 @@ software; this baseline is not a guarantee for every OpenFOAM or HPC environment
 
 - A common `Longship` interface for baseline OpenFOAM cases, field transforms,
   equation-level closures, and progress-variable combustion workflows.
-- Self-contained FNOM artifacts with input/output tensor contracts, scaling,
+- Self-contained FNOM artefacts with input/output tensor contracts, scaling,
   and runtime metadata. Export paths cover ONNX, sklearn-compatible estimators
   (supported compiled models or Joblib), and Equinox models.
 - Local and Slurm execution, model placement, runtime observations, and result

@@ -42,8 +42,8 @@ Large multi-node scaling and central accelerator placement remain later
 campaigns. They should use deliberately requested partitions and report
 solver, model, and orchestration time separately.
 
-Production flamelet thermodynamics, conservation tolerances, realizability,
-and a physically representative trained artifact remain scientific acceptance
+Production flamelet thermodynamics, conservation tolerances, realisability,
+and a physically representative trained artefact remain scientific acceptance
 work. They are not replaced by the software gates above.
 
 ## Roihu evidence: 2026-08-23
@@ -51,7 +51,7 @@ work. They are not replaced by the software gates above.
 OpenFOAM v2512 on one `small` node validated the reduced 4000-cell
 counter-flow case. Job `790448` established the four serial gates at commit
 `600d1a5`; job `790497` completed the focused two-rank MPI gate at commit
-`56338b4` after run-local decomposition normalization was added.
+`56338b4` after run-local decomposition normalisation was added.
 
 | Gate | Ranks | Gate elapsed | Result |
 | --- | ---: | ---: | --- |
@@ -76,7 +76,7 @@ passed `checkMesh`, the solver reached `End`, and OpenFOAM reported
 logs reported `0.09 s`. These single-step timings have only 0.01-second log
 resolution, so they demonstrate comparable solver cost rather than a stable
 percentage overhead. The FoamNordic gate totals of 2.378--2.444 seconds also
-include artifact export, case preparation, and resident startup/shutdown.
+include artefact export, case preparation, and resident startup/shutdown.
 
 A strict identical-mesh comparison at physical time 1 gave the following
 largest errors against pure OpenFOAM:

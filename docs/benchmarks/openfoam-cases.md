@@ -27,7 +27,7 @@ case = fno.OpenFOAM.Case(
 Each source case was copied to temporary storage. End times were shortened,
 but the turbulence selection and original field dictionaries were retained.
 An identity `U -> U` Transform ran at `time_step_start`, while native
-observation summarized `U`, `p`, and `nut` where available. A second run of
+observation summarised `U`, `p`, and `nut` where available. A second run of
 the same copied case provided the uncoupled baseline.
 
 | Regime | Case | Model or feature | Reduced gate | Result | Baseline comparison |

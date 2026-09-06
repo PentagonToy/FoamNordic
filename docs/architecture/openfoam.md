@@ -90,14 +90,14 @@ evidence is recorded in [OpenFOAM case validation](../benchmarks/openfoam-cases.
 
 `Foam::foamNordic::FieldProgramSession` is the reusable solver hook. It owns one
 rank-local connection and one `FieldProgramPort`; `begin(Time)` creates a fresh
-per-call invocation without reconnecting. A turbulence correction, modeled
+per-call invocation without reconnecting. A turbulence correction, modelled
 equation update, or combustion source evaluation provides its current views,
 registers its outputs, and commits before returning to the solver. Repeated
 calls at the same `Time::timeIndex()` therefore remain distinct transactions.
 Rune v2 preserves that OpenFOAM index separately as `solver_time_index`; the
 per-call `exchange_index` remains monotonic and unique for every outer
 corrector or source evaluation.
-The session also centralizes `{rank}` address expansion and UDS-to-SHM
+The session also centralises `{rank}` address expansion and UDS-to-SHM
 negotiation so specific closure adapters cannot accidentally implement a
 different handshake.
 
@@ -116,7 +116,7 @@ the active OpenFOAM `fvMesh` and object registry at the instant a closure is
 invoked. Initial native operations are `grad`, `div`, `curl`, `laplacian`,
 `mag`, `symm`, and `dev`, with nested expressions such as
 `dev(symm(grad(U)))`. The implementation calls OpenFOAM `fvc` and field
-algebra directly, so the case discretization schemes, dimensions, boundary
+algebra directly, so the case discretisation schemes, dimensions, boundary
 conditions, and current outer-corrector state remain authoritative.
 
 One frame belongs to exactly one closure invocation. It caches repeated
@@ -138,7 +138,7 @@ scalar, vector, tensor, differential, nested, and contraction expressions. It
 checks mesh-cell extent and every resulting scalar component for finiteness;
 this is the required a-posteriori operation smoke test for each supported
 OpenFOAM release.
-The probe intentionally does not invent missing discretization entries. An
+The probe intentionally does not invent missing discretisation entries. An
 expression such as `div(U)` is exercised only by a case whose `fvSchemes`
 defines `div(U)`; otherwise OpenFOAM's native missing-scheme failure remains
 authoritative.
@@ -315,7 +315,7 @@ kProduction           = 0.02 * k
 kDissipationCoeff     = 0.10 * k
 ```
 
-The generator loads the completed artifact through ONNX Runtime and verifies
+The generator loads the completed artefact through ONNX Runtime and verifies
 all three numerical outputs before publishing it for a solver test. The same
 11-feature to 3-feature boundary also has a backend test independent of ONNX,
 so field ordering and output splitting are checked on workstation builds.

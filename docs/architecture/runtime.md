@@ -39,7 +39,7 @@ output:  nut
 ```
 
 A k-equation closure can add resolved strain, filter width, density, or the
-modeled energy field without changing the exchange engine.
+modelled energy field without changing the exchange engine.
 
 ## Native bypass
 
@@ -52,7 +52,7 @@ Bypass is a first-class native policy with three responsibilities:
 For combustion, a policy may bypass cells outside the progress-variable range,
 with negligible variance, below an ignition temperature, or covered by an
 analytic or beta-FDF rule. For LES, a policy may apply a laminar, near-wall,
-realizability, or clipping rule. These physics policies are separate C++ or
+realisability, or clipping rule. These physics policies are separate C++ or
 Fortran kernels; the state machine only validates their indices and complete
 outputs.
 
@@ -114,8 +114,8 @@ path. This choice is made from the current request and is not cached as mesh
 state.
 
 When solver scalar precision differs from the model contract, Smedja casts
-while packing instead of materializing another complete converted field set.
-The common three-scalar float64-to-float32 closure path uses one specialized
+while packing instead of materialising another complete converted field set.
+The common three-scalar float64-to-float32 closure path uses one specialised
 contiguous loop. Sparse selections retain the same checked conversion rules.
 
 Smedja produces staged outputs; it does not mutate solver fields. The adapter
@@ -127,10 +127,10 @@ allocation, avoiding one additional full-field allocation. The remaining
 outputs receive independent storage, so publication never exposes strided or
 aliased solver data.
 Request-local packing, scaling, validation, and staging remain outside the
-backend lock; only the backend evaluation is serialized for backends that
+backend lock; only the backend evaluation is serialised for backends that
 require it. Arbitrary stateful kernels retain conservative worker-wide
-serialization. This synchronization ownership is preserved when kernels are
-wrapped by the public artifact loader, so loading an FNOM artifact cannot
+serialisation. This synchronisation ownership is preserved when kernels are
+wrapped by the public artefact loader, so loading an FNOM artefact cannot
 silently widen the critical section.
 
 ## Resident worker
@@ -155,7 +155,7 @@ completion marker.
 
 Solver-integrated closures always use per-call sequencing. The transport
 handshake establishes one persistent blocking session, while every invocation
-of `correctNut()`, a modeled-equation closure update, or a combustion source
+of `correctNut()`, a modelled-equation closure update, or a combustion source
 evaluation receives a fresh monotonic exchange index. Multiple calls at the
 same OpenFOAM time index and physical time are intentional and must each wait
 for their committed response. Timestep deduplication belongs only to the
@@ -171,7 +171,7 @@ outer-corrector calls nor repeated combustion-source evaluations are collapsed
 merely because their OpenFOAM time metadata is identical.
 
 The port depends only on named tensor views and an `ExchangeContract`. It has
-no knowledge of `nut`, modeled kinetic energy, progress variables, reaction
+no knowledge of `nut`, modelled kinetic energy, progress variables, reaction
 rates, turbulence classes, or combustion classes. OpenFOAM integrations should
 therefore remain thin view adapters; adding a new closure changes its contract
 and physics kernel rather than the transport state machine.

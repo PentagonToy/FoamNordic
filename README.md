@@ -9,7 +9,7 @@ operators without making Python part of the solver loop. The same `Longship`
 interface runs an unchanged OpenFOAM case, a field transform, or an
 equation-level closure supplied by any compatible solver adapter.
 
-FNOM is FoamNordic's self-contained model artifact. It stores the executable
+FNOM is FoamNordic's self-contained model artefact. It stores the executable
 payload together with tensor contracts, scaling, runtime requirements, and
 compatibility metadata. Fjord moves fields over shared memory, Unix sockets,
 UCX, or TCP; Longship owns placement, launch, logs, observations, and results.

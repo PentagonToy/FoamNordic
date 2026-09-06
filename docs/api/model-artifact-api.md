@@ -1,4 +1,4 @@
-# FNOM artifact API
+# FNOM artefact API
 
 `fno.Export.sklearn()`, `fno.Export.equinox()`, and `fno.Export.onnx()` create
 self-contained `.fnom` files.
