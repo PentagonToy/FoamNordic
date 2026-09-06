@@ -11,17 +11,29 @@
 
 #pragma once
 
+#include <atomic>
 #include <mutex>
 
 #include "foamnordic/backend/inference/artifact.hpp"
+#include "foamnordic/backend/inference/execution.hpp"
 #include "foamnordic/backend/inference/smedja.hpp"
 #include "foamnordic/backend/inference/runner.hpp"
 
 namespace foamnordic::inference {
 
+struct BackendCapabilities {
+    bool concurrent_evaluation{false};
+    bool row_independent{false};
+    bool owns_compute_threads{false};
+};
+
 class PackedModelKernel {
 public:
     virtual ~PackedModelKernel() = default;
+
+    [[nodiscard]] virtual BackendCapabilities capabilities() const noexcept {
+        return {};
+    }
 
     [[nodiscard]] virtual fjord::Tensor evaluate(
         fjord::TensorView features,
@@ -32,7 +44,10 @@ public:
 
 class ArtifactModelKernel final : public ModelKernel {
 public:
-    ArtifactModelKernel(ModelArtifact artifact, PackedModelKernel& kernel);
+    ArtifactModelKernel(
+        ModelArtifact artifact,
+        PackedModelKernel& kernel,
+        ExecutionResources resources = {});
 
     [[nodiscard]] TensorMap evaluate(
         const TensorMap& inputs,
@@ -42,6 +57,8 @@ public:
         std::uint32_t rank = 0) override;
 
     [[nodiscard]] bool owns_backend_synchronization() const noexcept override;
+    [[nodiscard]] ExecutionSnapshot execution_snapshot() const override;
+    void cancel_pending() noexcept override;
 
     [[nodiscard]] const ModelArtifact& artifact() const noexcept;
 
@@ -49,7 +66,17 @@ private:
     ModelArtifact artifact_;
     PackedModelKernel& kernel_;
     Smedja smedja_;
-    std::mutex backend_mutex_;
+    ExecutionContextPool contexts_;
+    BackendCapabilities capabilities_;
+    ExecutionContextPool backend_gate_{ExecutionResources{1}};
+    std::uint64_t profile_every_{0};
+    std::atomic<std::uint64_t> profile_sequence_{0};
+    std::atomic<std::uint64_t> profile_samples_{0};
+    std::atomic<std::uint64_t> packing_nanoseconds_{0};
+    std::atomic<std::uint64_t> inference_nanoseconds_{0};
+    std::atomic<std::uint64_t> output_nanoseconds_{0};
+    std::atomic<std::uint64_t> admission_nanoseconds_{0};
+    std::atomic<std::uint64_t> backend_wait_nanoseconds_{0};
 };
 
 }  // namespace foamnordic::inference

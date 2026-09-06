@@ -11,6 +11,8 @@ target_compile_features(_native PRIVATE cxx_std_20)
 set_target_properties(_native PROPERTIES CXX_EXTENSIONS OFF)
 
 install(TARGETS _native LIBRARY DESTINATION foamnordic COMPONENT Python)
+install(FILES ${PROJECT_SOURCE_DIR}/src/foamnordic/runtime/executor.hpp
+    DESTINATION foamnordic/templates/compiled COMPONENT Python)
 install(
     FILES
         ${PROJECT_SOURCE_DIR}/tools/template/openfoam/observation.in

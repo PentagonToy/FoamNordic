@@ -190,7 +190,10 @@ class LaunchTests(unittest.TestCase):
             fno.export.onnx(
                 b"fixture",
                 path=artifact,
-                inputs={"velocity_grad": fno.Tensor.tensor()},
+                inputs={
+                    "velocity_grad": fno.Tensor.tensor(),
+                    "filter_width": fno.Tensor.scalar(),
+                },
                 outputs={"eddy_viscosity": fno.Tensor.scalar()},
             )
             library = root / "lib"
@@ -229,8 +232,6 @@ class LaunchTests(unittest.TestCase):
                     fno.Closure(
                         name="nutFjord",
                         artifact=artifact,
-                        inputs={"velocity_grad": fno.grad("U")},
-                        outputs={"eddy_viscosity": fno.field("nut")},
                     ),
                 ),
             )

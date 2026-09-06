@@ -1,5 +1,29 @@
 # Placement and lifecycle
 
+## Runtime generations
+
+`foamnordic build` installs into a new generation under the selected runtime
+root. Only a successful build publishes the `current` symlink with an atomic
+replacement. Existing generations are not rewritten or automatically removed;
+resolved runtime paths remain pinned for jobs already prepared against them.
+The build worktree and installation root have separate process locks, so two
+prefixes sharing a CMake worktree cannot compile into it concurrently.
+
+A receipt records the source/configuration identity and installed-file hashes.
+An unchanged subsequent build validates that receipt and skips compilation.
+Source, compiler, ABI, precision/label environment and dependency metadata
+changes invalidate the identity. OpenFOAM dependency size, modification and
+change timestamps are inspected instead of rereading all upstream libraries;
+this is an incremental-build mechanism, not a cryptographic attestation of an
+upstream installation. Installed FoamNordic files are content-hashed.
+
+Interrupted builds leave an unpublished generation for diagnosis and do not
+replace the previous `current`. Old generations consume disk space until
+explicitly removed after their jobs have ended. A legacy installation without
+`current` remains readable. Changing a runtime root that a job has explicitly
+chosen is still an administrative action; no runtime scheme protects a path
+that the user deletes while the job is running.
+
 FoamNordic does not expose a database as part of its scientific workflow.
 The native service that receives fields, evaluates a resident field program,
 and returns fields is called a **ModelHost**. Cell-selection and bypass policies
@@ -12,7 +36,7 @@ Longship keeps the solver and model processes in one schedulable job.
 
 Placement, lifecycle, and data-path selection are separate contracts. A
 scheduler request must not implicitly select a transport or alter Python
-worker behavior.
+worker behaviour.
 
 ## Default: automatic
 
@@ -88,7 +112,7 @@ foamnordic-longship \
 The supervisor removes stale readiness paths before launch, waits for every
 configured host endpoint, starts the solver only afterward, and returns the
 failing component's status. Under Slurm the two commands may be `srun` command
-arrays; the lifecycle behavior remains identical.
+arrays; the lifecycle behaviour remains identical.
 After a successful solver exit, Longship first gives ModelHost one grace
 window to consume protocol shutdown and exit naturally. Only a host that
 remains alive receives `SIGTERM` and, after another bounded grace window,
@@ -106,7 +130,7 @@ from an unresponsive external runtime.
 One resident ModelHost accepts the declared number of solver connections on
 its node and owns one model instance. Every connection retains its global MPI
 rank and an independent Harbor, SHM channel, exchange state machine, and
-shutdown boundary. Model evaluation is initially serialized inside the host;
+shutdown boundary. Model evaluation is initially serialised inside the host;
 this guarantees framework safety without loading one model per rank. A later
 batching policy may combine compatible rank requests without changing their
 individual exchange identities.
@@ -117,7 +141,7 @@ visible to the Longship supervisor. `foamnordic_model_worker` accepts
 from `SLURM_PROCID`, PMI, PMIx, or Open MPI rank metadata. The marker is created
 only after the listener and model are ready and is removed when the worker
 exits. The canonical Slurm template passes all markers to
-`foamnordic-longship`, which alone owns startup and fail-together behavior.
+`foamnordic-longship`, which alone owns startup and fail-together behaviour.
 For a central UCX host, `foamnordic_model_worker` additionally accepts
 `--ucx-host HOST`. This keeps TCP as the advertised control address, creates a
 UCP listener on `HOST`, and requires every declared solver connection to

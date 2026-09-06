@@ -13,6 +13,7 @@
 
 #include <exception>
 #include <stdexcept>
+#include <limits>
 #include <utility>
 
 #include "foamnordic/runtime/log.hpp"
@@ -23,15 +24,50 @@ InferenceRunner::InferenceRunner(
     fjord::Harbor& harbor,
     ProgramContract contract,
     const CellEvaluationPolicy& bypass,
-    ModelKernel& kernel)
-    : harbor_(harbor), exchange_(std::move(contract)), bypass_(bypass), kernel_(kernel) {}
+    ModelKernel& kernel,
+    std::uint64_t maximum_exchange_payload,
+    ReceiveCreditPool* receive_credits,
+    ReceiveCreditPool* output_credits)
+    : harbor_(harbor),
+      exchange_(contract),
+      bypass_(bypass),
+      kernel_(kernel),
+      maximum_exchange_payload_(maximum_exchange_payload),
+      receive_credits_(receive_credits),
+      output_credits_(output_credits) {
+    for (const auto& field : contract.outputs) {
+        const auto width = fjord::element_size(field.element);
+        if (field.components > (std::numeric_limits<std::uint64_t>::max() - output_bytes_per_cell_) / width)
+            throw std::overflow_error("Model output contract byte count overflowed.");
+        output_bytes_per_cell_ += field.components * width;
+    }
+    if (maximum_exchange_payload_ == 0) {
+        throw std::invalid_argument(
+            "Model exchange payload limit must be positive.");
+    }
+}
 
 bool InferenceRunner::run_one() {
+    std::optional<ReceiveCreditPool::Reservation> receive_reservation;
+    std::optional<ReceiveCreditPool::Reservation> output_reservation;
+    if (receive_credits_ != nullptr) {
+        receive_reservation.emplace(*receive_credits_);
+    }
     bool started = false;
     std::uint32_t received_tensors = 0;
+    std::uint64_t received_payload_bytes = 0;
     try {
         while (true) {
-            auto message = harbor_.receive_message();
+            auto message = harbor_.receive_message(
+                maximum_exchange_payload_ - received_payload_bytes,
+                receive_reservation.has_value()
+                    ? fjord::PayloadAdmission{
+                          &*receive_reservation,
+                          [](void* context, std::uint64_t bytes) {
+                              static_cast<ReceiveCreditPool::Reservation*>(context)
+                                  ->acquire(bytes);
+                          }}
+                    : fjord::PayloadAdmission{});
             if (message.kind == fjord::RuneKind::shutdown) {
                 if (started) {
                     throw std::runtime_error("Model exchange was interrupted by shutdown.");
@@ -53,6 +89,7 @@ bool InferenceRunner::run_one() {
                         message.tensor->solver_time_index);
                     started = true;
                 }
+                received_payload_bytes += message.tensor->bytes.size();
                 exchange_.add_input(std::move(*message.tensor));
                 ++received_tensors;
                 continue;
@@ -71,6 +108,19 @@ bool InferenceRunner::run_one() {
         }
 
         exchange_.seal_inputs();
+        if (receive_reservation) {
+            receive_reservation->seal();
+        }
+        if (output_credits_) {
+            const auto cells = exchange_.cell_count();
+            if (output_bytes_per_cell_ > std::numeric_limits<std::uint64_t>::max() / 2
+                || (output_bytes_per_cell_ && cells > std::numeric_limits<std::uint64_t>::max() / 2 / output_bytes_per_cell_))
+                throw std::overflow_error("Model publication byte count overflowed.");
+            output_reservation.emplace(*output_credits_);
+            // Sparse predictions and full-field bypass outputs may coexist.
+            output_reservation->acquire(2 * cells * output_bytes_per_cell_);
+            output_reservation->seal();
+        }
         const auto& active_cells = exchange_.prepare(bypass_);
         auto predictions = kernel_.evaluate(
             exchange_.inputs(),
@@ -93,8 +143,19 @@ bool InferenceRunner::run_one() {
         }
         harbor_.publish(exchange_.exchange_index(), output_views);
         return true;
-    } catch (const std::exception& error) {
-        exchange_.fail(error.what());
+    } catch (...) {
+        if (receive_credits_) {
+            receive_credits_->cancel();
+        }
+        if (output_credits_) output_credits_->cancel();
+        std::string reason = "Unknown model exception.";
+        try {
+            throw;
+        } catch (const std::exception& error) {
+            reason = error.what();
+        } catch (...) {
+        }
+        exchange_.fail(std::move(reason));
         try {
             harbor_.fail_exchange(
                 started ? exchange_.exchange_index() : 0);

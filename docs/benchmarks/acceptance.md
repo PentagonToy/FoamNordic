@@ -1,5 +1,44 @@
 # Acceptance status
 
+## Local resource and deployment follow-up — 6 September 2026
+
+This pass used macOS arm64 only. No Roihu allocation, Slurm submission or UCX
+fabric experiment was performed.
+
+| Gate | Result |
+|---|---|
+| Native Release, without ONNX | 17/17 passed |
+| Native Release, ONNX Runtime 1.28.0 enabled | 18/18 passed |
+| Focused ThreadSanitizer executor/inference tests | 7/7 passed |
+| Focused AddressSanitizer executor/inference tests | 7/7 passed |
+| Installed-wheel Python tests | 218 passed, 2 optional-backend skips |
+| Data-only forest FNOM → native loader → worker | Repeated UDS and SHM exchanges passed |
+| Installed-wheel compiled and forest worker startup | 20 SHM exchanges each; exact simple-tree predictions |
+| Wheel build kit → OpenFOAM v2606 integration | Fresh isolated-prefix build passed |
+| Identical second native build | No build stages; receipt check completed in 0.80 s |
+
+The estimator parity tests cover ExtraTrees and RandomForest, empty through
+32,768-row batches, native compiled and data-only paths, with `rtol=atol=1e-13`
+against scikit-learn. Native tests also exercise missing-left routing, malformed
+graphs, persistent worker identities, executor exception recovery, concurrent
+submissions, FIFO admission and cancellation. Publication tests delay or
+interrupt the receiver while a payload exceeds the SHM ring's capacity, then
+verify that the reservation is returned without changing the output.
+
+The build measurements use an isolated installation root and the installed
+wheel's own build kit, not a source-checkout override. The first build's native
+compile stage took approximately 10 s and its OpenFOAM stage 33 s. These are
+single local build observations, not CFD speed-up measurements.
+
+The completed follow-up addresses persistent compiled execution, native C-ABI
+dispatch, an opt-in data-only forest evaluator, FIFO gates, publication lifetime
+and immutable incremental installation. It does **not** establish a universal
+RSS ceiling, arbitrary-backend interruption, an HPC scaling result, or new
+physical validation. ONNX output ownership remains transfer-based rather than
+reusing a buffer while a receiver might still hold it. JAX shape preparation,
+UCX idle-CPU policy and independent backend-session replication are not silently
+enabled by these changes.
+
 The solver-agnostic foundation has Linux HPC evidence for cross-node TCP,
 fabric-backed UCX, attached ModelHost lifecycle, two OpenFOAM ranks,
 `nutFjord`, and `kEqnFjord`. Domain-specific equation and physics acceptance
@@ -42,8 +81,8 @@ Large multi-node scaling and central accelerator placement remain later
 campaigns. They should use deliberately requested partitions and report
 solver, model, and orchestration time separately.
 
-Production flamelet thermodynamics, conservation tolerances, realizability,
-and a physically representative trained artifact remain scientific acceptance
+Production flamelet thermodynamics, conservation tolerances, realisability,
+and a physically representative trained artefact remain scientific acceptance
 work. They are not replaced by the software gates above.
 
 ## Roihu evidence: 2026-08-23
@@ -51,7 +90,7 @@ work. They are not replaced by the software gates above.
 OpenFOAM v2512 on one `small` node validated the reduced 4000-cell
 counter-flow case. Job `790448` established the four serial gates at commit
 `600d1a5`; job `790497` completed the focused two-rank MPI gate at commit
-`56338b4` after run-local decomposition normalization was added.
+`56338b4` after run-local decomposition normalisation was added.
 
 | Gate | Ranks | Gate elapsed | Result |
 | --- | ---: | ---: | --- |
@@ -76,7 +115,7 @@ passed `checkMesh`, the solver reached `End`, and OpenFOAM reported
 logs reported `0.09 s`. These single-step timings have only 0.01-second log
 resolution, so they demonstrate comparable solver cost rather than a stable
 percentage overhead. The FoamNordic gate totals of 2.378--2.444 seconds also
-include artifact export, case preparation, and resident startup/shutdown.
+include artefact export, case preparation, and resident startup/shutdown.
 
 A strict identical-mesh comparison at physical time 1 gave the following
 largest errors against pure OpenFOAM:

@@ -9,7 +9,7 @@ operators without making Python part of the solver loop. The same `Longship`
 interface runs an unchanged OpenFOAM case, a field transform, or an
 equation-level closure supplied by any compatible solver adapter.
 
-FNOM is FoamNordic's self-contained model artifact. It stores the executable
+FNOM is FoamNordic's self-contained model artefact. It stores the executable
 payload together with tensor contracts, scaling, runtime requirements, and
 compatibility metadata. Fjord moves fields over shared memory, Unix sockets,
 UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
@@ -115,6 +115,10 @@ run = fno.Longship(case=case, transforms=(transform,)).launch()
 FNOM selects compiled C++, ONNX, Joblib, or Equinox internally, so model
 loading does not alter the solver-facing API. Stochastic functions use
 `fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
+
+External solvers can add an equation-level adapter without including the
+FoamNordic source tree. See the installed-SDK
+[`externalNutFjord` example](examples/openfoam/externalNutFjord/README.md).
 
 ## Slurm resources
 

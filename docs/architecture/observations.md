@@ -54,7 +54,7 @@ interval=100                       sparse monitoring
 no Observe declaration             no live observation
 ```
 
-### Artifact retention
+### Artefact retention
 
 Full fields, checkpoints, VTK output, and final figures are explicit files.
 They use filesystem retention and are fetched on demand. A full-field snapshot
@@ -68,16 +68,16 @@ Before sending an observation across nodes, the node-local host may compute:
 - convergence and timing counters;
 - probes and selected patches;
 - planes, lines, and bounded point samples;
-- fixed-resolution visualization grids;
+- fixed-resolution visualisation grids;
 - explicitly requested sparse cell selections.
 
 MPI-wide summaries combine compact partial reductions. They do not gather all
 rank arrays into the orchestrator. A plane or surface is assembled only for
-the declared visualization product.
+the declared visualisation product.
 
 ## Observation backpressure
 
-Observation transport is separate from field-program transport. Its default behavior
+Observation transport is separate from field-program transport. Its default behaviour
 is lossy but bounded:
 
 ```text
@@ -88,7 +88,7 @@ producer faster than viewer
 ```
 
 Synchronous observation is diagnostic-only and must be requested explicitly.
-It reports that visualization latency can enter solver wall time.
+It reports that visualisation latency can enter solver wall time.
 
 This separation is also enforced by the native type system. An
 `ExecutionPlan` owns field writers and cannot contain observers. An
@@ -115,8 +115,8 @@ explicit exchange metadata and report missing contributions.
 Physics bypass selects cells that do not require model evaluation and supplies
 their valid output analytically. Observation sampling selects data that a user
 wants to inspect. They may reuse native masks and reductions, but their
-semantics and failure behavior are separate: dropping a plot must never change
-the modeled field.
+semantics and failure behaviour are separate: dropping a plot must never change
+the modelled field.
 
 ## Notebook memory target
 
@@ -128,7 +128,7 @@ A run-control notebook should work within a 4 GiB allocation because it owns:
 - at most the declared reduced snapshots;
 - no OpenFOAM full-field history and no resident model parameters.
 
-JAX training arrays, optimizer state, synthetic datasets, and model export
+JAX training arrays, optimiser state, synthetic datasets, and model export
 belong to a separate model-build notebook or batch task. A single document may
-link the resulting artifact into a Longship order, but training is not part of
+link the resulting artefact into a Longship order, but training is not part of
 the run-control process.

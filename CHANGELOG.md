@@ -9,12 +9,22 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 
 ### Native model execution
 
+- Added FIFO receive/context admission, cancellable backend admission and
+  output-publication reservations that survive slow receivers and failure.
+- Added persistent compiled-estimator threads and bounded reusable forest
+  scratch; managed compiled workers now call the native C ABI without a Python
+  evaluation callback.
+- Added an explicit data-only `forest` export backend for scalar scikit-learn
+  ExtraTrees and RandomForest regression, with checked native loading.
+- Published successful native builds as immutable runtime generations, with
+  build locks, atomic selection and receipt-based unchanged-build detection.
+
 - Added the Smedja model-execution boundary. Immutable tensor layouts are
   compiled once, while tensor addresses and shapes are rebound and validated
   for every invocation so dynamic OpenFOAM storage remains safe.
 - Moved field-name lookup outside the hot cell loop and added a zero-copy
   ownership transfer for compatible single-output staging buffers.
-- Narrowed artifact-kernel serialization to backend evaluation; request-local
+- Narrowed artefact-kernel serialisation to backend evaluation; request-local
   packing, scaling, validation, and staging no longer share the worker lock.
 - Reused rank-local input workspace capacity across stable invocations, with
   automatic downsizing after large dynamic-mesh requests.
@@ -23,7 +33,7 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 - Reused packed backend staging for the widest field during multi-output
   unpacking, removing one full-field allocation without exposing aliases.
 - Allowed floating-point solver/model dtype differences to be converted during
-  Smedja packing, with a specialized three-scalar float64-to-float32 path.
+  Smedja packing, with a specialised three-scalar float64-to-float32 path.
 - Verified that changing payload sizes, including tensors larger than one SHM
   slot, stream through one session without unsafe shared-region replacement.
 - Added internal surface-field dispatch alongside the existing volume-field
@@ -38,8 +48,42 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   and a non-empty copy of the same patch on its peer.
 - Fixed fresh `foamnordic build --without-onnx` installations by building the
   always-installed native inference core independently of the ONNX ModelHost.
+- Made solver-field publication fully transactional across multiple outputs.
+  Element conversions and destination-storage aliasing are now rejected before
+  any OpenFOAM-owned field is modified.
+- Preserved backend synchronisation ownership through the public artefact
+  loader, keeping request preparation and output staging outside the narrow
+  model-evaluation lock.
+- Released retained Smedja packing storage for zero-cell rank partitions while
+  preserving safe workspace reuse and regrowth for subsequent mesh layouts.
+- Replaced rank-thread-local packing storage with a bounded execution-context
+  pool. Context and working-byte admission now constrain concurrent model work,
+  while explicit backend capabilities permit safe native concurrency without
+  multiplying ONNX or managed-runtime thread pools.
+- Bounded complete input exchanges before allocating each subsequent tensor
+  body, and made execution-context admission cancellable during fail-together
+  worker shutdown.
+- Added `foamnordic diff` for non-executing comparison of validated FNOM
+  manifests and streamed embedded-payload digests.
+- Bound static-width ONNX outputs directly to their final FoamNordic tensor
+  storage, removing one allocation and full output copy while preserving the
+  fallback for dynamically sized output features.
+- Added opt-in sampled ModelHost stage timing through
+  `Longship.launch(profile_every=N)`; disabled production runs do not read a
+  clock or update timing counters.
+- Added a ModelHost-wide pre-receive memory-credit pool. Rank runners now
+  reserve validated tensor payloads before body allocation, retain credit for
+  the atomic exchange, and wake together on cancellation. The limit is
+  configurable with `Longship.launch(receive_memory_bytes=N)`.
 
 ### Solver boundary
+
+- Fixed partial-exchange receive-credit deadlock with cancellable reception
+  ownership and cumulative request rejection. Completed and failed exchanges
+  release input storage before returning credit.
+- Removed concurrent reads of active workspace vector metadata; retention is
+  published at lease return. Added concurrent multi-rank SHM regression coverage.
+- Separated sampled context admission and backend lock waiting from inference.
 
 - FoamNordic now builds and installs only the solver-agnostic native runtime,
   ModelHost, field hooks, and OpenFOAM adapter SDK. The bundled
@@ -61,7 +105,7 @@ software; this baseline is not a guarantee for every OpenFOAM or HPC environment
 
 - A common `Longship` interface for baseline OpenFOAM cases, field transforms,
   equation-level closures, and progress-variable combustion workflows.
-- Self-contained FNOM artifacts with input/output tensor contracts, scaling,
+- Self-contained FNOM artefacts with input/output tensor contracts, scaling,
   and runtime metadata. Export paths cover ONNX, sklearn-compatible estimators
   (supported compiled models or Joblib), and Equinox models.
 - Local and Slurm execution, model placement, runtime observations, and result

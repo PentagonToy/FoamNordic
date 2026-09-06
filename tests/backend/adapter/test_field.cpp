@@ -370,6 +370,207 @@ void test_atomic_field_exchange_applies_only_committed_output() {
         "Committed closure output was not applied atomically.");
 }
 
+void test_atomic_field_exchange_converts_float_model_output() {
+    auto channels = foamnordic::fjord::local_channel_pair();
+    const foamnordic::fjord::HarborOptions options{
+        foamnordic::fjord::HandshakeMode::disabled,
+        std::chrono::milliseconds(1'000),
+    };
+    foamnordic::fjord::Harbor solver(std::move(channels.first), options);
+    foamnordic::fjord::Harbor model(std::move(channels.second), options);
+    foamnordic::adapter::AtomicFieldExchange exchange(
+        solver, {{"delta"}, {"nut"}});
+
+    std::thread worker([&model] {
+        static_cast<void>(model.receive_message());
+        static_cast<void>(model.receive_message());
+        const std::array<float, 2> prediction{0.125F, 0.25F};
+        const foamnordic::fjord::TensorView output{
+            "nut",
+            foamnordic::fjord::Element::float32,
+            {2},
+            foamnordic::fjord::as_bytes(std::span(prediction)),
+            9,
+            0.5,
+            4,
+        };
+        model.publish(9, std::span(&output, 1));
+    });
+
+    std::array<double, 2> delta{0.01, 0.02};
+    std::array<double, 2> nut{-1.0, -1.0};
+    const auto field = [](const char* name, std::array<double, 2>& values) {
+        return foamnordic::fjord::MutableTensorView{
+            name,
+            foamnordic::fjord::Element::float64,
+            {2},
+            foamnordic::fjord::as_writable_bytes(std::span(values)),
+            9,
+            0.5,
+            4,
+        };
+    };
+    const auto delta_field = field("delta", delta);
+    const auto nut_field = field("nut", nut);
+    const foamnordic::adapter::InputFieldMap inputs{
+        {"delta", delta_field.read_only()},
+    };
+    const foamnordic::adapter::OutputFieldMap outputs{
+        {"nut", nut_field},
+    };
+    exchange.execute(9, 0.5, inputs, outputs);
+    worker.join();
+    require(
+        nut == std::array<double, 2>{0.125, 0.25},
+        "Float model output was not converted into the OpenFOAM scalar type.");
+}
+
+void test_invalid_later_output_never_partially_modifies_fields() {
+    auto channels = foamnordic::fjord::local_channel_pair();
+    const foamnordic::fjord::HarborOptions options{
+        foamnordic::fjord::HandshakeMode::disabled,
+        std::chrono::milliseconds(1'000),
+    };
+    foamnordic::fjord::Harbor solver(std::move(channels.first), options);
+    foamnordic::fjord::Harbor model(std::move(channels.second), options);
+    foamnordic::adapter::AtomicFieldExchange exchange(
+        solver, {{"U"}, {"first", "second"}});
+
+    std::thread worker([&model] {
+        static_cast<void>(model.receive_message());
+        static_cast<void>(model.receive_message());
+        const std::array<double, 2> valid{11.0, 12.0};
+        const std::array<std::int64_t, 2> invalid{21, 22};
+        const std::array<foamnordic::fjord::TensorView, 2> outputs{{
+            {
+                "first",
+                foamnordic::fjord::Element::float64,
+                {2},
+                foamnordic::fjord::as_bytes(std::span(valid)),
+                12,
+                0.75,
+                5,
+            },
+            {
+                "second",
+                foamnordic::fjord::Element::int64,
+                {2},
+                foamnordic::fjord::as_bytes(std::span(invalid)),
+                12,
+                0.75,
+                5,
+            },
+        }};
+        model.publish(12, outputs);
+    });
+
+    std::array<double, 2> velocity{1.0, 2.0};
+    std::array<double, 2> first{-1.0, -1.0};
+    std::array<double, 2> second{-2.0, -2.0};
+    const auto field = [](const char* name, std::array<double, 2>& values) {
+        return foamnordic::fjord::MutableTensorView{
+            name,
+            foamnordic::fjord::Element::float64,
+            {2},
+            foamnordic::fjord::as_writable_bytes(std::span(values)),
+            12,
+            0.75,
+            5,
+        };
+    };
+    const auto velocity_field = field("U", velocity);
+    bool rejected = false;
+    try {
+        exchange.execute(
+            12,
+            0.75,
+            {{"U", velocity_field.read_only()}},
+            {{"first", field("first", first)}, {"second", field("second", second)}});
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    worker.join();
+    require(rejected, "An unsupported later output dtype was accepted.");
+    require(
+        first == std::array<double, 2>{-1.0, -1.0}
+            && second == std::array<double, 2>{-2.0, -2.0},
+        "A failed output dtype preflight partially modified solver fields.");
+}
+
+void test_aliased_output_destinations_never_modify_fields() {
+    auto channels = foamnordic::fjord::local_channel_pair();
+    const foamnordic::fjord::HarborOptions options{
+        foamnordic::fjord::HandshakeMode::disabled,
+        std::chrono::milliseconds(1'000),
+    };
+    foamnordic::fjord::Harbor solver(std::move(channels.first), options);
+    foamnordic::fjord::Harbor model(std::move(channels.second), options);
+    foamnordic::adapter::AtomicFieldExchange exchange(
+        solver, {{"U"}, {"first", "second"}});
+
+    std::thread worker([&model] {
+        static_cast<void>(model.receive_message());
+        static_cast<void>(model.receive_message());
+        const std::array<double, 2> first{11.0, 12.0};
+        const std::array<double, 2> second{21.0, 22.0};
+        const std::array<foamnordic::fjord::TensorView, 2> outputs{{
+            {
+                "first",
+                foamnordic::fjord::Element::float64,
+                {2},
+                foamnordic::fjord::as_bytes(std::span(first)),
+                13,
+                0.8,
+                6,
+            },
+            {
+                "second",
+                foamnordic::fjord::Element::float64,
+                {2},
+                foamnordic::fjord::as_bytes(std::span(second)),
+                13,
+                0.8,
+                6,
+            },
+        }};
+        model.publish(13, outputs);
+    });
+
+    std::array<double, 2> velocity{1.0, 2.0};
+    std::array<double, 2> destination{-1.0, -1.0};
+    const auto field = [](const char* name,
+                          std::array<double, 2>& values) {
+        return foamnordic::fjord::MutableTensorView{
+            name,
+            foamnordic::fjord::Element::float64,
+            {2},
+            foamnordic::fjord::as_writable_bytes(std::span(values)),
+            13,
+            0.8,
+            6,
+        };
+    };
+    const auto velocity_field = field("U", velocity);
+    bool rejected = false;
+    try {
+        exchange.execute(
+            13,
+            0.8,
+            {{"U", velocity_field.read_only()}},
+            {
+                {"first", field("first", destination)},
+                {"second", field("second", destination)},
+            });
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    worker.join();
+    require(rejected, "Aliased output destinations were accepted.");
+    require(
+        destination == std::array<double, 2>{-1.0, -1.0},
+        "Aliased output preflight modified solver-owned storage.");
+}
+
 void test_incomplete_output_never_modifies_field() {
     auto channels = foamnordic::fjord::local_channel_pair();
     const foamnordic::fjord::HarborOptions options{
@@ -667,6 +868,9 @@ int main() {
     test_native_observation_jsonl_writer();
     test_longship_aggregates_ordered_observation_sources();
     test_atomic_field_exchange_applies_only_committed_output();
+    test_atomic_field_exchange_converts_float_model_output();
+    test_invalid_later_output_never_partially_modifies_fields();
+    test_aliased_output_destinations_never_modify_fields();
     test_incomplete_output_never_modifies_field();
     test_stale_output_never_modifies_field();
     test_worker_error_never_modifies_field(false);

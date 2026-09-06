@@ -21,5 +21,5 @@ Public declarations are compiled before the solver starts. Explicit transport
 requests never silently fall back, observations cannot gate solver progress,
 and bulk field-program tensors do not pass through the notebook. Low-level contracts
 are documented under [architecture](../architecture/README.md); measured
-behavior is kept under [benchmarks](../benchmarks/README.md). Wheel publication
+behaviour is kept under [benchmarks](../benchmarks/README.md). Wheel publication
 is a maintainer workflow documented in [others](../../others/publishing.md).

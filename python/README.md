@@ -89,7 +89,7 @@ and each later activation.
 ## Runtime invariants
 
 - A pure OpenFOAM baseline starts no ModelHost.
-- A model-driven workload loads each FNOM artifact once per resident worker.
+- A model-driven workload loads each FNOM artefact once per resident worker.
 - Node-local Slurm placement starts one ModelHost per solver node.
 - `Case.of_cmd` selects the matching installed OpenFOAM ABI at launch.
 - Generated cases and caches carry ownership markers; `clobber` removes only
@@ -114,5 +114,5 @@ also require their optional runtime libraries. The native C++ suite is built
 from the repository root with `FOAMNORDIC_TESTS=ON`; see the main README.
 
 Architecture and ownership details are in
-[the architecture guide](../docs/architecture/README.md). Measured behavior is
+[the architecture guide](../docs/architecture/README.md). Measured behaviour is
 kept separately under [benchmarks](../docs/benchmarks/README.md).

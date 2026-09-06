@@ -118,12 +118,13 @@ def openfoam_abi_for_toolchain(
 
 
 def runtime_directory(abi: str) -> Path:
-    return (
+    root = (
         Path.home()
         / ".local/share/foamnordic/runtime"
         / platform_tag()
         / abi
     ).resolve()
+    return (root / "current").resolve() if (root / "current").is_dir() else root
 
 
 def profile(
@@ -150,7 +151,8 @@ def profile(
         platform=platform_value,
         openfoam=abi,
         build_dir=build.resolve(),
-        runtime_dir=runtime.resolve(),
+        runtime_dir=(runtime / "current").resolve()
+        if (runtime / "current").is_dir() else runtime.resolve(),
     )
 
 

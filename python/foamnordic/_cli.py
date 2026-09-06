@@ -469,6 +469,45 @@ def _native_build_environment() -> dict[str, str]:
 
 
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
+    if args.dry_run:
+        return _build_direct(args, stream)
+    from .build.generations import complete, dependency_identity, fingerprint, locked, publish, tool_identity
+    import uuid
+
+    source = _source_root(args.source)
+    if source is None or not shutil.which("wmake"):
+        return _build_direct(args, stream)
+    selected = profile(build_dir=args.build_dir, runtime_dir=args.prefix)
+    assert selected is not None
+    root = (Path(args.prefix).expanduser().absolute() if args.prefix else
+            Path.home() / ".local/share/foamnordic/runtime" / selected.platform / selected.openfoam)
+    environment = _native_build_environment()
+    onnxruntime = None if args.without_onnx else resolve_onnxruntime(download=True)
+    identity = fingerprint(source, {
+        "abi": selected.openfoam, "platform": selected.platform,
+        "onnx": None if args.without_onnx else ONNXRUNTIME_VERSION,
+        "dependencies": dependency_identity(environment, onnxruntime),
+        "build_driver": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "environment": {k: v for k, v in environment.items() if k.startswith(("WM_", "FOAM", "CMAKE"))
+                        or k in {"CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "CPATH", "LIBRARY_PATH"}},
+        "tools": [tool_identity(environment.get("CXX", "c++")), tool_identity("cmake"), tool_identity("wmake")],
+    })
+    # Different installation prefixes may still share the same CMake worktree.
+    with locked(selected.build_dir.parent / (selected.build_dir.name + ".lock")), locked(root):
+        current = root / "current"
+        if current.is_dir() and complete(current.resolve(), identity):
+            print(f"[FoamNordic] Native runtime is up to date: {current.resolve()}", file=stream)
+            return 0
+        generation = root / "generations" / (identity[:16] + "-" + uuid.uuid4().hex[:8])
+        modified = argparse.Namespace(**vars(args))
+        modified.prefix = generation
+        result = _build_direct(modified, stream)
+        if result == 0:
+            publish(root, generation, identity)
+        return result
+
+
+def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
     terminal = _Terminal(stream)
     terminal.section("FoamNordic native build")
     source = _source_root(args.source)
@@ -860,6 +899,71 @@ def _validate_fnom(args: argparse.Namespace, stream: TextIO) -> int:
     return 0
 
 
+def _fnom_comparison_record(artifact) -> dict[str, object]:
+    from . import _native
+
+    metadata = dict(_native.read_model_manifest(str(artifact.path)))
+    external_payload = metadata.pop("artifact_path", None)
+    digest = hashlib.sha256()
+    if artifact.bundled:
+        with artifact.path.open("rb") as source:
+            source.seek(artifact.payload_offset or 0)
+            remaining = artifact.payload_size or 0
+            while remaining:
+                block = source.read(min(1024 * 1024, remaining))
+                if not block:
+                    raise RuntimeError("FNOM payload ended before its declared boundary")
+                digest.update(block)
+                remaining -= len(block)
+    else:
+        if not external_payload:
+            raise RuntimeError("Legacy FNOM manifest does not declare a model payload")
+        payload_path = Path(str(external_payload)).expanduser()
+        if not payload_path.is_absolute():
+            payload_path = artifact.path.parent / payload_path
+        with payload_path.open("rb") as source:
+            while block := source.read(1024 * 1024):
+                digest.update(block)
+    return {
+        "manifest": metadata,
+        "payload_sha256": digest.hexdigest(),
+    }
+
+
+def _diff_fnom(args: argparse.Namespace, stream: TextIO) -> int:
+    from .models import load
+
+    left = load(args.left)
+    right = load(args.right)
+    left_record = _fnom_comparison_record(left)
+    right_record = _fnom_comparison_record(right)
+    differences = {
+        key: {"left": left_record[key], "right": right_record[key]}
+        for key in left_record
+        if left_record[key] != right_record[key]
+    }
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "equal": not differences,
+                    "left": str(left.path),
+                    "right": str(right.path),
+                    "differences": differences,
+                },
+                indent=2,
+            ),
+            file=stream,
+        )
+    elif differences:
+        print(f"FNOM artifacts differ: {left.path} <> {right.path}", file=stream)
+        for key in differences:
+            print(f"- {key}", file=stream)
+    else:
+        print(f"Equivalent FNOM artifacts: {left.path} == {right.path}", file=stream)
+    return 1 if differences else 0
+
+
 def _compile_fnom(args: argparse.Namespace, stream: TextIO) -> int:
     from . import _native
     from .build.compiler import compile_source
@@ -957,6 +1061,21 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     validate_artifact.add_argument("artifact", type=Path, metavar="MODEL.fnom")
+    diff_artifacts = subcommands.add_parser(
+        "diff",
+        help="compare two validated FNOM artifacts",
+        description=(
+            "Compare validated FNOM manifests and embedded payload digests without "
+            "executing either model. File paths and container padding are ignored."
+        ),
+    )
+    diff_artifacts.add_argument("left", type=Path, metavar="LEFT.fnom")
+    diff_artifacts.add_argument("right", type=Path, metavar="RIGHT.fnom")
+    diff_artifacts.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable differences",
+    )
     compile_artifact = subcommands.add_parser(
         "compile",
         help="warm the target-native cache for a compiled FNOM artifact",
@@ -1026,6 +1145,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, RuntimeError, ValueError) as error:
             print(f"foamnordic: error: {error}", file=sys.stderr)
             return 1
+    if args.command == "diff":
+        try:
+            return _diff_fnom(args, sys.stdout)
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"foamnordic: error: {error}", file=sys.stderr)
+            return 2
     if args.command == "compile":
         try:
             return _compile_fnom(args, sys.stdout)

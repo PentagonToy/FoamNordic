@@ -26,6 +26,8 @@ public:
         std::vector<double> weights,
         std::vector<double> bias);
 
+    [[nodiscard]] BackendCapabilities capabilities() const noexcept override;
+
     [[nodiscard]] fjord::Tensor evaluate(
         fjord::TensorView features,
         std::uint64_t exchange_index,

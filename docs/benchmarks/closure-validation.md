@@ -56,14 +56,14 @@ kProduction       = nut (grad(U) : dev(2 symm(grad(U))))
 kDissipationCoeff = Ce sqrt(k)/delta
 ```
 
-The transported k equation, discretization, relaxation, bounds, boundary
+The transported k equation, discretisation, relaxation, bounds, boundary
 correction, and `fvOptions` remain in OpenFOAM. The Smagorinsky and k-equation
 gates use `Ck=0.094`, `Ce=1.048`, and `cubeRootVol` filter width.
 
 ### Apple lid-driven-cavity parity
 
 The 2026-08-22 gate compared stock Smagorinsky and k-equation models against
-mathematically equivalent float64 Equinox artifacts executed through
+mathematically equivalent float64 Equinox artefacts executed through
 FoamNordic.
 
 The test used the 16,384-cell lid-driven cavity for 100 steps from `t=0` to
@@ -82,7 +82,7 @@ The test used the 16,384-cell lid-driven cavity for 100 steps from `t=0` to
 | kEqn | `k` | 3.123e-17 | 4.101e-16 | PASS |
 
 The largest relative L2 difference was `4.075e-13` in Smagorinsky pressure;
-the modeled `nut` fields agreed to relative L2 below `6e-16`. The complete
+the modelled `nut` fields agreed to relative L2 below `6e-16`. The complete
 solver trajectories therefore agree to floating-point roundoff for this gate.
 
 | Model | Stock total [s] | FoamNordic total [s] | Added wall [s] | Stock/FoamNordic OpenFOAM execution [s] |
@@ -90,7 +90,7 @@ solver trajectories therefore agree to floating-point roundoff for this gate.
 | Smagorinsky | 8.87 | 10.29 | 1.43 | 6.62 / 6.55 |
 | kEqn | 8.87 | 10.58 | 1.71 | 6.76 / 6.77 |
 
-The total includes process launch, readiness, resident JAX initialization and
+The total includes process launch, readiness, resident JAX initialisation and
 JIT compilation, solver execution, and shutdown. OpenFOAM reported 7 seconds
 of clock time for every run. This single short-case timing indicates that the
 added wall time is predominantly fixed orchestration/model startup; it is not
@@ -135,7 +135,7 @@ and resident function implementations.
 The hosts differ, so the seven-second solver wall-time difference is only
 indicative. The FoamNordic timing does verify the corrected normal-shutdown
 lifecycle: after OpenFOAM completed, Longship signalled the resident
-ModelHost immediately and finalized in one second instead of consuming the
+ModelHost immediately and finalised in one second instead of consuming the
 30-second termination grace period before sending the signal.
 
 ## Linux pitzDaily learned closure
@@ -170,21 +170,21 @@ components of this two-dimensional case, were deliberately left unscaled by
 setting their exported mean to zero and scale to one. Both estimators were
 fitted on the same scaled features and exported with that same scaler. The
 Extra Trees model contained 100 estimators. The Voting model combined those
-trees with five uniform nearest neighbors using weights of 0.8 and 0.2.
+trees with five uniform nearest neighbours using weights of 0.8 and 0.2.
 Both used the `grad(U)[9], delta[1] -> nut[1]` contract and selected the
 `sklearnex` resident runtime. Their Joblib payloads were approximately 180
 MiB and 186 MiB, respectively.
 
 The Equinox MLP used the same input samples and held-out physical time. It
-standardized both inputs and the scalar target, used two 64-unit ReLU hidden
-layers, and optimized mean-squared error with Adam. The exported 32.6 KiB
+standardised both inputs and the scalar target, used two 64-unit ReLU hidden
+layers, and optimised mean-squared error with Adam. The exported 32.6 KiB
 payload included the fitted input and output scalers and used the same
 `grad(U)[9], delta[1] -> nut[1]` contract. Its resident inference path applied
 the inverse target transform but did not include the nonnegative clipping used
 by the notebook's offline metric calculation.
 
 The Voting model is retained deliberately as a bottleneck gate rather than a
-recommended production closure. It represents a more complex or customized
+recommended production closure. It represents a more complex or customised
 regressor that combines heterogeneous estimators behind one Joblib contract.
 Comparing it with the isolated Extra Trees component measures how estimator
 composition affects end-to-end solver latency and trajectory quality while
@@ -248,12 +248,12 @@ mean `nut` was `2.489e-6` and its maximum was `1.043e-4`. The active-region
 99th-percentile relative error was `5.121`, worse than either tree model even
 though its global norms and resulting `U` and `p` fields were substantially
 better. A production gate therefore requires the nonnegative output rule to
-be represented inside the model or artifact contract and retested in the
+be represented inside the model or artefact contract and retested in the
 solver.
 
 ### Timing
 
-| Path | Artifact payload | Started (Europe/Helsinki) | Host | OpenFOAM ExecutionTime [s] | OpenFOAM ClockTime [s] | FoamNordic total [s] | Orchestration [s] |
+| Path | Artefact payload | Started (Europe/Helsinki) | Host | OpenFOAM ExecutionTime [s] | OpenFOAM ClockTime [s] | FoamNordic total [s] | Orchestration [s] |
 | --- | ---: | --- | --- | ---: | ---: | ---: | ---: |
 | Stock Smagorinsky | n/a | 14:57:35 | `roihu-cpu-login1` | 44.96 | 46 | n/a | n/a |
 | Mathematical `nutFjord` | 1.9 KiB | 14:48:55 | `rc5183` | 52.15 | 55 | 56 | 1 |
@@ -276,7 +276,7 @@ is resident model evaluation rather than additional solver work.
 Removing exact K-nearest-neighbor inference reduced solver wall time from 665
 to 105 seconds and total time from 698 to 108 seconds. Extra Trees was 6.3
 times faster across the solver trajectory and reduced model-wait overhead by
-about a factor of 12, despite reducing the artifact by only about 6 MiB. Both
+about a factor of 12, despite reducing the artefact by only about 6 MiB. Both
 trajectories completed all 2,000 exchanges and wrote `t=0.02`; neither
 stalled. The comparison identifies the K-nearest-neighbor component, not SHM
 transport or lifecycle orchestration, as the dominant bottleneck in the
@@ -288,6 +288,6 @@ The Equinox trajectory completed the same 2,000 exchanges in 56 seconds of
 solver wall time, effectively matching the 55-second mathematical closure and
 finishing 1.9 times faster than Extra Trees and 11.9 times faster than Voting.
 Together with its 32.6 KiB payload and improved global field errors, this
-makes the vectorized Equinox model the strongest learned runtime candidate in
+makes the vectorised Equinox model the strongest learned runtime candidate in
 this gate. Its next acceptance step is output-constraint parity, not transport
-or lifecycle optimization.
+or lifecycle optimisation.

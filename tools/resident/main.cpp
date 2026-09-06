@@ -35,6 +35,8 @@ void usage() {
         << "  manifest  FoamNordic native model manifest\n"
         << "  --connections N  Solver sessions accepted by this host\n"
         << "  --threads N      Model CPUs reserved for this host\n"
+        << "  --receive-bytes N Shared input receive-memory limit\n"
+        << "  --profile-every N Sample one model call every N calls (0 disables)\n"
         << "  --ready-file PATH Create PATH after the worker is ready\n"
         << "  --ucx-host HOST   Require UCX and advertise HOST to solvers\n"
         << "  --no-shm          Keep a Unix session on UDS\n";
@@ -49,6 +51,30 @@ std::uint32_t positive_count(std::string_view value) {
         throw std::invalid_argument("--connections requires a positive integer.");
     }
     return count;
+}
+
+std::uint64_t nonnegative_count(std::string_view value) {
+    std::uint64_t count = 0;
+    const auto result = std::from_chars(
+        value.data(), value.data() + value.size(), count);
+    if (value.empty() || result.ec != std::errc{}
+        || result.ptr != value.data() + value.size()) {
+        throw std::invalid_argument(
+            "--profile-every requires a non-negative integer.");
+    }
+    return count;
+}
+
+std::uint64_t positive_bytes(std::string_view value) {
+    std::uint64_t bytes = 0;
+    const auto result = std::from_chars(
+        value.data(), value.data() + value.size(), bytes);
+    if (value.empty() || result.ec != std::errc{}
+        || result.ptr != value.data() + value.size() || bytes == 0) {
+        throw std::invalid_argument(
+            "--receive-bytes requires a positive integer.");
+    }
+    return bytes;
 }
 
 std::string expand_rank(std::string value) {
@@ -136,6 +162,10 @@ int main(int argc, char** argv) {
                 options.connections = positive_count(argv[++index]);
             } else if (argument == "--threads" && index + 1 < argc) {
                 options.model_threads = positive_count(argv[++index]);
+            } else if (argument == "--receive-bytes" && index + 1 < argc) {
+                options.maximum_receive_bytes = positive_bytes(argv[++index]);
+            } else if (argument == "--profile-every" && index + 1 < argc) {
+                options.profile_every = nonnegative_count(argv[++index]);
             } else if (argument == "--ready-file" && index + 1 < argc) {
                 ready_file = expand_rank(argv[++index]);
             } else if (argument == "--ucx-host" && index + 1 < argc) {

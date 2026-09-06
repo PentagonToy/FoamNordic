@@ -11,14 +11,60 @@
 
 #include "foamnordic/backend/inference/model.hpp"
 
+#include <chrono>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
 namespace foamnordic::inference {
+namespace {
 
-ArtifactModelKernel::ArtifactModelKernel(ModelArtifact artifact, PackedModelKernel& kernel)
-    : artifact_(std::move(artifact)), kernel_(kernel), smedja_(artifact_.contract) {
+std::uint64_t checked_tensor_bytes(
+    std::size_t rows,
+    std::uint64_t width,
+    fjord::Element element) {
+    const auto item_bytes = static_cast<std::uint64_t>(
+        fjord::element_size(element));
+    const auto row_count = static_cast<std::uint64_t>(rows);
+    if (width != 0
+        && row_count > std::numeric_limits<std::uint64_t>::max() / width) {
+        throw std::overflow_error("Model execution row count overflowed.");
+    }
+    const auto elements = row_count * width;
+    if (item_bytes != 0
+        && elements > std::numeric_limits<std::uint64_t>::max() / item_bytes) {
+        throw std::overflow_error("Model execution byte count overflowed.");
+    }
+    return elements * item_bytes;
+}
+
+std::uint64_t checked_working_bytes(
+    const Smedja& smedja,
+    std::size_t rows) {
+    const auto input = checked_tensor_bytes(
+        rows, smedja.input_width(), smedja.input_element());
+    const auto output = checked_tensor_bytes(
+        rows, smedja.output_width(), smedja.output_element());
+    if (output > (std::numeric_limits<std::uint64_t>::max() - input) / 2) {
+        throw std::overflow_error("Model execution working set overflowed.");
+    }
+    // Predictions and committed named outputs may coexist during unpacking.
+    return input + 2 * output;
+}
+
+}  // namespace
+
+ArtifactModelKernel::ArtifactModelKernel(
+    ModelArtifact artifact,
+    PackedModelKernel& kernel,
+    ExecutionResources resources)
+    : artifact_(std::move(artifact)),
+      kernel_(kernel),
+      smedja_(artifact_.contract),
+      contexts_(resources),
+      capabilities_(kernel.capabilities()),
+      profile_every_(resources.profile_every) {
     artifact_.validate();
 }
 
@@ -28,12 +74,20 @@ TensorMap ArtifactModelKernel::evaluate(
     std::uint64_t exchange_index,
     double physical_time,
     std::uint32_t rank) {
-    // InferenceRunner threads persist for the worker lifetime. This workspace
-    // therefore reuses capacity per runner without sharing OpenFOAM addresses
-    // or mutable tensor data between ranks.
-    thread_local SmedjaWorkspace workspace;
+    const auto sampled = profile_every_ != 0
+                         && profile_sequence_.fetch_add(
+                                1, std::memory_order_relaxed)
+                                % profile_every_
+                                == 0;
+    const auto admission_started = sampled ? std::chrono::steady_clock::now()
+                                          : std::chrono::steady_clock::time_point{};
+    auto context = contexts_.acquire(
+        checked_working_bytes(smedja_, active_cells.size()));
+    const auto packing_started = sampled
+                                     ? std::chrono::steady_clock::now()
+                                     : std::chrono::steady_clock::time_point{};
     auto& packed = smedja_.pack_into(
-        workspace, inputs, active_cells, exchange_index, physical_time);
+        context.workspace(), inputs, active_cells, exchange_index, physical_time);
     if (artifact_.input_scaler) {
         auto mutable_view = fjord::MutableTensorView{
             packed.name,
@@ -46,8 +100,11 @@ TensorMap ArtifactModelKernel::evaluate(
         };
         artifact_.input_scaler->transform(mutable_view);
     }
+    const auto inference_started = sampled
+                                       ? std::chrono::steady_clock::now()
+                                       : packing_started;
     if (active_cells.empty()) {
-        return smedja_.unpack({
+        auto outputs = smedja_.unpack({
             "foamnordic.predictions",
             smedja_.output_element(),
             {0, smedja_.output_width()},
@@ -55,10 +112,34 @@ TensorMap ArtifactModelKernel::evaluate(
             exchange_index,
             physical_time,
         });
+        if (sampled) {
+            const auto finished = std::chrono::steady_clock::now();
+            admission_nanoseconds_.fetch_add(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    packing_started - admission_started).count(),
+                std::memory_order_relaxed);
+            packing_nanoseconds_.fetch_add(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    inference_started - packing_started).count(),
+                std::memory_order_relaxed);
+            output_nanoseconds_.fetch_add(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    finished - inference_started).count(),
+                std::memory_order_relaxed);
+            profile_samples_.fetch_add(1, std::memory_order_relaxed);
+        }
+        return outputs;
     }
     fjord::Tensor predictions;
-    {
-        std::scoped_lock lock(backend_mutex_);
+    auto backend_started = inference_started;
+    if (capabilities_.concurrent_evaluation) {
+        predictions = kernel_.evaluate(
+            packed.view(), exchange_index, physical_time, rank);
+    } else {
+        auto backend_lease = backend_gate_.acquire(0);
+        if (sampled) {
+            backend_started = std::chrono::steady_clock::now();
+        }
         predictions = kernel_.evaluate(
             packed.view(), exchange_index, physical_time, rank);
     }
@@ -67,6 +148,9 @@ TensorMap ArtifactModelKernel::evaluate(
         || predictions.shape.empty() || predictions.shape.front() != active_cells.size()) {
         throw std::invalid_argument("Packed model output does not match its exchange.");
     }
+    const auto output_started = sampled
+                                    ? std::chrono::steady_clock::now()
+                                    : inference_started;
     if (artifact_.output_scaler) {
         auto mutable_view = fjord::MutableTensorView{
             predictions.name,
@@ -79,13 +163,55 @@ TensorMap ArtifactModelKernel::evaluate(
         };
         artifact_.output_scaler->inverse_transform(mutable_view);
     }
-    return smedja_.unpack(std::move(predictions));
+    auto outputs = smedja_.unpack(std::move(predictions));
+    if (sampled) {
+        admission_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                packing_started - admission_started).count(), std::memory_order_relaxed);
+        backend_wait_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                backend_started - inference_started).count(), std::memory_order_relaxed);
+        const auto finished = std::chrono::steady_clock::now();
+        packing_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                inference_started - packing_started).count(),
+            std::memory_order_relaxed);
+        inference_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                output_started - backend_started).count(),
+            std::memory_order_relaxed);
+        output_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                finished - output_started).count(),
+            std::memory_order_relaxed);
+        profile_samples_.fetch_add(1, std::memory_order_relaxed);
+    }
+    return outputs;
 }
 
 const ModelArtifact& ArtifactModelKernel::artifact() const noexcept { return artifact_; }
 
 bool ArtifactModelKernel::owns_backend_synchronization() const noexcept {
     return true;
+}
+
+ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
+    auto snapshot = contexts_.snapshot();
+    snapshot.profile_samples = profile_samples_.load(std::memory_order_relaxed);
+    snapshot.packing_nanoseconds =
+        packing_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.inference_nanoseconds =
+        inference_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.output_nanoseconds =
+        output_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.admission_nanoseconds = admission_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.backend_wait_nanoseconds = backend_wait_nanoseconds_.load(std::memory_order_relaxed);
+    return snapshot;
+}
+
+void ArtifactModelKernel::cancel_pending() noexcept {
+    contexts_.cancel();
+    backend_gate_.cancel();
 }
 
 }  // namespace foamnordic::inference

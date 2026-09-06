@@ -12,6 +12,7 @@
 #pragma once
 
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -57,6 +58,16 @@ struct HarborMessage {
     std::uint32_t tensor_count{0};
 };
 
+struct PayloadAdmission {
+    void* context{nullptr};
+    void (*callback)(void*, std::uint64_t){nullptr};
+
+    void operator()(std::uint64_t bytes) const { callback(context, bytes); }
+    [[nodiscard]] explicit operator bool() const noexcept {
+        return callback != nullptr;
+    }
+};
+
 class Harbor {
 public:
     explicit Harbor(
@@ -70,7 +81,10 @@ public:
 
     void send(const TensorView& tensor);
     void publish(std::uint64_t exchange_index, std::span<const TensorView> tensors);
-    [[nodiscard]] HarborMessage receive_message();
+    [[nodiscard]] HarborMessage receive_message(
+        std::uint64_t maximum_tensor_payload =
+            std::numeric_limits<std::uint64_t>::max(),
+        PayloadAdmission admit_payload = {});
     [[nodiscard]] Tensor receive();
     [[nodiscard]] SessionHello connect_session(const SessionHello& offer);
     [[nodiscard]] SessionHello accept_session(const SessionHello& support);

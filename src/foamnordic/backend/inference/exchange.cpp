@@ -120,9 +120,16 @@ const FieldContract& CellInferenceExchange::require_field(
 void CellInferenceExchange::validate_tensor(
     const fjord::Tensor& tensor,
     const FieldContract& field,
-    std::uint64_t expected_cells) const {
+    std::uint64_t expected_cells,
+    bool allow_floating_conversion) const {
     tensor.view().validate();
-    if (tensor.element != field.element || tensor.time_index != exchange_index_
+    const auto convertible = allow_floating_conversion
+        && (tensor.element == fjord::Element::float32
+            || tensor.element == fjord::Element::float64)
+        && (field.element == fjord::Element::float32
+            || field.element == fjord::Element::float64);
+    if ((!convertible && tensor.element != field.element)
+        || tensor.time_index != exchange_index_
         || tensor.solver_time_index != solver_time_index_
         || tensor.shape.empty() || tensor.shape.front() != expected_cells
         || std::abs(tensor.physical_time - physical_time_) > 1.0e-12) {
@@ -150,7 +157,7 @@ void CellInferenceExchange::require_state(ExchangeState expected, const char* op
 void CellInferenceExchange::add_input(fjord::Tensor tensor) {
     require_state(ExchangeState::collecting_inputs, "add_input");
     const auto& field = require_field(contract_.inputs, tensor.name, "input");
-    validate_tensor(tensor, field, cell_count_);
+    validate_tensor(tensor, field, cell_count_, true);
     if (!inputs_.emplace(tensor.name, std::move(tensor)).second) {
         throw std::invalid_argument("Model input field was supplied more than once.");
     }
@@ -204,10 +211,15 @@ TensorMap CellInferenceExchange::finish() {
     state_ = ExchangeState::completed;
     previous_exchange_index_ = exchange_index_;
     has_previous_exchange_ = true;
+    inputs_.clear();
+    predictions_.clear();
     return std::move(outputs_);
 }
 
 void CellInferenceExchange::fail(std::string reason) {
+    inputs_.clear();
+    predictions_.clear();
+    outputs_.clear();
     if (reason.empty()) {
         reason = "Unknown model failure.";
     }

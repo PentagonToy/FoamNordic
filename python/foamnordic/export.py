@@ -262,6 +262,7 @@ def _compiled(
     x_scaler: object | None = None,
     y_scaler: object | None = None,
     verbose: bool = False,
+    forest: bool = False,
 ) -> Path:
     """Export a supported estimator as portable C++ in one FNOM artifact.
 
@@ -284,10 +285,16 @@ def _compiled(
         raise ValueError("compiled v1 artifacts currently require float64 tensors")
     input_width = sum(width for _, width in input_contract)
     output_width = sum(width for _, width in output_contract)
-    source = generate_source(model, input_width=input_width, output_width=output_width)
+    if forest:
+        from .models.forest import encode
+        if output_width != 1:
+            raise ValueError("forest backend requires one scalar output")
+        source = encode(model, input_width)
+    else:
+        source = generate_source(model, input_width=input_width, output_width=output_width).encode()
     temporary = _temporary_for(payload)
     try:
-        temporary.write_text(source, encoding="utf-8")
+        temporary.write_bytes(source)
         temporary.replace(payload)
         dtype = _manifest_contract(
             manifest,
@@ -298,7 +305,7 @@ def _compiled(
             outputs,
             x_scaler=x_scaler,
             y_scaler=y_scaler,
-            runtime="cpp-v1",
+            runtime="forest-v1" if forest else "cpp-v1",
         )
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -326,8 +333,8 @@ def sklearn(
 ) -> Path:
     """Export a fitted sklearn-compatible estimator into one FNOM artifact."""
 
-    if backend not in {"auto", "compiled", "joblib"}:
-        raise ValueError("sklearn backend must be 'auto', 'compiled', or 'joblib'")
+    if backend not in {"auto", "compiled", "joblib", "forest"}:
+        raise ValueError("sklearn backend must be 'auto', 'compiled', 'forest', or 'joblib'")
     if runtime not in {"sklearn", "sklearnex"}:
         raise ValueError("sklearn Joblib runtime must be 'sklearn' or 'sklearnex'")
     from .models.compiled import supports
@@ -344,10 +351,10 @@ def sklearn(
         "y_scaler": y_scaler,
         "verbose": verbose,
     }
-    if selected == "compiled":
+    if selected in {"compiled", "forest"}:
         if runtime != "sklearn":
             raise ValueError("runtime applies only when the sklearn backend is joblib")
-        return _compiled(model, **arguments)
+        return _compiled(model, forest=selected == "forest", **arguments)
     return _joblib(model, runtime=runtime, **arguments)
 
 

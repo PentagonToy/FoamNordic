@@ -632,6 +632,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--connections", type=int, default=1)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--receive-bytes", type=int, default=16 * 1024**3)
+    parser.add_argument("--profile-every", type=int, default=0)
     parser.add_argument("--ready-file", default="")
     parser.add_argument("--key", default=Key((42, 0)).to_json())
     parser.add_argument("--program", default="model")
@@ -645,11 +647,38 @@ def main(argv: list[str] | None = None) -> int:
             "the managed resident requires a FoamNordic binary wheel"
         )
     arguments = _parser().parse_args(argv)
+    if arguments.profile_every < 0:
+        raise ValueError("profile_every must not be negative")
+    if arguments.receive_bytes <= 0:
+        raise ValueError("receive_bytes must be positive")
     model_threads = _configure_model_threads(arguments.threads)
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
     model_format = str(manifest["format"])
+    if manifest.get("runtime") == "forest-v1":
+        _native.run_native_worker(
+            arguments.address, str(manifest_path), arguments.connections,
+            arguments.ready_file, not arguments.no_shm, model_threads,
+            arguments.receive_bytes, arguments.profile_every,
+        )
+        return 0
     payload = _payload(manifest_path, manifest)
+    if model_format == "compiled":
+        from ..build.compiler import compile_source
+
+        source = (
+            payload.read_bytes() if isinstance(payload, Path)
+            else _native.read_model_payload(str(payload.path))
+            if isinstance(payload, _EmbeddedPayload)
+            else payload.getvalue()
+        )
+        library, _, _ = compile_source(source)
+        _native.run_compiled_worker(
+            arguments.address, str(manifest_path), str(library),
+            arguments.connections, arguments.ready_file, not arguments.no_shm,
+            model_threads, arguments.receive_bytes, arguments.profile_every,
+        )
+        return 0
     outputs = _output_contract(manifest)
     dtype = str(manifest["inputs"][0][2])
     if model_format == "joblib":
@@ -664,8 +693,6 @@ def main(argv: list[str] | None = None) -> int:
             arguments.program,
             threads=model_threads,
         )
-    elif model_format == "compiled":
-        evaluator = _compiled_evaluator(payload, outputs, dtype, model_threads)
     else:
         raise ValueError(f"managed Python worker does not support {model_format!r}")
     runtime_label = (
@@ -684,6 +711,9 @@ def main(argv: list[str] | None = None) -> int:
         arguments.connections,
         arguments.ready_file,
         not arguments.no_shm,
+        model_threads,
+        arguments.receive_bytes,
+        arguments.profile_every,
     )
     return 0
 

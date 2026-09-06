@@ -121,7 +121,7 @@ function needs independent draws. The public distributions are `uniform`,
 At execution time FoamNordic folds the stable program identity and exchange
 index into the root key. `scope="global"` gives every solver rank the same
 invocation key. `scope="rank"` additionally folds in the negotiated rank.
-`fno.Random.to_jax(key)` materializes a JAX typed key; Equinox residents do so
+`fno.Random.to_jax(key)` materialises a JAX typed key; Equinox residents do so
 automatically. NumPy and JAX are reproducible within their backend but do not
 promise bit-identical samples across backends.
 

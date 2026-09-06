@@ -11,6 +11,7 @@
 
 #include "foamnordic/backend/inference/worker.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <mutex>
 #include <stdexcept>
@@ -53,6 +54,12 @@ public:
             inputs, active_cells, exchange_index, physical_time, rank);
     }
 
+    [[nodiscard]] ExecutionSnapshot execution_snapshot() const override {
+        return kernel_.execution_snapshot();
+    }
+
+    void cancel_pending() noexcept override { kernel_.cancel_pending(); }
+
 private:
     ModelKernel& kernel_;
     std::mutex mutex_;
@@ -71,6 +78,14 @@ void WorkerOptions::validate() const {
     }
     if (maximum_payload == 0) {
         throw std::invalid_argument("Native model worker payload limit must be positive.");
+    }
+    if (maximum_receive_bytes == 0) {
+        throw std::invalid_argument(
+            "Native model worker receive-memory limit must be positive.");
+    }
+    if (maximum_working_bytes == 0) {
+        throw std::invalid_argument(
+            "Native model worker working-memory limit must be positive.");
     }
     if (ucx && ucx_host.empty()) {
         throw std::invalid_argument(
@@ -112,7 +127,14 @@ ModelWorker::ModelWorker(
       options_(options) {
     requested_address_.validate();
     options_.validate();
-    auto loaded = load_model(manifest_path, {options_.model_threads});
+    auto loaded = load_model(
+        manifest_path,
+        {
+            options_.model_threads,
+            std::min(options_.connections, options_.model_threads),
+            options_.maximum_working_bytes,
+            options_.profile_every,
+        });
     artifact_ = std::move(loaded.artifact);
     owned_kernel_ = std::move(loaded.kernel);
     kernel_ = owned_kernel_.get();
@@ -214,6 +236,8 @@ void ModelWorker::run() {
     ModelKernel& execution_kernel = kernel_->owns_backend_synchronization()
                                        ? *kernel_
                                        : static_cast<ModelKernel&>(synchronized);
+    ReceiveCreditPool receive_credits(options_.maximum_receive_bytes);
+    ReceiveCreditPool output_credits(options_.maximum_working_bytes);
     std::mutex failure_mutex;
     std::exception_ptr failure;
     std::vector<std::thread> runners;
@@ -226,7 +250,10 @@ void ModelWorker::run() {
                         *peer,
                         artifact_.contract,
                         bypass_,
-                        execution_kernel);
+                        execution_kernel,
+                        options_.maximum_payload,
+                        &receive_credits,
+                        &output_credits);
                     runner.run();
                 } catch (...) {
                     {
@@ -235,6 +262,9 @@ void ModelWorker::run() {
                             failure = std::current_exception();
                         }
                     }
+                    execution_kernel.cancel_pending();
+                    receive_credits.cancel();
+                    output_credits.cancel();
                     for (auto& active : harbors) {
                         active->interrupt();
                     }
@@ -242,6 +272,9 @@ void ModelWorker::run() {
             });
         }
     } catch (...) {
+        execution_kernel.cancel_pending();
+        receive_credits.cancel();
+        output_credits.cancel();
         for (auto& active : harbors) {
             active->interrupt();
         }
@@ -254,6 +287,45 @@ void ModelWorker::run() {
         runner.join();
     }
     listener_.close();
+    const auto receive = receive_credits.snapshot();
+    const auto output = output_credits.snapshot();
+    if (output.requests != 0) {
+        native::log(native::LogLevel::info, "Model publication peak: reserved_bytes="
+            + std::to_string(output.peak_active_bytes));
+    }
+    if (receive.requests != 0) {
+        native::log(
+            native::LogLevel::info,
+            "Model receive peak: bytes="
+                + std::to_string(receive.peak_active_bytes));
+    }
+    const auto resources = execution_kernel.execution_snapshot();
+    if (resources.peak_active_contexts != 0) {
+        native::log(
+            native::LogLevel::info,
+            "Model execution peak: contexts="
+                + std::to_string(resources.peak_active_contexts)
+                + ", working_bytes="
+                + std::to_string(resources.peak_admitted_bytes)
+                + ", retained_workspace_bytes="
+                + std::to_string(resources.retained_workspace_bytes));
+    }
+    if (resources.profile_samples != 0) {
+        const auto samples = resources.profile_samples;
+        native::log(
+            native::LogLevel::info,
+            "Model sampled stages: samples=" + std::to_string(samples)
+                + ", admission_us="
+                + std::to_string(resources.admission_nanoseconds / samples / 1000)
+                + ", backend_wait_us="
+                + std::to_string(resources.backend_wait_nanoseconds / samples / 1000)
+                + ", pack_us="
+                + std::to_string(resources.packing_nanoseconds / samples / 1000)
+                + ", infer_us="
+                + std::to_string(resources.inference_nanoseconds / samples / 1000)
+                + ", output_us="
+                + std::to_string(resources.output_nanoseconds / samples / 1000));
+    }
     if (failure) {
         std::rethrow_exception(failure);
     }

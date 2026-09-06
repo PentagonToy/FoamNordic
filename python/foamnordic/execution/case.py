@@ -19,6 +19,7 @@ from ..core.expressions import FieldExpression
 from ..core.layout import FieldLayout, field_layout
 from ..core.managed import mark_generated
 from ..core.plan import CompiledPlan
+from ..models import load as load_model
 from .run import (
     _initialize_sailing_log,
     _internal_path,
@@ -83,6 +84,8 @@ def validate_case(longship: Longship) -> None:
             raise FileNotFoundError(
                 f"field-program artifact does not exist: {program.artifact}"
             )
+        if program.artifact is not None:
+            _validate_model_contract(longship, program)
     if (
         longship.case.integration is None
         and closures
@@ -95,6 +98,72 @@ def validate_case(longship: Longship) -> None:
             "attached launch currently supports auto, shm, and uds; central UCX "
             "remains an explicit HPC validation topology"
         )
+
+
+def _validate_model_contract(longship: Longship, program: Closure | Transform) -> None:
+    """Match FNOM names and packed widths to the selected OpenFOAM bindings."""
+
+    assert program.artifact is not None
+    manifest = load_model(program.artifact)
+    declared = (
+        ("inputs", manifest.inputs, program.inputs),
+        ("outputs", manifest.outputs, program.outputs),
+    )
+    for label, ports, bindings in declared:
+        names = tuple(port.name for port in ports)
+        if set(names) != set(bindings) or len(names) != len(bindings):
+            raise ValueError(
+                f"{program.name} {label} do not match its FNOM contract: "
+                f"{tuple(bindings)!r} != {names!r}"
+            )
+        for port in ports:
+            expression = bindings[port.name]
+            layout = (
+                _input_layout(longship, program, expression)
+                if label == "inputs"
+                else _output_layout(longship, program, expression)
+            )
+            if port.components != layout.transport_width:
+                raise ValueError(
+                    f"{program.name} {label} port {port.name!r} has "
+                    f"{port.components} FNOM component(s), but "
+                    f"{expression.canonical!r} requires "
+                    f"{layout.transport_width}"
+                )
+
+    adapter = adapter_contract(program.name)
+    if adapter is None:
+        return
+    input_fields = tuple(value.canonical for value in program.inputs.values())
+    output_fields = tuple(
+        str(value.field_name) for value in program.outputs.values()
+    )
+    if set(input_fields) != set(adapter.inputs):
+        raise ValueError(
+            f"{program.name} requires OpenFOAM inputs {tuple(adapter.inputs)!r}; "
+            f"got {input_fields!r}"
+        )
+    if set(output_fields) != set(adapter.outputs):
+        raise ValueError(
+            f"{program.name} requires OpenFOAM outputs {tuple(adapter.outputs)!r}; "
+            f"got {output_fields!r}"
+        )
+
+
+def _input_layout(
+    longship: Longship,
+    program: Closure | Transform,
+    expression: FieldExpression,
+) -> FieldLayout:
+    """Resolve an input layout, including adapter-owned derived fields."""
+
+    try:
+        return _expression_layout(longship, expression)
+    except KeyError:
+        contract = adapter_contract(program.name)
+        if contract is not None and expression.canonical in contract.inputs:
+            return contract.inputs[expression.canonical]
+        raise
 
 
 def _validate_observation_fields(longship: Longship) -> None:

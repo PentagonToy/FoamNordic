@@ -1,8 +1,12 @@
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <memory>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <future>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -25,6 +29,150 @@ void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+void test_output_credit_survives_backpressure(bool cancel) {
+    using namespace foamnordic;
+    auto channels = fjord::shared_memory_channel_pair(8, 256);
+    fjord::Harbor client(std::move(channels.first)), worker(std::move(channels.second));
+    struct Echo final : inference::ModelKernel {
+        std::promise<void> called;
+        TensorMap evaluate(const TensorMap& inputs, const std::vector<std::uint64_t>&,
+                           std::uint64_t, double, std::uint32_t) override {
+            called.set_value();
+            return inputs;
+        }
+    } kernel;
+    auto invoked = kernel.called.get_future();
+    inference::EvaluateAllCells bypass;
+    constexpr std::uint64_t bytes = 1024 * 1024;
+    inference::ReceiveCreditPool credits(2 * bytes);
+    std::exception_ptr failure;
+    std::thread thread([&] {
+        try {
+            static_cast<void>(worker.accept_session({1, fjord::Capability::uds, 0, 1, 2 * bytes}));
+            inference::InferenceRunner runner(worker,
+                {"echo", {{"x", Element::float64, 1}}, {{"x", Element::float64, 1}}},
+                bypass, kernel, 2 * bytes, nullptr, &credits);
+            require(runner.run_one(), "Output-credit exchange did not run.");
+        } catch (...) { failure = std::current_exception(); }
+    });
+    static_cast<void>(client.connect_session({1, fjord::Capability::uds, 0, 1, 2 * bytes}));
+    Tensor input{"x", Element::float64, {bytes / 8}, std::vector<std::byte>(bytes), 0, 0};
+    client.send(input.view()); client.complete(0, 1);
+    invoked.wait();
+    require(credits.snapshot().active_bytes == 2 * bytes, "Publication reservation ended before consumption.");
+    if (cancel) {
+        worker.interrupt(); client.interrupt();
+    } else {
+        auto result = client.receive_message();
+        require(result.tensor && result.tensor->bytes == input.bytes, "Output changed during publication.");
+        require(client.receive_control() == fjord::RuneKind::complete, "Missing publication boundary.");
+    }
+    thread.join();
+    if (!cancel && failure) std::rethrow_exception(failure);
+    require(credits.snapshot().active_bytes == 0, "Publication credit leaked.");
+}
+
+void test_shared_receive_credit_blocks_and_cancels() {
+    using namespace std::chrono_literals;
+    foamnordic::inference::ReceiveCreditPool credits(64);
+    std::atomic<bool> waiting{false};
+    std::atomic<bool> admitted{false};
+    auto first = std::make_unique<
+        foamnordic::inference::ReceiveCreditPool::Reservation>(credits);
+    first->acquire(48);
+    std::thread waiter([&] {
+        waiting.store(true);
+        foamnordic::inference::ReceiveCreditPool::Reservation second(credits);
+        second.acquire(32);
+        admitted.store(true);
+    });
+    while (!waiting.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(10ms);
+    require(!admitted.load(), "Shared receive credit did not apply back-pressure.");
+    first.reset();
+    waiter.join();
+    const auto snapshot = credits.snapshot();
+    require(snapshot.active_bytes == 0, "Receive credit leaked after release.");
+    require(snapshot.peak_active_bytes <= 64, "Receive credit exceeded its limit.");
+
+    bool oversized = false;
+    try {
+        credits.acquire(65);
+    } catch (const std::length_error&) {
+        oversized = true;
+    }
+    require(oversized, "Receive credit accepted an oversized tensor.");
+
+    foamnordic::inference::ReceiveCreditPool cancelled(16);
+    cancelled.acquire(16);
+    std::atomic<bool> cancellation_waiting{false};
+    std::atomic<bool> woke{false};
+    std::thread blocked([&] {
+        cancellation_waiting.store(true);
+        try {
+            cancelled.acquire(1);
+        } catch (const std::runtime_error&) {
+            woke.store(true);
+        }
+    });
+    while (!cancellation_waiting.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(10ms);
+    cancelled.cancel();
+    blocked.join();
+    require(woke.load(), "Cancellation did not wake a receive-credit waiter.");
+    cancelled.release(16);
+}
+
+void test_partial_requests_make_progress() {
+    using namespace std::chrono_literals;
+    foamnordic::inference::ReceiveCreditPool credits(64);
+    auto first = std::make_unique<
+        foamnordic::inference::ReceiveCreditPool::Reservation>(credits);
+    first->acquire(32);
+    std::atomic<bool> completed{false};
+    std::thread peer([&] {
+        foamnordic::inference::ReceiveCreditPool::Reservation second(credits);
+        second.acquire(32);
+        second.acquire(32);
+        second.seal();
+        completed = true;
+    });
+    first->acquire(32);
+    first->seal();
+    first.reset();
+    peer.join();
+    require(completed, "Two partial requests failed to complete.");
+    require(credits.snapshot().active_bytes == 0, "Completed credit leaked.");
+    require(credits.snapshot().peak_active_bytes == 64, "Budget was exceeded.");
+    bool rejected = false;
+    {
+        foamnordic::inference::ReceiveCreditPool::Reservation oversized(credits);
+        oversized.acquire(40);
+        try { oversized.acquire(25); }
+        catch (const std::length_error&) { rejected = true; }
+    }
+    require(rejected, "Oversized cumulative exchange waited on itself.");
+}
+
+void test_active_workspace_accounting() {
+    foamnordic::inference::ExecutionContextPool pool({2, 1024 * 1024});
+    auto active = pool.acquire(4096);
+    std::thread writer([&] {
+        for (int i = 0; i < 10000; ++i) {
+            active.workspace().release();
+        }
+    });
+    for (int i = 0; i < 10000; ++i) {
+        auto other = pool.acquire(4096);
+        static_cast<void>(pool.snapshot());
+    }
+    writer.join();
 }
 
 Tensor field(
@@ -328,6 +476,61 @@ void test_scaled_affine_exchange(bool shared_memory) {
     }
 }
 
+void test_exchange_payload_is_rejected_before_body_allocation() {
+    auto channels = foamnordic::fjord::local_channel_pair();
+    foamnordic::fjord::Harbor client(std::move(channels.first));
+    foamnordic::fjord::Harbor worker(std::move(channels.second));
+    foamnordic::inference::EvaluateAllCells bypass;
+    CombustionKernel kernel;
+    std::atomic<bool> rejected{false};
+
+    std::thread worker_thread([&] {
+        try {
+            static_cast<void>(worker.accept_session({
+                1,
+                foamnordic::fjord::Capability::uds,
+                0,
+                1,
+                4096,
+            }));
+            foamnordic::inference::InferenceRunner runner(
+                worker,
+                {
+                    "bounded-request",
+                    {
+                        {"c_tilde", Element::float64, 1},
+                        {"c_var", Element::float64, 1},
+                        {"T_tilde", Element::float64, 1},
+                    },
+                    {{"omega_c", Element::float64, 1}},
+                },
+                bypass,
+                kernel,
+                24);
+            static_cast<void>(runner.run_one());
+        } catch (const std::runtime_error&) {
+            rejected.store(true, std::memory_order_release);
+        }
+    });
+
+    static_cast<void>(client.connect_session({
+        8101,
+        foamnordic::fjord::Capability::uds,
+        0,
+        1,
+        4096,
+    }));
+    client.send(scalar_field("c_tilde", {0.1, 0.2}, 13, 0.5).view());
+    client.send(scalar_field("c_var", {0.0, 0.1}, 13, 0.5).view());
+    require(
+        client.receive_control() == foamnordic::fjord::RuneKind::error,
+        "Oversized model exchange did not return an atomic error.");
+    worker_thread.join();
+    require(
+        rejected.load(std::memory_order_acquire),
+        "Model runner accepted an oversized aggregate payload.");
+}
+
 void test_k_eqn_fjord_contract() {
     std::vector<double> weights(33, 0.0);
     weights[10] = 0.05;
@@ -449,10 +652,16 @@ void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
 }  // namespace
 
 int main() {
+    test_output_credit_survives_backpressure(false);
+    test_output_credit_survives_backpressure(true);
+    test_partial_requests_make_progress();
+    test_active_workspace_accounting();
+    test_shared_receive_credit_blocks_and_cancels();
     test_native_combustion_exchange(false);
     test_native_combustion_exchange(true);
     test_scaled_affine_exchange(false);
     test_scaled_affine_exchange(true);
+    test_exchange_payload_is_rejected_before_body_allocation();
     test_k_eqn_fjord_contract();
     test_worker_failure_is_reported_to_solver(false);
     test_worker_failure_is_reported_to_solver(true);

@@ -172,11 +172,17 @@ def _host_command(
     prepared: PreparedProgram,
     model_threads: int = 1,
     connections: int | None = None,
+    profile_every: int = 0,
+    receive_memory_bytes: int | None = None,
 ) -> tuple[str, ...]:
     if model_threads < 1:
         raise ValueError("model_threads must be positive")
     if connections is not None and connections < 1:
         raise ValueError("connections must be positive")
+    if profile_every < 0:
+        raise ValueError("profile_every must not be negative")
+    if receive_memory_bytes is not None and receive_memory_bytes < 1:
+        raise ValueError("receive_memory_bytes must be positive")
     program = prepared.program
     if program.artifact is None and prepared.artifact is None:
         raise RuntimeError("a model-backed field program is required")
@@ -212,11 +218,15 @@ def _host_command(
         str(connections or longship.case.ranks),
         "--threads",
         str(model_threads),
+        "--profile-every",
+        str(profile_every),
         "--ready-file",
         prepared.ready,
     ]
     if model_format in {"joblib", "equinox"}:
         values.extend(("--key", program.key.to_json(), "--program", program.name))
+    if receive_memory_bytes is not None:
+        values.extend(("--receive-bytes", str(receive_memory_bytes)))
     if longship.placement.data_path == "uds":
         values.append("--no-shm")
     # ModelHost is a FoamNordic backend process, not an OpenFOAM
@@ -233,6 +243,8 @@ def _host_group_command(
     work_dir: Path,
     host_cpus: int,
     connections: int | None = None,
+    profile_every: int = 0,
+    receive_memory_bytes: int | None = None,
 ) -> tuple[tuple[str, ...], tuple[Path, ...]]:
     if host_cpus < 1:
         raise ValueError("host_cpus must be positive")
@@ -246,13 +258,21 @@ def _host_group_command(
     )
     commands = [
         (
-            _host_command(longship, item, threads)
+            _host_command(
+                longship,
+                item,
+                threads,
+                profile_every=profile_every,
+                receive_memory_bytes=receive_memory_bytes,
+            )
             if connections is None
             else _host_command(
                 longship,
                 item,
                 threads,
                 connections=connections,
+                profile_every=profile_every,
+                receive_memory_bytes=receive_memory_bytes,
             )
         )
         for item, threads in zip(prepared, thread_budgets, strict=True)
@@ -326,6 +346,8 @@ def launch(
     termination_grace: float = 30.0,
     orphan_timeout: float = 30.0,
     verbose: bool = True,
+    profile_every: int = 0,
+    receive_memory_bytes: int | None = None,
 ) -> Run:
     """Compile, prepare, and start one non-blocking coupled workload."""
 
@@ -333,6 +355,10 @@ def launch(
         raise ValueError("lifecycle timeouts must be positive")
     if orphan_timeout < 0:
         raise ValueError("orphan_timeout must not be negative")
+    if profile_every < 0:
+        raise ValueError("profile_every must not be negative")
+    if receive_memory_bytes is not None and receive_memory_bytes < 1:
+        raise ValueError("receive_memory_bytes must be positive")
     validate_case(longship)
     plan = longship.compile()
     runtime = plan.as_dict()["runtime"]
@@ -359,6 +385,8 @@ def launch(
             work_dir,
             int(runtime["host_cpus_per_task"]),
             int(runtime["solver_tasks_per_node"]),
+            profile_every,
+            receive_memory_bytes,
         )
         if prepared
         else (None, ())

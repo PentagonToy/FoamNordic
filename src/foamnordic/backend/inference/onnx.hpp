@@ -42,6 +42,8 @@ public:
     OnnxPackedKernel(OnnxPackedKernel&&) noexcept;
     OnnxPackedKernel& operator=(OnnxPackedKernel&&) noexcept;
 
+    [[nodiscard]] BackendCapabilities capabilities() const noexcept override;
+
     [[nodiscard]] fjord::Tensor evaluate(
         fjord::TensorView features,
         std::uint64_t exchange_index,

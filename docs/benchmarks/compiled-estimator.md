@@ -12,13 +12,13 @@ execution only; it is not an OpenFOAM wall-time result.
   `0.8 / 0.2`.
 - Forest: maximum depth 16, minimum leaf size 2, 445,702 total tree nodes.
 - Seven repetitions per warm prediction; table reports the median.
-- Both artifacts use the same fitted estimator and no scaler.
+- Both artefacts use the same fitted estimator and no scaler.
 
 The compiled predictor reproduces Joblib within `1.4e-15` maximum absolute
 error. Its tree comparisons deliberately reproduce scikit-learn's float32
 input narrowing before applying stored float64 thresholds.
 
-## Artifact and startup
+## Artefact and startup
 
 | Measurement | Joblib | Compiled `cpp-v1` |
 |---|---:|---:|
@@ -61,7 +61,7 @@ custom estimator graphs are not claimed by `cpp-v1`.
 ## ExtraTrees and KNN voting
 
 A second benchmark uses the same 30,000 by 10 training matrix, 64 ExtraTrees,
-five distance-weighted neighbors, and equal `0.5 / 0.5` voting weights. Five
+five distance-weighted neighbours, and equal `0.5 / 0.5` voting weights. Five
 warm repetitions are reduced by their median. Exact KNN search is intentional;
 both backends therefore retain linear dependence on the number of training
 samples.

@@ -1,0 +1,27 @@
+EXE_INC = \
+    -std=c++20 \
+    -Wno-overloaded-virtual \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(LIB_SRC)/transportModels \
+    -I$(LIB_SRC)/transportModels/compressible/lnInclude \
+    -I$(LIB_SRC)/TurbulenceModels/turbulenceModels/lnInclude \
+    -I$(LIB_SRC)/TurbulenceModels/incompressible/lnInclude \
+    -I$(LIB_SRC)/TurbulenceModels/compressible/lnInclude \
+    -I$(LIB_SRC)/thermophysicalModels/basic/lnInclude \
+    -I$(LIB_SRC)/thermophysicalModels/specie/lnInclude \
+    -I$(shell foamnordic dir --include) \
+    -I$(shell foamnordic dir --include)/foamnordic/openfoam \
+    -I$(shell foamnordic dir --include)/foamnordic/openfoam/operations
+
+LIB_LIBS = \
+    $(shell foamnordic dir --openfoam-library) \
+    -lfiniteVolume \
+    -lmeshTools \
+    -lturbulenceModels \
+    -lincompressibleTurbulenceModels \
+    -lincompressibleTransportModels \
+    -lcompressibleTransportModels \
+    -lcompressibleTurbulenceModels \
+    -lfluidThermophysicalModels \
+    -lspecie

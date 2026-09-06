@@ -478,6 +478,14 @@ class PlanTests(unittest.TestCase):
             example_longship().launch(start_timeout=0)
         with self.assertRaisesRegex(ValueError, "orphan_timeout"):
             example_longship().launch(orphan_timeout=-1)
+        with self.assertRaisesRegex(ValueError, "profile_every"):
+            example_longship().launch(profile_every=-1)
+        with self.assertRaisesRegex(TypeError, "profile_every"):
+            example_longship().launch(profile_every=True)
+        with self.assertRaisesRegex(ValueError, "receive_memory_bytes"):
+            example_longship().launch(receive_memory_bytes=0)
+        with self.assertRaisesRegex(TypeError, "receive_memory_bytes"):
+            example_longship().launch(receive_memory_bytes=True)
 
     def test_launch_reports_background_sailing_unless_quiet(self) -> None:
         expected = Mock()
@@ -951,12 +959,14 @@ class PlanTests(unittest.TestCase):
                     None,
                 ),
                 model_threads=6,
+                receive_memory_bytes=268435456,
             )
         rendered = " ".join(command)
         self.assertIn(sys.executable, rendered)
         self.assertIn("foamnordic.execution.resident", rendered)
         self.assertIn(f"--connections {longship.case.ranks}", rendered)
         self.assertIn("--threads 6", rendered)
+        self.assertIn("--receive-bytes 268435456", rendered)
         key_index = command.index("--key")
         self.assertEqual(
             command[key_index + 1],
@@ -1045,7 +1055,15 @@ class PlanTests(unittest.TestCase):
         )
         budgets = []
 
-        def command(_longship, _prepared, model_threads=1):
+        def command(
+            _longship,
+            _prepared,
+            model_threads=1,
+            profile_every=0,
+            receive_memory_bytes=None,
+        ):
+            self.assertEqual(profile_every, 0)
+            self.assertIsNone(receive_memory_bytes)
             budgets.append(model_threads)
             return ("worker", str(model_threads))
 

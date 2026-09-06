@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Callable, Mapping
 
 from .. import openfoam
+from ..contracts import infer_model_bindings, infer_transform_bindings
 from .expressions import FieldExpression
 from .native_plan import compile_runtime_plan
 from .paths import PathInput, path_from
@@ -146,10 +147,23 @@ class Closure:
         if (artifact is None) == (operator is None):
             raise ValueError("closure requires exactly one of operator or artifact")
         selected = Operator.model(artifact) if operator is None else operator
+        if inputs is None or outputs is None:
+            if selected.kind != "model":
+                raise ValueError(
+                    "function closures require explicit inputs and outputs"
+                )
+            model_artifact = selected.artifact
+            assert model_artifact is not None
+            inputs, outputs = infer_model_bindings(
+                name,
+                model_artifact,
+                inputs=inputs,
+                outputs=outputs,
+            )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "operator", selected)
-        object.__setattr__(self, "inputs", {} if inputs is None else inputs)
-        object.__setattr__(self, "outputs", {} if outputs is None else outputs)
+        object.__setattr__(self, "inputs", inputs)
+        object.__setattr__(self, "outputs", outputs)
         object.__setattr__(self, "key", _program_key(key, seed, "closure"))
         self.__post_init__()
 
@@ -201,13 +215,25 @@ class Transform:
         self,
         name: str,
         operator: Operator,
-        inputs: Mapping[str, FieldExpression],
-        outputs: Mapping[str, FieldExpression],
+        inputs: Mapping[str, FieldExpression] | None = None,
+        outputs: Mapping[str, FieldExpression] | None = None,
         at: str = "time_step_start",
         key: Key | int | None = None,
         *,
         seed: int | None = None,
     ) -> None:
+        if inputs is None or outputs is None:
+            if operator.kind != "model":
+                raise ValueError(
+                    "function transforms require explicit inputs and outputs"
+                )
+            model_artifact = operator.artifact
+            assert model_artifact is not None
+            inputs, outputs = infer_transform_bindings(
+                model_artifact,
+                inputs=inputs,
+                outputs=outputs,
+            )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "operator", operator)
         object.__setattr__(self, "inputs", inputs)
@@ -575,6 +601,8 @@ class Longship:
         orphan_timeout: float = 30.0,
         start_timeout: float | None = None,
         verbose: bool | None = None,
+        profile_every: int = 0,
+        receive_memory_bytes: int | None = None,
     ) -> Run:
         """Prepare an isolated case and return a non-blocking native Run."""
 
@@ -587,12 +615,25 @@ class Longship:
             raise ValueError("start_timeout must be positive")
         if orphan_timeout < 0:
             raise ValueError("orphan_timeout must not be negative")
+        if not isinstance(profile_every, int) or isinstance(profile_every, bool):
+            raise TypeError("profile_every must be an integer")
+        if profile_every < 0:
+            raise ValueError("profile_every must not be negative")
+        if receive_memory_bytes is not None:
+            if not isinstance(receive_memory_bytes, int) or isinstance(
+                receive_memory_bytes, bool
+            ):
+                raise TypeError("receive_memory_bytes must be an integer or None")
+            if receive_memory_bytes < 1:
+                raise ValueError("receive_memory_bytes must be positive")
         run = launch(
             self,
             readiness_timeout=readiness_timeout,
             termination_grace=termination_grace,
             orphan_timeout=orphan_timeout,
             verbose=selected_verbose,
+            profile_every=profile_every,
+            receive_memory_bytes=receive_memory_bytes,
         )
         if selected_verbose:
             if self.scheduler is None:
