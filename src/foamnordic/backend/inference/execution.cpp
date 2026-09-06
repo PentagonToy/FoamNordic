@@ -82,6 +82,9 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
     }
     std::unique_lock lock(mutex_);
     available_.wait(lock, [&] {
+        if (cancelled_) {
+            return true;
+        }
         const auto has_context = std::any_of(
             slots_.begin(), slots_.end(), [](const auto& slot) {
                 return !slot.active;
@@ -89,6 +92,9 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
         return has_context
             && working_bytes <= resources_.maximum_working_bytes - admitted_bytes_;
     });
+    if (cancelled_) {
+        throw std::runtime_error("Model execution was cancelled.");
+    }
     const auto slot = std::find_if(
         slots_.begin(), slots_.end(), [](const auto& candidate) {
             return !candidate.active;
@@ -101,6 +107,14 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
     peak_active_contexts_ = std::max(peak_active_contexts_, active_contexts_);
     peak_admitted_bytes_ = std::max(peak_admitted_bytes_, admitted_bytes_);
     return Lease(*this, index, working_bytes);
+}
+
+void ExecutionContextPool::cancel() noexcept {
+    {
+        std::scoped_lock lock(mutex_);
+        cancelled_ = true;
+    }
+    available_.notify_all();
 }
 
 ExecutionSnapshot ExecutionContextPool::snapshot() const {

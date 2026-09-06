@@ -12,6 +12,7 @@
 #pragma once
 
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -70,7 +71,9 @@ public:
 
     void send(const TensorView& tensor);
     void publish(std::uint64_t exchange_index, std::span<const TensorView> tensors);
-    [[nodiscard]] HarborMessage receive_message();
+    [[nodiscard]] HarborMessage receive_message(
+        std::uint64_t maximum_tensor_payload =
+            std::numeric_limits<std::uint64_t>::max());
     [[nodiscard]] Tensor receive();
     [[nodiscard]] SessionHello connect_session(const SessionHello& offer);
     [[nodiscard]] SessionHello accept_session(const SessionHello& support);

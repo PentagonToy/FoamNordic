@@ -66,6 +66,7 @@ public:
     explicit ExecutionContextPool(ExecutionResources resources);
 
     [[nodiscard]] Lease acquire(std::uint64_t working_bytes);
+    void cancel() noexcept;
     [[nodiscard]] ExecutionSnapshot snapshot() const;
 
 private:
@@ -86,6 +87,7 @@ private:
     std::uint64_t requests_{0};
     std::uint64_t admitted_bytes_{0};
     std::uint64_t peak_admitted_bytes_{0};
+    bool cancelled_{false};
 };
 
 }  // namespace foamnordic::inference

@@ -58,6 +58,8 @@ public:
         return kernel_.execution_snapshot();
     }
 
+    void cancel_pending() noexcept override { kernel_.cancel_pending(); }
+
 private:
     ModelKernel& kernel_;
     std::mutex mutex_;
@@ -241,7 +243,8 @@ void ModelWorker::run() {
                         *peer,
                         artifact_.contract,
                         bypass_,
-                        execution_kernel);
+                        execution_kernel,
+                        options_.maximum_payload);
                     runner.run();
                 } catch (...) {
                     {
@@ -250,6 +253,7 @@ void ModelWorker::run() {
                             failure = std::current_exception();
                         }
                     }
+                    execution_kernel.cancel_pending();
                     for (auto& active : harbors) {
                         active->interrupt();
                     }
@@ -257,6 +261,7 @@ void ModelWorker::run() {
             });
         }
     } catch (...) {
+        execution_kernel.cancel_pending();
         for (auto& active : harbors) {
             active->interrupt();
         }

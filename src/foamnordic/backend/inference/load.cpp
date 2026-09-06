@@ -53,6 +53,8 @@ public:
         return kernel_.execution_snapshot();
     }
 
+    void cancel_pending() noexcept override { kernel_.cancel_pending(); }
+
 private:
     std::unique_ptr<PackedModelKernel> packed_;
     ArtifactModelKernel kernel_;

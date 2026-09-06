@@ -482,6 +482,25 @@ void test_execution_context_pool_bounds_contexts_and_bytes() {
         "Execution pool did not release its admitted resources.");
 }
 
+void test_execution_context_pool_cancels_waiters() {
+    foamnordic::inference::ExecutionContextPool pool({1, 64});
+    auto active = pool.acquire(32);
+    std::atomic<bool> cancelled{false};
+    std::thread waiter([&] {
+        try {
+            static_cast<void>(pool.acquire(32));
+        } catch (const std::runtime_error&) {
+            cancelled.store(true, std::memory_order_release);
+        }
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    pool.cancel();
+    waiter.join();
+    require(
+        cancelled.load(std::memory_order_acquire),
+        "Execution pool did not cancel a blocked waiter.");
+}
+
 void test_smedja_packs_contiguous_and_sparse_cell_ranges() {
     const foamnordic::inference::ProgramContract single_input_contract{
         "single",
@@ -1019,6 +1038,7 @@ int main() {
     test_smedja_reuses_multi_output_staging_for_widest_field();
     test_smedja_reuses_and_bounds_workspace_capacity();
     test_execution_context_pool_bounds_contexts_and_bytes();
+    test_execution_context_pool_cancels_waiters();
     test_smedja_packs_contiguous_and_sparse_cell_ranges();
     test_smedja_fuses_float_input_conversion_with_packing();
     test_artifact_kernel_owns_a_narrow_backend_lock();

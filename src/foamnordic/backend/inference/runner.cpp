@@ -23,15 +23,27 @@ InferenceRunner::InferenceRunner(
     fjord::Harbor& harbor,
     ProgramContract contract,
     const CellEvaluationPolicy& bypass,
-    ModelKernel& kernel)
-    : harbor_(harbor), exchange_(std::move(contract)), bypass_(bypass), kernel_(kernel) {}
+    ModelKernel& kernel,
+    std::uint64_t maximum_exchange_payload)
+    : harbor_(harbor),
+      exchange_(std::move(contract)),
+      bypass_(bypass),
+      kernel_(kernel),
+      maximum_exchange_payload_(maximum_exchange_payload) {
+    if (maximum_exchange_payload_ == 0) {
+        throw std::invalid_argument(
+            "Model exchange payload limit must be positive.");
+    }
+}
 
 bool InferenceRunner::run_one() {
     bool started = false;
     std::uint32_t received_tensors = 0;
+    std::uint64_t received_payload_bytes = 0;
     try {
         while (true) {
-            auto message = harbor_.receive_message();
+            auto message = harbor_.receive_message(
+                maximum_exchange_payload_ - received_payload_bytes);
             if (message.kind == fjord::RuneKind::shutdown) {
                 if (started) {
                     throw std::runtime_error("Model exchange was interrupted by shutdown.");
@@ -53,6 +65,7 @@ bool InferenceRunner::run_one() {
                         message.tensor->solver_time_index);
                     started = true;
                 }
+                received_payload_bytes += message.tensor->bytes.size();
                 exchange_.add_input(std::move(*message.tensor));
                 ++received_tensors;
                 continue;

@@ -137,4 +137,6 @@ ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
     return contexts_.snapshot();
 }
 
+void ArtifactModelKernel::cancel_pending() noexcept { contexts_.cancel(); }
+
 }  // namespace foamnordic::inference

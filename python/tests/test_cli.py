@@ -117,6 +117,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("build", output.getvalue())
         self.assertIn("inspect", output.getvalue())
         self.assertIn("validate", output.getvalue())
+        self.assertIn("diff", output.getvalue())
         self.assertIn("compile", output.getvalue())
         self.assertIn("clobber", output.getvalue())
 
@@ -164,6 +165,46 @@ class CliTests(unittest.TestCase):
                 with redirect_stdout(output):
                     self.assertEqual(main(["compile", str(path)]), 0)
             self.assertIn("Compile time: 0.125 s", output.getvalue())
+
+    @unittest.skipUnless(native_available(), "nanobind extension is not installed")
+    def test_fnom_diff_compares_contract_and_embedded_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            left = fno.export.onnx(
+                b"same-payload",
+                path=root / "left.fnom",
+                name="same-model",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+            )
+            right = fno.export.onnx(
+                b"same-payload",
+                path=root / "right.fnom",
+                name="same-model",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+            )
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main(["diff", str(left), str(right)]), 0)
+            self.assertIn("Equivalent FNOM", output.getvalue())
+
+            changed = fno.export.onnx(
+                b"changed-payload",
+                path=root / "changed.fnom",
+                name="same-model",
+                inputs={"x": fno.Tensor.scalar()},
+                outputs={"y": fno.Tensor.scalar()},
+            )
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(
+                    main(["diff", str(left), str(changed), "--json"]),
+                    1,
+                )
+            record = json.loads(output.getvalue())
+            self.assertFalse(record["equal"])
+            self.assertIn("payload_sha256", record["differences"])
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
     def test_fnom_validate_rejects_corrupt_container(self) -> None:

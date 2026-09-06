@@ -115,6 +115,14 @@ storage from their current contracts rather than stale mesh state. Retained
 workspace is therefore bounded by execution resources rather than MPI rank
 count.
 
+The negotiated payload limit applies to the complete prepared input exchange,
+not independently to every field. Before allocating each incoming tensor body,
+the Rune reader checks the remaining exchange allowance. A malformed client
+therefore cannot multiply the negotiated limit by sending many individually
+valid fields. If one rank fails while another is waiting for an execution
+context, ModelHost cancels and wakes the waiter before interrupting the rank
+channels; fail-together shutdown cannot remain blocked behind admission.
+
 Contiguous active-cell ranges use a dedicated packing path. A single input is
 copied as one block, while multi-input packing avoids repeated active-index
 loads in the cell loop. Sparse bypass selections retain the validated gather

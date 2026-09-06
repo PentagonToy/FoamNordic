@@ -108,7 +108,7 @@ void Harbor::publish(
     complete(exchange_index, static_cast<std::uint32_t>(tensors.size()));
 }
 
-HarborMessage Harbor::receive_message() {
+HarborMessage Harbor::receive_message(std::uint64_t maximum_tensor_payload) {
     const auto prefix = receive_prefix();
     if (session_.session_id != 0 && prefix.session_id != session_.session_id) {
         throw std::runtime_error("Harbor received data for a different session.");
@@ -121,7 +121,8 @@ HarborMessage Harbor::receive_message() {
         return {prefix.kind, std::nullopt, prefix.exchange_index, prefix.flags};
     }
 
-    if (prefix.payload_bytes > session_.maximum_payload) {
+    if (prefix.payload_bytes > session_.maximum_payload
+        || prefix.payload_bytes > maximum_tensor_payload) {
         throw std::runtime_error("Rune tensor payload exceeds the Harbor safety limit.");
     }
     std::string name(prefix.name_bytes, '\0');

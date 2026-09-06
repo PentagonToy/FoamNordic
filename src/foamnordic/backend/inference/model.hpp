@@ -57,6 +57,7 @@ public:
 
     [[nodiscard]] bool owns_backend_synchronization() const noexcept override;
     [[nodiscard]] ExecutionSnapshot execution_snapshot() const override;
+    void cancel_pending() noexcept override;
 
     [[nodiscard]] const ModelArtifact& artifact() const noexcept;
 

@@ -328,6 +328,61 @@ void test_scaled_affine_exchange(bool shared_memory) {
     }
 }
 
+void test_exchange_payload_is_rejected_before_body_allocation() {
+    auto channels = foamnordic::fjord::local_channel_pair();
+    foamnordic::fjord::Harbor client(std::move(channels.first));
+    foamnordic::fjord::Harbor worker(std::move(channels.second));
+    foamnordic::inference::EvaluateAllCells bypass;
+    CombustionKernel kernel;
+    std::atomic<bool> rejected{false};
+
+    std::thread worker_thread([&] {
+        try {
+            static_cast<void>(worker.accept_session({
+                1,
+                foamnordic::fjord::Capability::uds,
+                0,
+                1,
+                4096,
+            }));
+            foamnordic::inference::InferenceRunner runner(
+                worker,
+                {
+                    "bounded-request",
+                    {
+                        {"c_tilde", Element::float64, 1},
+                        {"c_var", Element::float64, 1},
+                        {"T_tilde", Element::float64, 1},
+                    },
+                    {{"omega_c", Element::float64, 1}},
+                },
+                bypass,
+                kernel,
+                24);
+            static_cast<void>(runner.run_one());
+        } catch (const std::runtime_error&) {
+            rejected.store(true, std::memory_order_release);
+        }
+    });
+
+    static_cast<void>(client.connect_session({
+        8101,
+        foamnordic::fjord::Capability::uds,
+        0,
+        1,
+        4096,
+    }));
+    client.send(scalar_field("c_tilde", {0.1, 0.2}, 13, 0.5).view());
+    client.send(scalar_field("c_var", {0.0, 0.1}, 13, 0.5).view());
+    require(
+        client.receive_control() == foamnordic::fjord::RuneKind::error,
+        "Oversized model exchange did not return an atomic error.");
+    worker_thread.join();
+    require(
+        rejected.load(std::memory_order_acquire),
+        "Model runner accepted an oversized aggregate payload.");
+}
+
 void test_k_eqn_fjord_contract() {
     std::vector<double> weights(33, 0.0);
     weights[10] = 0.05;
@@ -453,6 +508,7 @@ int main() {
     test_native_combustion_exchange(true);
     test_scaled_affine_exchange(false);
     test_scaled_affine_exchange(true);
+    test_exchange_payload_is_rejected_before_body_allocation();
     test_k_eqn_fjord_contract();
     test_worker_failure_is_reported_to_solver(false);
     test_worker_failure_is_reported_to_solver(true);

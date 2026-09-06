@@ -35,6 +35,8 @@ public:
         return {};
     }
 
+    virtual void cancel_pending() noexcept {}
+
     [[nodiscard]] virtual TensorMap evaluate(
         const TensorMap& inputs,
         const std::vector<std::uint64_t>& active_cells,
@@ -49,7 +51,9 @@ public:
         fjord::Harbor& harbor,
         ProgramContract contract,
         const CellEvaluationPolicy& bypass,
-        ModelKernel& kernel);
+        ModelKernel& kernel,
+        std::uint64_t maximum_exchange_payload =
+            16ULL * 1024ULL * 1024ULL * 1024ULL);
 
     [[nodiscard]] bool run_one();
     void run();
@@ -59,6 +63,7 @@ private:
     CellInferenceExchange exchange_;
     const CellEvaluationPolicy& bypass_;
     ModelKernel& kernel_;
+    std::uint64_t maximum_exchange_payload_;
 };
 
 }  // namespace foamnordic::inference

@@ -50,6 +50,11 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   pool. Context and working-byte admission now constrain concurrent model work,
   while explicit backend capabilities permit safe native concurrency without
   multiplying ONNX or managed-runtime thread pools.
+- Bounded complete input exchanges before allocating each subsequent tensor
+  body, and made execution-context admission cancellable during fail-together
+  worker shutdown.
+- Added `foamnordic diff` for non-executing comparison of validated FNOM
+  manifests and streamed embedded-payload digests.
 
 ### Solver boundary
 

@@ -35,7 +35,14 @@ The equivalent CLI commands are:
 foamnordic inspect reaction-rate.fnom
 foamnordic inspect reaction-rate.fnom --json
 foamnordic validate reaction-rate.fnom
+foamnordic diff reference.fnom candidate.fnom
+foamnordic diff reference.fnom candidate.fnom --json
 ```
+
+`diff` validates both artefacts, compares their complete execution manifests
+and streams embedded or legacy external payloads through SHA-256. File names,
+external payload paths, and container padding do not affect equivalence, and
+neither model payload is executed.
 
 See the [FNOM format specification](../architecture/fnom.md) for binary
 layout, trust boundaries, and compatibility policy.

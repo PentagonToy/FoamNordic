@@ -23,7 +23,14 @@ Metadata can be inspected without importing or executing the backend payload:
 foamnordic inspect model.fnom
 foamnordic inspect model.fnom --json
 foamnordic validate model.fnom
+foamnordic diff reference.fnom candidate.fnom
 ```
+
+`diff` ignores paths and container padding. It compares the complete validated
+manifest and streams each embedded or legacy external payload through SHA-256
+without loading or executing the model. Its exit status is zero for equivalent
+artefacts and one for a meaningful difference; malformed input is reported
+separately.
 
 ```python
 artifact = fno.Models.load("model.fnom")
