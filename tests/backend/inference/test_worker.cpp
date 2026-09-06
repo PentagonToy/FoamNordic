@@ -227,6 +227,7 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
     {
         foamnordic::inference::WorkerOptions options;
         options.connections = 2;
+        options.maximum_receive_bytes = 32;
         foamnordic::inference::ModelWorker worker(
             foamnordic::fjord::FjordAddress::local(socket_path.string()),
             {
@@ -251,11 +252,22 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
 
         auto first = connect_rank(worker.address(), 0, 2);
         auto second = connect_rank(worker.address(), 1, 2);
-        verify_affine_exchange(first);
-        verify_affine_exchange(second);
+        std::exception_ptr first_failure, second_failure;
+        std::thread first_request([&] {
+            try { verify_affine_exchange(first); }
+            catch (...) { first_failure = std::current_exception(); }
+        });
+        std::thread second_request([&] {
+            try { verify_affine_exchange(second); }
+            catch (...) { second_failure = std::current_exception(); }
+        });
+        first_request.join();
+        second_request.join();
         first.shutdown();
         second.shutdown();
         worker_thread.join();
+        if (first_failure) { std::rethrow_exception(first_failure); }
+        if (second_failure) { std::rethrow_exception(second_failure); }
         if (worker_failure) {
             std::rethrow_exception(worker_failure);
         }

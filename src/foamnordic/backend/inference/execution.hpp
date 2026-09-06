@@ -40,6 +40,8 @@ struct ExecutionSnapshot {
     std::uint64_t packing_nanoseconds{0};
     std::uint64_t inference_nanoseconds{0};
     std::uint64_t output_nanoseconds{0};
+    std::uint64_t admission_nanoseconds{0};
+    std::uint64_t backend_wait_nanoseconds{0};
 };
 
 struct ReceiveCreditSnapshot {
@@ -60,10 +62,12 @@ public:
         ~Reservation();
 
         void acquire(std::uint64_t bytes);
+        void seal() noexcept;
 
     private:
         ReceiveCreditPool* owner_;
         std::uint64_t bytes_{0};
+        bool receiving_{false};
     };
 
     explicit ReceiveCreditPool(std::uint64_t maximum_bytes);
@@ -81,6 +85,7 @@ private:
     std::uint64_t active_bytes_{0};
     std::uint64_t peak_active_bytes_{0};
     bool cancelled_{false};
+    Reservation* receiver_{nullptr};
 };
 
 class ExecutionContextPool final {
@@ -119,6 +124,7 @@ private:
     struct Slot {
         SmedjaWorkspace workspace;
         bool active{false};
+        std::uint64_t retained_bytes{0};
     };
 
     void release(std::size_t index, std::uint64_t admitted_bytes) noexcept;

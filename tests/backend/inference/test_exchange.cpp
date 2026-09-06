@@ -114,6 +114,7 @@ void test_combustion_bypass() {
     exchange.add_output(scalar_field("omega_c", {10.0, 20.0}));
     exchange.seal_outputs(bypass);
     const auto outputs = exchange.finish();
+    require(exchange.inputs().empty(), "Finished exchange retained input payloads.");
     require(
         values_of(outputs.at("omega_c")) == std::vector<double>{0.0, 10.0, 0.0, 20.0},
         "Combustion bypass merge is incorrect.");
@@ -134,6 +135,8 @@ void test_incomplete_exchange_is_rejected() {
         rejected = true;
     }
     require(rejected, "Incomplete LES closure input was accepted.");
+    exchange.fail("Test failure cleanup");
+    require(exchange.inputs().empty(), "Failed exchange retained input payloads.");
 }
 
 void test_in_place_field_contract() {

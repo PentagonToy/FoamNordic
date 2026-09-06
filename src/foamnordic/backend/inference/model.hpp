@@ -75,6 +75,8 @@ private:
     std::atomic<std::uint64_t> packing_nanoseconds_{0};
     std::atomic<std::uint64_t> inference_nanoseconds_{0};
     std::atomic<std::uint64_t> output_nanoseconds_{0};
+    std::atomic<std::uint64_t> admission_nanoseconds_{0};
+    std::atomic<std::uint64_t> backend_wait_nanoseconds_{0};
 };
 
 }  // namespace foamnordic::inference

@@ -79,6 +79,8 @@ TensorMap ArtifactModelKernel::evaluate(
                                 1, std::memory_order_relaxed)
                                 % profile_every_
                                 == 0;
+    const auto admission_started = sampled ? std::chrono::steady_clock::now()
+                                          : std::chrono::steady_clock::time_point{};
     auto context = contexts_.acquire(
         checked_working_bytes(smedja_, active_cells.size()));
     const auto packing_started = sampled
@@ -112,6 +114,10 @@ TensorMap ArtifactModelKernel::evaluate(
         });
         if (sampled) {
             const auto finished = std::chrono::steady_clock::now();
+            admission_nanoseconds_.fetch_add(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    packing_started - admission_started).count(),
+                std::memory_order_relaxed);
             packing_nanoseconds_.fetch_add(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     inference_started - packing_started).count(),
@@ -125,11 +131,15 @@ TensorMap ArtifactModelKernel::evaluate(
         return outputs;
     }
     fjord::Tensor predictions;
+    auto backend_started = inference_started;
     if (capabilities_.concurrent_evaluation) {
         predictions = kernel_.evaluate(
             packed.view(), exchange_index, physical_time, rank);
     } else {
         std::scoped_lock lock(backend_mutex_);
+        if (sampled) {
+            backend_started = std::chrono::steady_clock::now();
+        }
         predictions = kernel_.evaluate(
             packed.view(), exchange_index, physical_time, rank);
     }
@@ -155,6 +165,12 @@ TensorMap ArtifactModelKernel::evaluate(
     }
     auto outputs = smedja_.unpack(std::move(predictions));
     if (sampled) {
+        admission_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                packing_started - admission_started).count(), std::memory_order_relaxed);
+        backend_wait_nanoseconds_.fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                backend_started - inference_started).count(), std::memory_order_relaxed);
         const auto finished = std::chrono::steady_clock::now();
         packing_nanoseconds_.fetch_add(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -162,7 +178,7 @@ TensorMap ArtifactModelKernel::evaluate(
             std::memory_order_relaxed);
         inference_nanoseconds_.fetch_add(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
-                output_started - inference_started).count(),
+                output_started - backend_started).count(),
             std::memory_order_relaxed);
         output_nanoseconds_.fetch_add(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -188,6 +204,8 @@ ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
         inference_nanoseconds_.load(std::memory_order_relaxed);
     snapshot.output_nanoseconds =
         output_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.admission_nanoseconds = admission_nanoseconds_.load(std::memory_order_relaxed);
+    snapshot.backend_wait_nanoseconds = backend_wait_nanoseconds_.load(std::memory_order_relaxed);
     return snapshot;
 }
 

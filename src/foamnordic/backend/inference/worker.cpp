@@ -306,6 +306,10 @@ void ModelWorker::run() {
         native::log(
             native::LogLevel::info,
             "Model sampled stages: samples=" + std::to_string(samples)
+                + ", admission_us="
+                + std::to_string(resources.admission_nanoseconds / samples / 1000)
+                + ", backend_wait_us="
+                + std::to_string(resources.backend_wait_nanoseconds / samples / 1000)
                 + ", pack_us="
                 + std::to_string(resources.packing_nanoseconds / samples / 1000)
                 + ", infer_us="

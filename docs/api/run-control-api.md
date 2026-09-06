@@ -140,12 +140,21 @@ read a clock or update timing counters on the closure path. Sampling changes
 observation only; it does not move computation into Python or alter handshake
 semantics.
 
+Sampled output also separates context `admission_us` and `backend_wait_us` from
+`infer_us`. Admission includes context acquisition overhead. Receive-credit
+waiting is outside these model-stage measurements.
+
 `Longship.launch(receive_memory_bytes=N)` sets one input receive-memory budget
 shared by every solver rank connected to a ModelHost. A tensor reserves its
 payload bytes after its header passes validation and before its body is
 allocated. The reservation remains held until that rank's atomic exchange has
 finished or failed, so concurrent large-mesh ranks apply back-pressure rather
 than multiplying input allocations without bound.
+The default is 16 GiB per resident process. One incomplete exchange receives at
+a time; a completed input batch can be evaluated while the next batch arrives.
+Requests larger than the limit are rejected, and input storage is released
+before its credit. The limit excludes transport rings, model storage, output
+buffers, and backend allocations.
 
 `x_scaler` and `y_scaler` accept fitted scikit-learn `StandardScaler`,
 `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or affine

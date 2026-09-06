@@ -211,10 +211,15 @@ TensorMap CellInferenceExchange::finish() {
     state_ = ExchangeState::completed;
     previous_exchange_index_ = exchange_index_;
     has_previous_exchange_ = true;
+    inputs_.clear();
+    predictions_.clear();
     return std::move(outputs_);
 }
 
 void CellInferenceExchange::fail(std::string reason) {
+    inputs_.clear();
+    predictions_.clear();
+    outputs_.clear();
     if (reason.empty()) {
         reason = "Unknown model failure.";
     }

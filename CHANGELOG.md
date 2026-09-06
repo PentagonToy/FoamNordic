@@ -68,6 +68,13 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 
 ### Solver boundary
 
+- Fixed partial-exchange receive-credit deadlock with cancellable reception
+  ownership and cumulative request rejection. Completed and failed exchanges
+  release input storage before returning credit.
+- Removed concurrent reads of active workspace vector metadata; retention is
+  published at lease return. Added concurrent multi-rank SHM regression coverage.
+- Separated sampled context admission and backend lock waiting from inference.
+
 - FoamNordic now builds and installs only the solver-agnostic native runtime,
   ModelHost, field hooks, and OpenFOAM adapter SDK. The bundled
   progress-variable solver and combustion-model registrations moved out of

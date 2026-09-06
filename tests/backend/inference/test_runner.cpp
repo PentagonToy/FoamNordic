@@ -85,6 +85,52 @@ void test_shared_receive_credit_blocks_and_cancels() {
     cancelled.release(16);
 }
 
+void test_partial_requests_make_progress() {
+    using namespace std::chrono_literals;
+    foamnordic::inference::ReceiveCreditPool credits(64);
+    auto first = std::make_unique<
+        foamnordic::inference::ReceiveCreditPool::Reservation>(credits);
+    first->acquire(32);
+    std::atomic<bool> completed{false};
+    std::thread peer([&] {
+        foamnordic::inference::ReceiveCreditPool::Reservation second(credits);
+        second.acquire(32);
+        second.acquire(32);
+        second.seal();
+        completed = true;
+    });
+    first->acquire(32);
+    first->seal();
+    first.reset();
+    peer.join();
+    require(completed, "Two partial requests failed to complete.");
+    require(credits.snapshot().active_bytes == 0, "Completed credit leaked.");
+    require(credits.snapshot().peak_active_bytes == 64, "Budget was exceeded.");
+    bool rejected = false;
+    {
+        foamnordic::inference::ReceiveCreditPool::Reservation oversized(credits);
+        oversized.acquire(40);
+        try { oversized.acquire(25); }
+        catch (const std::length_error&) { rejected = true; }
+    }
+    require(rejected, "Oversized cumulative exchange waited on itself.");
+}
+
+void test_active_workspace_accounting() {
+    foamnordic::inference::ExecutionContextPool pool({2, 1024 * 1024});
+    auto active = pool.acquire(4096);
+    std::thread writer([&] {
+        for (int i = 0; i < 10000; ++i) {
+            active.workspace().release();
+        }
+    });
+    for (int i = 0; i < 10000; ++i) {
+        auto other = pool.acquire(4096);
+        static_cast<void>(pool.snapshot());
+    }
+    writer.join();
+}
+
 Tensor field(
     std::string name,
     std::uint64_t components,
@@ -562,6 +608,8 @@ void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
 }  // namespace
 
 int main() {
+    test_partial_requests_make_progress();
+    test_active_workspace_accounting();
     test_shared_receive_credit_blocks_and_cancels();
     test_native_combustion_exchange(false);
     test_native_combustion_exchange(true);

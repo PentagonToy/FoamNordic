@@ -31,11 +31,37 @@ ReceiveCreditPool::Reservation::Reservation(ReceiveCreditPool& owner) noexcept
 
 ReceiveCreditPool::Reservation::~Reservation() {
     owner_->release(bytes_);
+    seal();
 }
 
 void ReceiveCreditPool::Reservation::acquire(std::uint64_t bytes) {
+    if (bytes > owner_->maximum_bytes_ - bytes_) {
+        throw std::length_error("Model exchange exceeds the shared receive-memory limit.");
+    }
+    if (!receiving_) {
+        std::unique_lock lock(owner_->mutex_);
+        owner_->available_.wait(lock, [&] {
+            return owner_->cancelled_ || owner_->receiver_ == nullptr;
+        });
+        if (owner_->cancelled_) {
+            throw std::runtime_error("Model input reception was cancelled.");
+        }
+        owner_->receiver_ = this;
+        receiving_ = true;
+    }
     owner_->acquire(bytes);
     bytes_ += bytes;
+}
+
+void ReceiveCreditPool::Reservation::seal() noexcept {
+    if (receiving_) {
+        {
+            std::scoped_lock lock(owner_->mutex_);
+            owner_->receiver_ = nullptr;
+            receiving_ = false;
+        }
+        owner_->available_.notify_all();
+    }
 }
 
 ReceiveCreditPool::ReceiveCreditPool(std::uint64_t maximum_bytes)
@@ -191,8 +217,7 @@ ExecutionSnapshot ExecutionContextPool::snapshot() const {
 std::uint64_t ExecutionContextPool::retained_bytes_locked() const noexcept {
     std::uint64_t total = 0;
     for (const auto& slot : slots_) {
-        const auto retained = static_cast<std::uint64_t>(
-            slot.workspace.retained_bytes());
+        const auto retained = slot.retained_bytes;
         if (retained > std::numeric_limits<std::uint64_t>::max() - total) {
             return std::numeric_limits<std::uint64_t>::max();
         }
@@ -207,12 +232,14 @@ void ExecutionContextPool::release(
     {
         std::scoped_lock lock(mutex_);
         auto& slot = slots_[index];
+        slot.retained_bytes = slot.workspace.retained_bytes();
         slot.active = false;
         --active_contexts_;
         admitted_bytes_ -= admitted_bytes;
         auto retained = retained_bytes_locked();
         if (retained > resources_.maximum_working_bytes) {
             slot.workspace.release();
+            slot.retained_bytes = 0;
             retained = retained_bytes_locked();
         }
         for (auto& candidate : slots_) {
@@ -221,6 +248,7 @@ void ExecutionContextPool::release(
             }
             if (!candidate.active && &candidate != &slot) {
                 candidate.workspace.release();
+                candidate.retained_bytes = 0;
                 retained = retained_bytes_locked();
             }
         }

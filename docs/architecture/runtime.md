@@ -191,6 +191,12 @@ This error boundary is exercised over both the socket-backed channel and the
 native SHM ring used after a same-node upgrade.
 
 All rank runners within a ModelHost share one pre-receive memory-credit pool.
+Only one incomplete input exchange may acquire incremental credit at a time.
+After its inputs are sealed, reception of the next rank may overlap inference.
+This prevents partial requests from exhausting credit while waiting on one
+another. An exchange exceeding the budget fails before allocating its next
+body. This conservative policy does not require a new wire envelope or infer
+the size of other fields from the first tensor. It does not promise FIFO fairness.
 The Harbor validates each tensor header first, then obtains credit before
 allocating or reading its body. Credit covers the complete lifetime of the
 rank's atomic input exchange and is returned on success or failure. A failed
@@ -198,6 +204,12 @@ rank cancels the pool and wakes blocked peers as part of fail-together
 shutdown. This admission limit is distinct from the execution-context budget:
 the former bounds resident input payloads, while the latter bounds model
 packing, inference, and output workspace.
+
+Input payloads are destroyed on completion or failure before receive credit is
+returned. Workspace retention counters are published when a lease returns;
+active vector metadata is never inspected by another thread. During execution,
+retention figures describe the last published capacities, not live RSS or a
+hard bound on allocator and backend memory.
 
 The current end-to-end native test sends `c`, `c_var`, and `T`
 through a real Fjord socket channel. It evaluates only cells selected by

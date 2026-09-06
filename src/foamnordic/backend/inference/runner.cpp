@@ -98,6 +98,9 @@ bool InferenceRunner::run_one() {
         }
 
         exchange_.seal_inputs();
+        if (receive_reservation) {
+            receive_reservation->seal();
+        }
         const auto& active_cells = exchange_.prepare(bypass_);
         auto predictions = kernel_.evaluate(
             exchange_.inputs(),
@@ -120,8 +123,18 @@ bool InferenceRunner::run_one() {
         }
         harbor_.publish(exchange_.exchange_index(), output_views);
         return true;
-    } catch (const std::exception& error) {
-        exchange_.fail(error.what());
+    } catch (...) {
+        if (receive_credits_) {
+            receive_credits_->cancel();
+        }
+        std::string reason = "Unknown model exception.";
+        try {
+            throw;
+        } catch (const std::exception& error) {
+            reason = error.what();
+        } catch (...) {
+        }
+        exchange_.fail(std::move(reason));
         try {
             harbor_.fail_exchange(
                 started ? exchange_.exchange_index() : 0);
