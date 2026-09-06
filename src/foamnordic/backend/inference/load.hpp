@@ -22,6 +22,8 @@ namespace foamnordic::inference {
 
 struct ModelLoadOptions {
     std::uint32_t threads{1};
+    std::uint32_t execution_contexts{1};
+    std::uint64_t maximum_working_bytes{16ULL * 1024ULL * 1024ULL * 1024ULL};
 
     void validate() const;
 };

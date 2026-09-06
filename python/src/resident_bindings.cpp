@@ -2,6 +2,7 @@
 
 #include <nanobind/stl/string.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -161,18 +162,26 @@ void bind_resident(nb::module_& module) {
            nb::object evaluator,
            std::uint32_t connections,
            const std::string& ready_file,
-           bool shared_memory) {
+           bool shared_memory,
+           std::uint32_t model_threads) {
             auto artifact = foamnordic::inference::read_manifest(manifest_path);
             if (artifact.format == foamnordic::inference::ModelFormat::onnx) {
                 throw std::invalid_argument(
                     "ONNX artifacts must use the native ONNX connector.");
             }
-            PythonPackedKernel packed(std::move(evaluator), output_width(artifact));
-            foamnordic::inference::ArtifactModelKernel kernel(artifact, packed);
-            foamnordic::inference::EvaluateAllCells bypass;
             foamnordic::inference::WorkerOptions options;
             options.connections = connections;
+            options.model_threads = model_threads;
             options.shared_memory = shared_memory;
+            PythonPackedKernel packed(std::move(evaluator), output_width(artifact));
+            foamnordic::inference::ArtifactModelKernel kernel(
+                artifact,
+                packed,
+                {
+                    std::min(connections, model_threads),
+                    options.maximum_working_bytes,
+                });
+            foamnordic::inference::EvaluateAllCells bypass;
             foamnordic::inference::ModelWorker worker(
                 foamnordic::fjord::FjordAddress::parse(address),
                 artifact,
@@ -193,5 +202,6 @@ void bind_resident(nb::module_& module) {
         "connections"_a = 1,
         "ready_file"_a = "",
         "shared_memory"_a = true,
+        "model_threads"_a = 1,
         "Run a managed Python model behind the native Fjord worker.");
 }

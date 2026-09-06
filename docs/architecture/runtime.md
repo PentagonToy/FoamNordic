@@ -99,13 +99,21 @@ Tensor addresses, shapes, active-cell selections, and local cell counts are
 rebound and validated for every invocation. It never retains an OpenFOAM-owned
 pointer or treats a previous mesh layout as current state.
 
-Each persistent runner thread owns an input workspace. Similar request sizes
-reuse byte capacity, but logical shape, metadata, and contents are reset on
-every call. A request smaller than one quarter of retained capacity releases
-the oversized allocation so a temporary topology does not pin rank-multiplied
+ModelHost owns a bounded pool of execution contexts rather than attaching a
+large workspace to every solver rank. Each context owns one Smedja input
+workspace and admits a conservative working-set estimate covering packed input,
+backend prediction, and named output preparation. A request larger than the
+host limit fails with its required and permitted byte counts; otherwise it
+waits without occupying another execution context.
+
+Similar request sizes reuse byte capacity, but logical shape, metadata, and
+contents are reset on every call. A request smaller than one quarter of retained
+capacity releases the oversized allocation so a temporary topology does not pin
 memory for the rest of a run. A zero-cell rank partition releases its retained
 packing allocation completely; later non-empty partitions reacquire and grow
-storage from their current contracts rather than stale mesh state.
+storage from their current contracts rather than stale mesh state. Retained
+workspace is therefore bounded by execution resources rather than MPI rank
+count.
 
 Contiguous active-cell ranges use a dedicated packing path. A single input is
 copied as one block, while multi-input packing avoids repeated active-index
@@ -132,6 +140,18 @@ require it. Arbitrary stateful kernels retain conservative worker-wide
 serialisation. This synchronisation ownership is preserved when kernels are
 wrapped by the public artefact loader, so loading an FNOM artefact cannot
 silently widen the critical section.
+
+Packed backends declare whether evaluation is concurrent, row-independent, and
+owner of an internal compute-thread pool. Unknown and managed Python backends
+remain serial by default. Reentrant native kernels may evaluate in parallel up
+to the bounded context count; ONNX remains one `Run()` at a time because its
+session owns the configured CPU thread budget. Request concurrency therefore
+cannot silently multiply ONNX's intra-operator threads.
+
+At shutdown, ModelHost reports peak active contexts, peak admitted working
+bytes, and retained Smedja workspace bytes. These bounded counters describe
+native execution storage without reading a clock for every stage, tracing
+cells, or placing observation traffic on the solver path.
 
 ## Resident worker
 

@@ -74,6 +74,10 @@ std::size_t SmedjaWorkspace::retained_bytes() const noexcept {
     return input_.bytes.capacity();
 }
 
+void SmedjaWorkspace::release() noexcept {
+    std::vector<std::byte>().swap(input_.bytes);
+}
+
 Smedja::Layout Smedja::compile(const std::vector<FieldContract>& fields) {
     if (fields.empty()) {
         throw std::invalid_argument("Smedja layout requires at least one field.");

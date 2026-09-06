@@ -12,13 +12,57 @@
 #include "foamnordic/backend/inference/model.hpp"
 
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
 namespace foamnordic::inference {
+namespace {
 
-ArtifactModelKernel::ArtifactModelKernel(ModelArtifact artifact, PackedModelKernel& kernel)
-    : artifact_(std::move(artifact)), kernel_(kernel), smedja_(artifact_.contract) {
+std::uint64_t checked_tensor_bytes(
+    std::size_t rows,
+    std::uint64_t width,
+    fjord::Element element) {
+    const auto item_bytes = static_cast<std::uint64_t>(
+        fjord::element_size(element));
+    const auto row_count = static_cast<std::uint64_t>(rows);
+    if (width != 0
+        && row_count > std::numeric_limits<std::uint64_t>::max() / width) {
+        throw std::overflow_error("Model execution row count overflowed.");
+    }
+    const auto elements = row_count * width;
+    if (item_bytes != 0
+        && elements > std::numeric_limits<std::uint64_t>::max() / item_bytes) {
+        throw std::overflow_error("Model execution byte count overflowed.");
+    }
+    return elements * item_bytes;
+}
+
+std::uint64_t checked_working_bytes(
+    const Smedja& smedja,
+    std::size_t rows) {
+    const auto input = checked_tensor_bytes(
+        rows, smedja.input_width(), smedja.input_element());
+    const auto output = checked_tensor_bytes(
+        rows, smedja.output_width(), smedja.output_element());
+    if (output > (std::numeric_limits<std::uint64_t>::max() - input) / 2) {
+        throw std::overflow_error("Model execution working set overflowed.");
+    }
+    // Predictions and committed named outputs may coexist during unpacking.
+    return input + 2 * output;
+}
+
+}  // namespace
+
+ArtifactModelKernel::ArtifactModelKernel(
+    ModelArtifact artifact,
+    PackedModelKernel& kernel,
+    ExecutionResources resources)
+    : artifact_(std::move(artifact)),
+      kernel_(kernel),
+      smedja_(artifact_.contract),
+      contexts_(resources),
+      capabilities_(kernel.capabilities()) {
     artifact_.validate();
 }
 
@@ -28,12 +72,10 @@ TensorMap ArtifactModelKernel::evaluate(
     std::uint64_t exchange_index,
     double physical_time,
     std::uint32_t rank) {
-    // InferenceRunner threads persist for the worker lifetime. This workspace
-    // therefore reuses capacity per runner without sharing OpenFOAM addresses
-    // or mutable tensor data between ranks.
-    thread_local SmedjaWorkspace workspace;
+    auto context = contexts_.acquire(
+        checked_working_bytes(smedja_, active_cells.size()));
     auto& packed = smedja_.pack_into(
-        workspace, inputs, active_cells, exchange_index, physical_time);
+        context.workspace(), inputs, active_cells, exchange_index, physical_time);
     if (artifact_.input_scaler) {
         auto mutable_view = fjord::MutableTensorView{
             packed.name,
@@ -57,7 +99,10 @@ TensorMap ArtifactModelKernel::evaluate(
         });
     }
     fjord::Tensor predictions;
-    {
+    if (capabilities_.concurrent_evaluation) {
+        predictions = kernel_.evaluate(
+            packed.view(), exchange_index, physical_time, rank);
+    } else {
         std::scoped_lock lock(backend_mutex_);
         predictions = kernel_.evaluate(
             packed.view(), exchange_index, physical_time, rank);
@@ -86,6 +131,10 @@ const ModelArtifact& ArtifactModelKernel::artifact() const noexcept { return art
 
 bool ArtifactModelKernel::owns_backend_synchronization() const noexcept {
     return true;
+}
+
+ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
+    return contexts_.snapshot();
 }
 
 }  // namespace foamnordic::inference

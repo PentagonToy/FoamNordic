@@ -22,6 +22,7 @@ namespace foamnordic::inference {
 class SmedjaWorkspace final {
 public:
     [[nodiscard]] std::size_t retained_bytes() const noexcept;
+    void release() noexcept;
 
 private:
     friend class Smedja;

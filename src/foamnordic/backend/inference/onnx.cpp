@@ -252,6 +252,16 @@ OnnxPackedKernel::~OnnxPackedKernel() = default;
 OnnxPackedKernel::OnnxPackedKernel(OnnxPackedKernel&&) noexcept = default;
 OnnxPackedKernel& OnnxPackedKernel::operator=(OnnxPackedKernel&&) noexcept = default;
 
+BackendCapabilities OnnxPackedKernel::capabilities() const noexcept {
+    // One session owns its configured ORT thread pool. Keeping Run() serial
+    // prevents request concurrency from multiplying that CPU budget.
+    return {
+        .concurrent_evaluation = false,
+        .row_independent = false,
+        .owns_compute_threads = true,
+    };
+}
+
 fjord::Tensor OnnxPackedKernel::evaluate(
     fjord::TensorView features,
     std::uint64_t exchange_index,

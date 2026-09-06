@@ -684,6 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.connections,
         arguments.ready_file,
         not arguments.no_shm,
+        model_threads,
     )
     return 0
 

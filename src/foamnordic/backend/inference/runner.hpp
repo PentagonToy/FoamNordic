@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "foamnordic/backend/inference/exchange.hpp"
+#include "foamnordic/backend/inference/execution.hpp"
 #include "foamnordic/fjord/harbor.hpp"
 
 namespace foamnordic::inference {
@@ -28,6 +29,10 @@ public:
     // only its non-reentrant backend resources itself.
     [[nodiscard]] virtual bool owns_backend_synchronization() const noexcept {
         return false;
+    }
+
+    [[nodiscard]] virtual ExecutionSnapshot execution_snapshot() const {
+        return {};
     }
 
     [[nodiscard]] virtual TensorMap evaluate(

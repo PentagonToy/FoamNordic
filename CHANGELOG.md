@@ -46,6 +46,10 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   model-evaluation lock.
 - Released retained Smedja packing storage for zero-cell rank partitions while
   preserving safe workspace reuse and regrowth for subsequent mesh layouts.
+- Replaced rank-thread-local packing storage with a bounded execution-context
+  pool. Context and working-byte admission now constrain concurrent model work,
+  while explicit backend capabilities permit safe native concurrency without
+  multiplying ONNX or managed-runtime thread pools.
 
 ### Solver boundary
 

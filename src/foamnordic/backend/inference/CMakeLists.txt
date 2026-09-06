@@ -3,6 +3,7 @@ add_library(foamnordic_inference STATIC
     affine.cpp
     artifact.cpp
     exchange.cpp
+    execution.cpp
     smedja.cpp
     load.cpp
     manifest.cpp

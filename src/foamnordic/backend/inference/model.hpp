@@ -14,14 +14,25 @@
 #include <mutex>
 
 #include "foamnordic/backend/inference/artifact.hpp"
+#include "foamnordic/backend/inference/execution.hpp"
 #include "foamnordic/backend/inference/smedja.hpp"
 #include "foamnordic/backend/inference/runner.hpp"
 
 namespace foamnordic::inference {
 
+struct BackendCapabilities {
+    bool concurrent_evaluation{false};
+    bool row_independent{false};
+    bool owns_compute_threads{false};
+};
+
 class PackedModelKernel {
 public:
     virtual ~PackedModelKernel() = default;
+
+    [[nodiscard]] virtual BackendCapabilities capabilities() const noexcept {
+        return {};
+    }
 
     [[nodiscard]] virtual fjord::Tensor evaluate(
         fjord::TensorView features,
@@ -32,7 +43,10 @@ public:
 
 class ArtifactModelKernel final : public ModelKernel {
 public:
-    ArtifactModelKernel(ModelArtifact artifact, PackedModelKernel& kernel);
+    ArtifactModelKernel(
+        ModelArtifact artifact,
+        PackedModelKernel& kernel,
+        ExecutionResources resources = {});
 
     [[nodiscard]] TensorMap evaluate(
         const TensorMap& inputs,
@@ -42,6 +56,7 @@ public:
         std::uint32_t rank = 0) override;
 
     [[nodiscard]] bool owns_backend_synchronization() const noexcept override;
+    [[nodiscard]] ExecutionSnapshot execution_snapshot() const override;
 
     [[nodiscard]] const ModelArtifact& artifact() const noexcept;
 
@@ -49,6 +64,8 @@ private:
     ModelArtifact artifact_;
     PackedModelKernel& kernel_;
     Smedja smedja_;
+    ExecutionContextPool contexts_;
+    BackendCapabilities capabilities_;
     std::mutex backend_mutex_;
 };
 

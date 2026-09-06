@@ -127,6 +127,12 @@ budget between their resident processes and rejects a declaration smaller
 than the program count. This prevents hidden oversubscription on both laptops
 and Slurm nodes.
 
+Within each ModelHost, the same budget also bounds reusable execution contexts.
+Packing for independent solver ranks may overlap, but a backend that owns an
+internal thread pool remains serial unless it explicitly declares safe
+concurrent evaluation. This separates rank count from inference resources and
+prevents one large workspace per rank.
+
 `x_scaler` and `y_scaler` accept fitted scikit-learn `StandardScaler`,
 `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or affine
 `FunctionTransformer` instances. Export converts

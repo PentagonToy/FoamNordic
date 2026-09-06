@@ -11,6 +11,7 @@
 
 #include "foamnordic/backend/inference/worker.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <mutex>
 #include <stdexcept>
@@ -53,6 +54,10 @@ public:
             inputs, active_cells, exchange_index, physical_time, rank);
     }
 
+    [[nodiscard]] ExecutionSnapshot execution_snapshot() const override {
+        return kernel_.execution_snapshot();
+    }
+
 private:
     ModelKernel& kernel_;
     std::mutex mutex_;
@@ -71,6 +76,10 @@ void WorkerOptions::validate() const {
     }
     if (maximum_payload == 0) {
         throw std::invalid_argument("Native model worker payload limit must be positive.");
+    }
+    if (maximum_working_bytes == 0) {
+        throw std::invalid_argument(
+            "Native model worker working-memory limit must be positive.");
     }
     if (ucx && ucx_host.empty()) {
         throw std::invalid_argument(
@@ -112,7 +121,13 @@ ModelWorker::ModelWorker(
       options_(options) {
     requested_address_.validate();
     options_.validate();
-    auto loaded = load_model(manifest_path, {options_.model_threads});
+    auto loaded = load_model(
+        manifest_path,
+        {
+            options_.model_threads,
+            std::min(options_.connections, options_.model_threads),
+            options_.maximum_working_bytes,
+        });
     artifact_ = std::move(loaded.artifact);
     owned_kernel_ = std::move(loaded.kernel);
     kernel_ = owned_kernel_.get();
@@ -254,6 +269,17 @@ void ModelWorker::run() {
         runner.join();
     }
     listener_.close();
+    const auto resources = execution_kernel.execution_snapshot();
+    if (resources.peak_active_contexts != 0) {
+        native::log(
+            native::LogLevel::info,
+            "Model execution peak: contexts="
+                + std::to_string(resources.peak_active_contexts)
+                + ", working_bytes="
+                + std::to_string(resources.peak_admitted_bytes)
+                + ", retained_workspace_bytes="
+                + std::to_string(resources.retained_workspace_bytes));
+    }
     if (failure) {
         std::rethrow_exception(failure);
     }

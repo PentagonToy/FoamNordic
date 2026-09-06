@@ -102,6 +102,14 @@ DenseAffineKernel::DenseAffineKernel(
     }
 }
 
+BackendCapabilities DenseAffineKernel::capabilities() const noexcept {
+    return {
+        .concurrent_evaluation = true,
+        .row_independent = true,
+        .owns_compute_threads = false,
+    };
+}
+
 fjord::Tensor DenseAffineKernel::evaluate(
     fjord::TensorView features,
     std::uint64_t exchange_index,

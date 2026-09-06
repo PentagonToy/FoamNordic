@@ -16,6 +16,7 @@
 
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/affine.hpp"
+#include "foamnordic/backend/inference/execution.hpp"
 #include "foamnordic/backend/inference/load.hpp"
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
@@ -436,6 +437,51 @@ void test_smedja_reuses_and_bounds_workspace_capacity() {
         "Smedja did not regrow a released dynamic-mesh workspace.");
 }
 
+void test_execution_context_pool_bounds_contexts_and_bytes() {
+    foamnordic::inference::ExecutionContextPool pool({2, 64});
+    auto first = pool.acquire(20);
+    auto second = pool.acquire(20);
+    auto snapshot = pool.snapshot();
+    require(
+        snapshot.active_contexts == 2
+            && snapshot.peak_active_contexts == 2
+            && snapshot.admitted_bytes == 40,
+        "Execution pool did not account for active contexts.");
+
+    second = {};
+    std::atomic<bool> admitted{false};
+    std::exception_ptr failure;
+    std::thread waiter([&] {
+        try {
+            auto third = pool.acquire(50);
+            admitted.store(true, std::memory_order_release);
+        } catch (...) {
+            failure = std::current_exception();
+        }
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(
+        !admitted.load(std::memory_order_acquire),
+        "Execution pool exceeded its working-memory budget.");
+    first = {};
+    waiter.join();
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+    require(
+        admitted.load(std::memory_order_acquire),
+        "Execution pool did not admit work after resources were released.");
+    require_throws(
+        [&] { static_cast<void>(pool.acquire(65)); },
+        "Execution pool accepted a request larger than its byte budget.");
+    snapshot = pool.snapshot();
+    require(
+        snapshot.active_contexts == 0
+            && snapshot.admitted_bytes == 0
+            && snapshot.peak_admitted_bytes <= 64,
+        "Execution pool did not release its admitted resources.");
+}
+
 void test_smedja_packs_contiguous_and_sparse_cell_ranges() {
     const foamnordic::inference::ProgramContract single_input_contract{
         "single",
@@ -483,6 +529,18 @@ void test_smedja_fuses_float_input_conversion_with_packing() {
 
 class ConcurrentProbeKernel final : public foamnordic::inference::PackedModelKernel {
 public:
+    explicit ConcurrentProbeKernel(bool concurrent = false)
+        : concurrent_(concurrent) {}
+
+    [[nodiscard]] foamnordic::inference::BackendCapabilities capabilities()
+        const noexcept override {
+        return {
+            .concurrent_evaluation = concurrent_,
+            .row_independent = true,
+            .owns_compute_threads = false,
+        };
+    }
+
     foamnordic::fjord::Tensor evaluate(
         foamnordic::fjord::TensorView features,
         std::uint64_t exchange_index,
@@ -506,6 +564,7 @@ public:
     [[nodiscard]] std::uint32_t peak() const noexcept { return peak_.load(); }
 
 private:
+    bool concurrent_;
     std::atomic<std::uint32_t> active_{0};
     std::atomic<std::uint32_t> peak_{0};
 };
@@ -542,6 +601,65 @@ void test_artifact_kernel_owns_a_narrow_backend_lock() {
     require(
         packed_kernel.peak() == 1,
         "Artifact kernel allowed concurrent access to a serialized backend.");
+}
+
+void test_reentrant_backend_uses_bounded_execution_contexts() {
+    ConcurrentProbeKernel packed_kernel(true);
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            2,
+            foamnordic::inference::ModelFormat::compiled,
+            "artifact/model.cpp",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+            "cpp-v1",
+        },
+        packed_kernel,
+        {2, 4096});
+    const auto invoke = [&](std::uint64_t exchange_index) {
+        foamnordic::inference::TensorMap inputs;
+        inputs.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+        inputs.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+        inputs.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+        static_cast<void>(kernel.evaluate(inputs, {0, 1}, exchange_index, 0.25));
+    };
+    std::thread first([&] { invoke(20); });
+    std::thread second([&] { invoke(21); });
+    first.join();
+    second.join();
+    require(
+        packed_kernel.peak() == 2,
+        "A reentrant backend did not use its execution contexts concurrently.");
+}
+
+void test_artifact_kernel_rejects_an_oversized_working_set() {
+    ConcurrentProbeKernel packed_kernel(true);
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            1,
+            foamnordic::inference::ModelFormat::onnx,
+            "artifact/model.onnx",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+        },
+        packed_kernel,
+        {1, 79});
+    foamnordic::inference::TensorMap inputs;
+    inputs.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+    inputs.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+    inputs.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+    require_throws(
+        [&] {
+            static_cast<void>(kernel.evaluate(inputs, {0, 1}, 30, 0.25));
+        },
+        "Artifact kernel accepted a request above its working-memory limit.");
+    require(
+        packed_kernel.peak() == 0,
+        "An oversized request reached the model backend before rejection.");
 }
 
 class LoadedProbeKernel final : public foamnordic::inference::PackedModelKernel {
@@ -900,9 +1018,12 @@ int main() {
     test_smedja_moves_a_single_output_staging_buffer();
     test_smedja_reuses_multi_output_staging_for_widest_field();
     test_smedja_reuses_and_bounds_workspace_capacity();
+    test_execution_context_pool_bounds_contexts_and_bytes();
     test_smedja_packs_contiguous_and_sparse_cell_ranges();
     test_smedja_fuses_float_input_conversion_with_packing();
     test_artifact_kernel_owns_a_narrow_backend_lock();
+    test_reentrant_backend_uses_bounded_execution_contexts();
+    test_artifact_kernel_rejects_an_oversized_working_set();
     test_loaded_artifact_preserves_backend_synchronization_ownership();
     test_dense_affine_kernel_float64();
     test_dense_affine_kernel_float32();

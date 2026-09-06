@@ -30,8 +30,10 @@ class OwnedArtifactKernel final : public ModelKernel {
 public:
     OwnedArtifactKernel(
         ModelArtifact artifact,
-        std::unique_ptr<PackedModelKernel> packed)
-        : packed_(std::move(packed)), kernel_(std::move(artifact), *packed_) {}
+        std::unique_ptr<PackedModelKernel> packed,
+        ExecutionResources resources)
+        : packed_(std::move(packed)),
+          kernel_(std::move(artifact), *packed_, resources) {}
 
     TensorMap evaluate(
         const TensorMap& inputs,
@@ -45,6 +47,10 @@ public:
 
     [[nodiscard]] bool owns_backend_synchronization() const noexcept override {
         return kernel_.owns_backend_synchronization();
+    }
+
+    [[nodiscard]] ExecutionSnapshot execution_snapshot() const override {
+        return kernel_.execution_snapshot();
     }
 
 private:
@@ -70,6 +76,7 @@ void ModelLoadOptions::validate() const {
                           std::numeric_limits<std::int32_t>::max())) {
         throw std::invalid_argument("Model thread count must be positive.");
     }
+    ExecutionResources{execution_contexts, maximum_working_bytes}.validate();
 }
 
 LoadedModel load_model(
@@ -90,8 +97,13 @@ LoadedModel load_model(
             resolve_artifact(manifest_path, artifact.artifact_path), artifact);
     }
 
-    auto kernel =
-        std::make_unique<OwnedArtifactKernel>(artifact, std::move(packed));
+    auto kernel = std::make_unique<OwnedArtifactKernel>(
+        artifact,
+        std::move(packed),
+        ExecutionResources{
+            options.execution_contexts,
+            options.maximum_working_bytes,
+        });
     return {std::move(artifact), std::move(kernel)};
 }
 
