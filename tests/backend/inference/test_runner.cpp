@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <future>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -28,6 +29,49 @@ void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+void test_output_credit_survives_backpressure(bool cancel) {
+    using namespace foamnordic;
+    auto channels = fjord::shared_memory_channel_pair(8, 256);
+    fjord::Harbor client(std::move(channels.first)), worker(std::move(channels.second));
+    struct Echo final : inference::ModelKernel {
+        std::promise<void> called;
+        TensorMap evaluate(const TensorMap& inputs, const std::vector<std::uint64_t>&,
+                           std::uint64_t, double, std::uint32_t) override {
+            called.set_value();
+            return inputs;
+        }
+    } kernel;
+    auto invoked = kernel.called.get_future();
+    inference::EvaluateAllCells bypass;
+    constexpr std::uint64_t bytes = 1024 * 1024;
+    inference::ReceiveCreditPool credits(2 * bytes);
+    std::exception_ptr failure;
+    std::thread thread([&] {
+        try {
+            static_cast<void>(worker.accept_session({1, fjord::Capability::uds, 0, 1, 2 * bytes}));
+            inference::InferenceRunner runner(worker,
+                {"echo", {{"x", Element::float64, 1}}, {{"x", Element::float64, 1}}},
+                bypass, kernel, 2 * bytes, nullptr, &credits);
+            require(runner.run_one(), "Output-credit exchange did not run.");
+        } catch (...) { failure = std::current_exception(); }
+    });
+    static_cast<void>(client.connect_session({1, fjord::Capability::uds, 0, 1, 2 * bytes}));
+    Tensor input{"x", Element::float64, {bytes / 8}, std::vector<std::byte>(bytes), 0, 0};
+    client.send(input.view()); client.complete(0, 1);
+    invoked.wait();
+    require(credits.snapshot().active_bytes == 2 * bytes, "Publication reservation ended before consumption.");
+    if (cancel) {
+        worker.interrupt(); client.interrupt();
+    } else {
+        auto result = client.receive_message();
+        require(result.tensor && result.tensor->bytes == input.bytes, "Output changed during publication.");
+        require(client.receive_control() == fjord::RuneKind::complete, "Missing publication boundary.");
+    }
+    thread.join();
+    if (!cancel && failure) std::rethrow_exception(failure);
+    require(credits.snapshot().active_bytes == 0, "Publication credit leaked.");
 }
 
 void test_shared_receive_credit_blocks_and_cancels() {
@@ -608,6 +652,8 @@ void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
 }  // namespace
 
 int main() {
+    test_output_credit_survives_backpressure(false);
+    test_output_credit_survives_backpressure(true);
     test_partial_requests_make_progress();
     test_active_workspace_accounting();
     test_shared_receive_credit_blocks_and_cancels();

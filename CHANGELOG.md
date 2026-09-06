@@ -9,6 +9,16 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 
 ### Native model execution
 
+- Added FIFO receive/context admission, cancellable backend admission and
+  output-publication reservations that survive slow receivers and failure.
+- Added persistent compiled-estimator threads and bounded reusable forest
+  scratch; managed compiled workers now call the native C ABI without a Python
+  evaluation callback.
+- Added an explicit data-only `forest` export backend for scalar scikit-learn
+  ExtraTrees and RandomForest regression, with checked native loading.
+- Published successful native builds as immutable runtime generations, with
+  build locks, atomic selection and receipt-based unchanged-build detection.
+
 - Added the Smedja model-execution boundary. Immutable tensor layouts are
   compiled once, while tensor addresses and shapes are rebound and validated
   for every invocation so dynamic OpenFOAM storage remains safe.

@@ -45,6 +45,23 @@ scalers, tree metadata, and payload layout. It deliberately does not unpickle
 Joblib or Equinox payloads, compile C++ source, or execute an ONNX graph.
 Backend loading remains an execution-time validation performed by ModelHost.
 
+### Data-only forests
+
+`fno.Export.sklearn(..., backend="forest")` supports fitted scalar-output
+`ExtraTreesRegressor` and `RandomForestRegressor` models. Inputs and outputs use
+the same float64 contract and native scaler pipeline as `backend="compiled"`.
+The existing `auto` selection is unchanged; voting models and unsupported
+estimators must use an existing supported backend.
+
+The FNOM manifest uses format `compiled` with runtime `forest-v1`. The embedded
+payload starts with `FNOFOR1\0`, followed by little-endian 64-bit feature, tree
+and node counts, root indices and fixed 48-byte node records. Node records carry
+signed child/feature indices, float64 threshold/value and a missing-left flag.
+Loading checks lengths, roots, features, finite parameters and forward-only
+children before accepting the graph. Old runtimes reject the new runtime token;
+there is no attempt to treat these data as C++ source or pickle. General FNOM
+inspection remains non-executing; graph validation occurs in the forest loader.
+
 ## Execution boundaries
 
 All backends consume named packed tensors with the same native scaling and

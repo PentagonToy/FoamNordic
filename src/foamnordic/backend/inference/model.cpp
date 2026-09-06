@@ -136,7 +136,7 @@ TensorMap ArtifactModelKernel::evaluate(
         predictions = kernel_.evaluate(
             packed.view(), exchange_index, physical_time, rank);
     } else {
-        std::scoped_lock lock(backend_mutex_);
+        auto backend_lease = backend_gate_.acquire(0);
         if (sampled) {
             backend_started = std::chrono::steady_clock::now();
         }
@@ -209,6 +209,9 @@ ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
     return snapshot;
 }
 
-void ArtifactModelKernel::cancel_pending() noexcept { contexts_.cancel(); }
+void ArtifactModelKernel::cancel_pending() noexcept {
+    contexts_.cancel();
+    backend_gate_.cancel();
+}
 
 }  // namespace foamnordic::inference

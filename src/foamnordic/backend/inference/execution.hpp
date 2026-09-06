@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <vector>
 
@@ -42,6 +43,7 @@ struct ExecutionSnapshot {
     std::uint64_t output_nanoseconds{0};
     std::uint64_t admission_nanoseconds{0};
     std::uint64_t backend_wait_nanoseconds{0};
+    std::uint64_t waiting_contexts{0};
 };
 
 struct ReceiveCreditSnapshot {
@@ -86,6 +88,7 @@ private:
     std::uint64_t peak_active_bytes_{0};
     bool cancelled_{false};
     Reservation* receiver_{nullptr};
+    std::deque<Reservation*> receivers_;
 };
 
 class ExecutionContextPool final {
@@ -140,6 +143,7 @@ private:
     std::uint64_t admitted_bytes_{0};
     std::uint64_t peak_admitted_bytes_{0};
     bool cancelled_{false};
+    std::deque<const void*> waiters_;
 };
 
 }  // namespace foamnordic::inference

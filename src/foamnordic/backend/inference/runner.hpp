@@ -54,7 +54,8 @@ public:
         ModelKernel& kernel,
         std::uint64_t maximum_exchange_payload =
             16ULL * 1024ULL * 1024ULL * 1024ULL,
-        ReceiveCreditPool* receive_credits = nullptr);
+        ReceiveCreditPool* receive_credits = nullptr,
+        ReceiveCreditPool* output_credits = nullptr);
 
     [[nodiscard]] bool run_one();
     void run();
@@ -66,6 +67,8 @@ private:
     ModelKernel& kernel_;
     std::uint64_t maximum_exchange_payload_;
     ReceiveCreditPool* receive_credits_;
+    ReceiveCreditPool* output_credits_;
+    std::uint64_t output_bytes_per_cell_{0};
 };
 
 }  // namespace foamnordic::inference

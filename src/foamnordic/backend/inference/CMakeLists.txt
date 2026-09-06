@@ -1,6 +1,8 @@
 add_library(foamnordic_inference STATIC
     ../connectors/registry.cpp
     affine.cpp
+    compiled.cpp
+    forest.cpp
     artifact.cpp
     exchange.cpp
     execution.cpp
@@ -17,6 +19,7 @@ add_library(FoamNordic::inference ALIAS foamnordic_inference)
 target_compile_features(foamnordic_inference PUBLIC cxx_std_20)
 target_include_directories(foamnordic_inference PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(foamnordic_inference PUBLIC FoamNordic::fjord FoamNordic::runtime)
+target_link_libraries(foamnordic_inference PRIVATE ${CMAKE_DL_LIBS})
 set_target_properties(foamnordic_inference PROPERTIES
     CXX_EXTENSIONS OFF
     POSITION_INDEPENDENT_CODE ON

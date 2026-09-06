@@ -237,6 +237,7 @@ void ModelWorker::run() {
                                        ? *kernel_
                                        : static_cast<ModelKernel&>(synchronized);
     ReceiveCreditPool receive_credits(options_.maximum_receive_bytes);
+    ReceiveCreditPool output_credits(options_.maximum_working_bytes);
     std::mutex failure_mutex;
     std::exception_ptr failure;
     std::vector<std::thread> runners;
@@ -251,7 +252,8 @@ void ModelWorker::run() {
                         bypass_,
                         execution_kernel,
                         options_.maximum_payload,
-                        &receive_credits);
+                        &receive_credits,
+                        &output_credits);
                     runner.run();
                 } catch (...) {
                     {
@@ -262,6 +264,7 @@ void ModelWorker::run() {
                     }
                     execution_kernel.cancel_pending();
                     receive_credits.cancel();
+                    output_credits.cancel();
                     for (auto& active : harbors) {
                         active->interrupt();
                     }
@@ -271,6 +274,7 @@ void ModelWorker::run() {
     } catch (...) {
         execution_kernel.cancel_pending();
         receive_credits.cancel();
+        output_credits.cancel();
         for (auto& active : harbors) {
             active->interrupt();
         }
@@ -284,6 +288,11 @@ void ModelWorker::run() {
     }
     listener_.close();
     const auto receive = receive_credits.snapshot();
+    const auto output = output_credits.snapshot();
+    if (output.requests != 0) {
+        native::log(native::LogLevel::info, "Model publication peak: reserved_bytes="
+            + std::to_string(output.peak_active_bytes));
+    }
     if (receive.requests != 0) {
         native::log(
             native::LogLevel::info,

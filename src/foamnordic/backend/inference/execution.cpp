@@ -40,12 +40,16 @@ void ReceiveCreditPool::Reservation::acquire(std::uint64_t bytes) {
     }
     if (!receiving_) {
         std::unique_lock lock(owner_->mutex_);
+        owner_->receivers_.push_back(this);
         owner_->available_.wait(lock, [&] {
-            return owner_->cancelled_ || owner_->receiver_ == nullptr;
+            return owner_->cancelled_ || (owner_->receiver_ == nullptr
+                && owner_->receivers_.front() == this);
         });
         if (owner_->cancelled_) {
+            std::erase(owner_->receivers_, this);
             throw std::runtime_error("Model input reception was cancelled.");
         }
+        owner_->receivers_.pop_front();
         owner_->receiver_ = this;
         receiving_ = true;
     }
@@ -166,6 +170,8 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
             + std::to_string(resources_.maximum_working_bytes) + " bytes.");
     }
     std::unique_lock lock(mutex_);
+    const char ticket{};
+    waiters_.push_back(&ticket);
     available_.wait(lock, [&] {
         if (cancelled_) {
             return true;
@@ -174,12 +180,14 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
             slots_.begin(), slots_.end(), [](const auto& slot) {
                 return !slot.active;
             });
-        return has_context
+        return waiters_.front() == &ticket && has_context
             && working_bytes <= resources_.maximum_working_bytes - admitted_bytes_;
     });
     if (cancelled_) {
+        std::erase(waiters_, &ticket);
         throw std::runtime_error("Model execution was cancelled.");
     }
+    waiters_.pop_front();
     const auto slot = std::find_if(
         slots_.begin(), slots_.end(), [](const auto& candidate) {
             return !candidate.active;
@@ -191,6 +199,7 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
     admitted_bytes_ += working_bytes;
     peak_active_contexts_ = std::max(peak_active_contexts_, active_contexts_);
     peak_admitted_bytes_ = std::max(peak_admitted_bytes_, admitted_bytes_);
+    available_.notify_all();
     return Lease(*this, index, working_bytes);
 }
 
@@ -204,7 +213,7 @@ void ExecutionContextPool::cancel() noexcept {
 
 ExecutionSnapshot ExecutionContextPool::snapshot() const {
     std::scoped_lock lock(mutex_);
-    return {
+    auto result = ExecutionSnapshot{
         requests_,
         active_contexts_,
         peak_active_contexts_,
@@ -212,6 +221,8 @@ ExecutionSnapshot ExecutionContextPool::snapshot() const {
         peak_admitted_bytes_,
         retained_bytes_locked(),
     };
+    result.waiting_contexts = waiters_.size();
+    return result;
 }
 
 std::uint64_t ExecutionContextPool::retained_bytes_locked() const noexcept {

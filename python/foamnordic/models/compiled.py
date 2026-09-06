@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Sequence
 
 
@@ -364,18 +365,7 @@ class _Generator:
             f"    for (std::size_t row = begin; row < end; ++row) output[row] = {name}(input + row * columns);\n"
             "  };\n"
             "  if (workers == 1 || rows < 256) { evaluate(0, rows); return; }\n"
-            "  std::vector<std::thread> pool;\n"
-            "  pool.reserve(workers - 1);\n"
-            "  const std::size_t quotient = rows / workers;\n"
-            "  const std::size_t remainder = rows % workers;\n"
-            "  std::size_t begin = 0;\n"
-            "  for (std::size_t worker = 0; worker + 1 < workers; ++worker) {\n"
-            "    const std::size_t end = begin + quotient + (worker < remainder ? 1 : 0);\n"
-            "    pool.emplace_back(evaluate, begin, end);\n"
-            "    begin = end;\n"
-            "  }\n"
-            "  evaluate(begin, rows);\n"
-            "  for (auto& worker : pool) worker.join();\n"
+            "  fno_parallel(rows, workers, [&](std::size_t, std::size_t begin, std::size_t end) { evaluate(begin, end); });\n"
             "}"
         )
 
@@ -428,14 +418,22 @@ class _Generator:
                 "}",
                 f"static inline void {name}_batch(const double* input, std::size_t rows, std::size_t columns, double* output, std::size_t requested_threads) {{\n"
                 f"  const std::size_t tree_count = {len(trees)};\n"
-                "  const std::size_t workers = std::min(tree_count, std::max<std::size_t>(1, requested_threads));\n"
-                "  std::vector<double> partial(workers * rows, 0.0);\n"
+                "  const std::size_t workers = std::min(std::size_t(1048576), std::min(tree_count, std::max<std::size_t>(1, requested_threads)));\n"
+                "  static std::mutex scratch_mutex;\n"
+                "  std::lock_guard<std::mutex> scratch_lock(scratch_mutex);\n"
+                "  static std::vector<double> partial;\n"
+                "  const std::size_t tile = std::min(rows, std::size_t(1048576) / workers);\n"
+                "  if (partial.capacity() < workers * tile) std::vector<double>(workers * tile).swap(partial);\n"
+                "  else partial.resize(workers * tile);\n"
+                "  for (std::size_t offset = 0; offset < rows; offset += tile) {\n"
+                "  const std::size_t count = std::min(tile, rows - offset);\n"
+                "  std::fill(partial.begin(), partial.end(), 0.0);\n"
                 "  auto evaluate_trees = [&](std::size_t worker, std::size_t first, std::size_t last) {\n"
-                "    double* local = partial.data() + worker * rows;\n"
+                "    double* local = partial.data() + worker * tile;\n"
                 "    for (std::size_t tree = first; tree < last; ++tree) {\n"
                 f"      const int root = static_cast<int>({prefix}_offset[tree]);\n"
-                "      for (std::size_t row = 0; row < rows; ++row) {\n"
-                "        const double* x = input + row * columns;\n"
+                "      for (std::size_t row = 0; row < count; ++row) {\n"
+                "        const double* x = input + (offset + row) * columns;\n"
                 "        int node = root;\n"
                 f"        while ({prefix}_left[node] >= 0) {{\n"
                 f"          const int column = {prefix}_feature[node];\n"
@@ -445,22 +443,12 @@ class _Generator:
                 "      }\n"
                 "    }\n"
                 "  };\n"
-                "  std::vector<std::thread> pool;\n"
-                "  pool.reserve(workers - 1);\n"
-                "  const std::size_t quotient = tree_count / workers;\n"
-                "  const std::size_t remainder = tree_count % workers;\n"
-                "  std::size_t first = 0;\n"
-                "  for (std::size_t worker = 0; worker + 1 < workers; ++worker) {\n"
-                "    const std::size_t last = first + quotient + (worker < remainder ? 1 : 0);\n"
-                "    pool.emplace_back(evaluate_trees, worker, first, last);\n"
-                "    first = last;\n"
-                "  }\n"
-                "  evaluate_trees(workers - 1, first, tree_count);\n"
-                "  for (auto& worker : pool) worker.join();\n"
-                "  for (std::size_t row = 0; row < rows; ++row) {\n"
+                "  fno_parallel(tree_count, workers, evaluate_trees);\n"
+                "  for (std::size_t row = 0; row < count; ++row) {\n"
                 "    double sum = 0.0;\n"
-                "    for (std::size_t worker = 0; worker < workers; ++worker) sum += partial[worker * rows + row];\n"
-                "    output[row] = sum / static_cast<double>(tree_count);\n"
+                "    for (std::size_t worker = 0; worker < workers; ++worker) sum += partial[worker * tile + row];\n"
+                "    output[offset + row] = sum / static_cast<double>(tree_count);\n"
+                "  }\n"
                 "  }\n"
                 "}",
             )
@@ -515,6 +503,11 @@ def generate_source(model: object, *, input_width: int, output_width: int) -> st
     root = generator.model(model)
     root_batch = generator.batches[root]
     definitions = "\n\n".join(generator.definitions)
+    package = Path(__file__).resolve().parents[1]
+    template = package / "templates/compiled/executor.hpp"
+    if not template.is_file():
+        template = package.parents[1] / "src/foamnordic/runtime/executor.hpp"
+    executor = template.read_text(encoding="utf-8")
     return f"""// Generated by FoamNordic compiled runtime v1. Do not edit.
 #include <cstddef>
 #include <algorithm>
@@ -523,6 +516,7 @@ def generate_source(model: object, *, input_width: int, output_width: int) -> st
 #include <utility>
 #include <vector>
 
+{executor}
 namespace {{
 {definitions}
 }}
@@ -543,9 +537,11 @@ extern "C" int foamnordic_predict(
     std::size_t columns,
     double* output,
     std::size_t output_columns) {{
+  try {{
   if (!input || !output || columns != {input_width} || output_columns != 1) return 1;
   foamnordic_predict_rows(input, 0, rows, columns, output);
   return 0;
+  }} catch (...) {{ return 2; }}
 }}
 extern "C" int foamnordic_predict_parallel(
     const double* input,
@@ -554,6 +550,7 @@ extern "C" int foamnordic_predict_parallel(
     double* output,
     std::size_t output_columns,
     std::size_t requested_threads) {{
+  try {{
   if (!input || !output || columns != {input_width} || output_columns != 1) return 1;
   const std::size_t workers = std::min(rows, std::max<std::size_t>(1, requested_threads));
   if (rows >= 32768) {{
@@ -564,19 +561,11 @@ extern "C" int foamnordic_predict_parallel(
     foamnordic_predict_rows(input, 0, rows, columns, output);
     return 0;
   }}
-  std::vector<std::thread> pool;
-  pool.reserve(workers - 1);
-  const std::size_t quotient = rows / workers;
-  const std::size_t remainder = rows % workers;
-  std::size_t begin = 0;
-  for (std::size_t worker = 0; worker + 1 < workers; ++worker) {{
-    const std::size_t end = begin + quotient + (worker < remainder ? 1 : 0);
-    pool.emplace_back([=] {{ foamnordic_predict_rows(input, begin, end, columns, output); }});
-    begin = end;
-  }}
-  foamnordic_predict_rows(input, begin, rows, columns, output);
-  for (auto& worker : pool) worker.join();
+  fno_parallel(rows, workers, [&](std::size_t, std::size_t begin, std::size_t end) {{
+    foamnordic_predict_rows(input, begin, end, columns, output);
+  }});
   return 0;
+  }} catch (...) {{ return 2; }}
 }}
 """
 

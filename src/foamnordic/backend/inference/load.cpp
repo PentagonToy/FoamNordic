@@ -15,6 +15,8 @@
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <fstream>
+#include "foamnordic/backend/inference/forest.hpp"
 
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
@@ -87,6 +89,19 @@ LoadedModel load_model(
     options.validate();
     auto artifact = read_manifest(manifest_path);
     std::unique_ptr<PackedModelKernel> packed;
+    if (artifact.runtime == "forest-v1") {
+        std::vector<std::byte> data;
+        if (is_bundle(manifest_path)) data = read_bundle_payload(manifest_path);
+        else {
+            std::ifstream stream(resolve_artifact(manifest_path, artifact.artifact_path), std::ios::binary | std::ios::ate);
+            if (!stream || stream.tellg() < 0) throw std::runtime_error("Cannot read forest payload.");
+            data.resize(static_cast<std::size_t>(stream.tellg()));
+            stream.seekg(0);
+            if (!stream.read(reinterpret_cast<char*>(data.data()), data.size()))
+                throw std::runtime_error("Truncated forest payload.");
+        }
+        packed = std::make_unique<ForestKernel>(data, options.threads);
+    } else
 #ifdef FOAMNORDIC_HAS_ONNXRUNTIME
     if (artifact.format == ModelFormat::onnx && is_bundle(manifest_path)) {
         packed = std::make_unique<OnnxPackedKernel>(

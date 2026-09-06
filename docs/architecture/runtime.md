@@ -196,7 +196,12 @@ After its inputs are sealed, reception of the next rank may overlap inference.
 This prevents partial requests from exhausting credit while waiting on one
 another. An exchange exceeding the budget fails before allocating its next
 body. This conservative policy does not require a new wire envelope or infer
-the size of other fields from the first tensor. It does not promise FIFO fairness.
+the size of other fields from the first tensor. Requests entering the receive
+gate and execution-context gate are admitted in arrival order. This ordering
+does not wait for idle ranks and does not impose a global response order.
+An incomplete sender can still hold the receive gate; owner/transport failure
+must terminate that session rather than allow another partial request to
+exhaust the same budget.
 The Harbor validates each tensor header first, then obtains credit before
 allocating or reading its body. Credit covers the complete lifetime of the
 rank's atomic input exchange and is returned on success or failure. A failed
@@ -210,6 +215,47 @@ returned. Workspace retention counters are published when a lease returns;
 active vector metadata is never inspected by another thread. During execution,
 retention figures describe the last published capacities, not live RSS or a
 hard bound on allocator and backend memory.
+
+Publication has a separate host-wide reservation, acquired before output
+preparation and retained until `Harbor.publish()` returns or fails. Its budget
+is the working-byte limit, independent of input credit and execution credit.
+The estimate is twice the full output contract size, covering sparse predictions
+and full-field bypass destinations that may coexist. A slow receiver cannot
+release this reservation merely by letting inference finish. Data already
+copied into a transport ring belong to the separately allocated ring, not the
+released output vector. These budgets are not a combined process-RSS ceiling:
+weights, backend scratch, allocator overhead and transport rings remain separate.
+
+Backend serialisation uses a cancellable FIFO gate. Cancellation wakes pending
+receive, context, backend and publication-credit waiters; transport interruption
+also wakes blocked publication. It does not forcibly interrupt an active call
+inside an external ML library. Mutable backend sessions remain serial unless
+their capability contract explicitly permits concurrency.
+
+## Native estimator execution
+
+Compiled FNOM payloads are compiled or retrieved from cache once during worker
+startup. A native `CompiledKernel` loads their C ABI and performs subsequent
+evaluation without a Python callback or ctypes call per exchange. Python may
+still bootstrap the process; this is not a claim that Python is absent from
+startup. Legacy serial-only compiled entry points remain supported.
+
+Newly exported compiled estimators reuse a persistent executor. The caller is
+one compute worker; at most the requested count minus one background workers
+are created lazily and retained. Submissions are serialised, worker exceptions
+reach the caller, and destruction joins the workers. Existing FNOM files retain
+their embedded implementation; re-export is necessary to obtain the new pool.
+The large forest path uses reusable tiles of at most 8 MiB of double scratch
+per embedded forest, rather than `threads × all cells` temporary storage. A
+voting model can contain several such forests; their scratch is backend memory,
+not part of the transport-credit counter.
+
+The explicit `forest` export backend stores supported forest parameters rather
+than generated source. Its native evaluator performs checked tree traversal,
+retains one model and executor, and requires no model-specific compilation.
+It preserves float32 feature narrowing, float64 thresholds and accumulation,
+and stored missing-value routing. This is an additional option, not a silent
+replacement for Joblib, Equinox, ONNX or compiled voting models.
 
 The current end-to-end native test sends `c`, `c_var`, and `T`
 through a real Fjord socket channel. It evaluates only cells selected by

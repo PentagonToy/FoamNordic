@@ -469,6 +469,45 @@ def _native_build_environment() -> dict[str, str]:
 
 
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
+    if args.dry_run:
+        return _build_direct(args, stream)
+    from .build.generations import complete, dependency_identity, fingerprint, locked, publish, tool_identity
+    import uuid
+
+    source = _source_root(args.source)
+    if source is None or not shutil.which("wmake"):
+        return _build_direct(args, stream)
+    selected = profile(build_dir=args.build_dir, runtime_dir=args.prefix)
+    assert selected is not None
+    root = (Path(args.prefix).expanduser().absolute() if args.prefix else
+            Path.home() / ".local/share/foamnordic/runtime" / selected.platform / selected.openfoam)
+    environment = _native_build_environment()
+    onnxruntime = None if args.without_onnx else resolve_onnxruntime(download=True)
+    identity = fingerprint(source, {
+        "abi": selected.openfoam, "platform": selected.platform,
+        "onnx": None if args.without_onnx else ONNXRUNTIME_VERSION,
+        "dependencies": dependency_identity(environment, onnxruntime),
+        "build_driver": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "environment": {k: v for k, v in environment.items() if k.startswith(("WM_", "FOAM", "CMAKE"))
+                        or k in {"CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "CPATH", "LIBRARY_PATH"}},
+        "tools": [tool_identity(environment.get("CXX", "c++")), tool_identity("cmake"), tool_identity("wmake")],
+    })
+    # Different installation prefixes may still share the same CMake worktree.
+    with locked(selected.build_dir.parent / (selected.build_dir.name + ".lock")), locked(root):
+        current = root / "current"
+        if current.is_dir() and complete(current.resolve(), identity):
+            print(f"[FoamNordic] Native runtime is up to date: {current.resolve()}", file=stream)
+            return 0
+        generation = root / "generations" / (identity[:16] + "-" + uuid.uuid4().hex[:8])
+        modified = argparse.Namespace(**vars(args))
+        modified.prefix = generation
+        result = _build_direct(modified, stream)
+        if result == 0:
+            publish(root, generation, identity)
+        return result
+
+
+def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
     terminal = _Terminal(stream)
     terminal.section("FoamNordic native build")
     source = _source_root(args.source)

@@ -68,7 +68,7 @@ private:
     Smedja smedja_;
     ExecutionContextPool contexts_;
     BackendCapabilities capabilities_;
-    std::mutex backend_mutex_;
+    ExecutionContextPool backend_gate_{ExecutionResources{1}};
     std::uint64_t profile_every_{0};
     std::atomic<std::uint64_t> profile_sequence_{0};
     std::atomic<std::uint64_t> profile_samples_{0};

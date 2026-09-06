@@ -42,7 +42,7 @@ void ModelArtifact::validate() const {
     if (schema_version == 1 && !runtime.empty()) {
         throw std::invalid_argument("FNOM v1 artifacts cannot define a runtime.");
     }
-    if (format == ModelFormat::compiled && runtime != "cpp-v1") {
+    if (format == ModelFormat::compiled && runtime != "cpp-v1" && runtime != "forest-v1") {
         throw std::invalid_argument("Compiled artifact runtime is invalid.");
     }
     if (!runtime.empty() && format != ModelFormat::compiled) {

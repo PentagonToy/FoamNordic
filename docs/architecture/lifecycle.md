@@ -1,5 +1,29 @@
 # Placement and lifecycle
 
+## Runtime generations
+
+`foamnordic build` installs into a new generation under the selected runtime
+root. Only a successful build publishes the `current` symlink with an atomic
+replacement. Existing generations are not rewritten or automatically removed;
+resolved runtime paths remain pinned for jobs already prepared against them.
+The build worktree and installation root have separate process locks, so two
+prefixes sharing a CMake worktree cannot compile into it concurrently.
+
+A receipt records the source/configuration identity and installed-file hashes.
+An unchanged subsequent build validates that receipt and skips compilation.
+Source, compiler, ABI, precision/label environment and dependency metadata
+changes invalidate the identity. OpenFOAM dependency size, modification and
+change timestamps are inspected instead of rereading all upstream libraries;
+this is an incremental-build mechanism, not a cryptographic attestation of an
+upstream installation. Installed FoamNordic files are content-hashed.
+
+Interrupted builds leave an unpublished generation for diagnosis and do not
+replace the previous `current`. Old generations consume disk space until
+explicitly removed after their jobs have ended. A legacy installation without
+`current` remains readable. Changing a runtime root that a job has explicitly
+chosen is still an administrative action; no runtime scheme protects a path
+that the user deletes while the job is running.
+
 FoamNordic does not expose a database as part of its scientific workflow.
 The native service that receives fields, evaluates a resident field program,
 and returns fields is called a **ModelHost**. Cell-selection and bypass policies

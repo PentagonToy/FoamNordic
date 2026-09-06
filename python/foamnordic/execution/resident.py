@@ -655,7 +655,30 @@ def main(argv: list[str] | None = None) -> int:
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
     model_format = str(manifest["format"])
+    if manifest.get("runtime") == "forest-v1":
+        _native.run_native_worker(
+            arguments.address, str(manifest_path), arguments.connections,
+            arguments.ready_file, not arguments.no_shm, model_threads,
+            arguments.receive_bytes, arguments.profile_every,
+        )
+        return 0
     payload = _payload(manifest_path, manifest)
+    if model_format == "compiled":
+        from ..build.compiler import compile_source
+
+        source = (
+            payload.read_bytes() if isinstance(payload, Path)
+            else _native.read_model_payload(str(payload.path))
+            if isinstance(payload, _EmbeddedPayload)
+            else payload.getvalue()
+        )
+        library, _, _ = compile_source(source)
+        _native.run_compiled_worker(
+            arguments.address, str(manifest_path), str(library),
+            arguments.connections, arguments.ready_file, not arguments.no_shm,
+            model_threads, arguments.receive_bytes, arguments.profile_every,
+        )
+        return 0
     outputs = _output_contract(manifest)
     dtype = str(manifest["inputs"][0][2])
     if model_format == "joblib":
@@ -670,8 +693,6 @@ def main(argv: list[str] | None = None) -> int:
             arguments.program,
             threads=model_threads,
         )
-    elif model_format == "compiled":
-        evaluator = _compiled_evaluator(payload, outputs, dtype, model_threads)
     else:
         raise ValueError(f"managed Python worker does not support {model_format!r}")
     runtime_label = (
