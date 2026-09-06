@@ -16,9 +16,12 @@
 
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/affine.hpp"
-#include "foamnordic/backend/inference/smedja.hpp"
+#include "foamnordic/backend/inference/load.hpp"
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
+#include "foamnordic/backend/inference/smedja.hpp"
+#include "foamnordic/backend/connectors/connector.hpp"
+#include "foamnordic/backend/connectors/registry.hpp"
 
 namespace {
 
@@ -417,6 +420,20 @@ void test_smedja_reuses_and_bounds_workspace_capacity() {
     require(
         workspace.retained_bytes() < large_capacity,
         "Smedja retained an oversized dynamic-mesh workspace.");
+
+    static_cast<void>(smedja.pack_into(workspace, inputs, {}, 14, 0.5));
+    require(
+        workspace.retained_bytes() == 0,
+        "Smedja retained a large workspace for an empty rank partition.");
+    static_cast<void>(smedja.pack_into(workspace, inputs, {0}, 15, 0.6));
+    require(
+        workspace.retained_bytes() > 0,
+        "Smedja did not reacquire storage after an empty rank partition.");
+    const auto& regrown = smedja.pack_into(
+        workspace, inputs, all_cells, 16, 0.7);
+    require(
+        regrown.shape == std::vector<std::uint64_t>{64, 3},
+        "Smedja did not regrow a released dynamic-mesh workspace.");
 }
 
 void test_smedja_packs_contiguous_and_sparse_cell_ranges() {
@@ -525,6 +542,67 @@ void test_artifact_kernel_owns_a_narrow_backend_lock() {
     require(
         packed_kernel.peak() == 1,
         "Artifact kernel allowed concurrent access to a serialized backend.");
+}
+
+class LoadedProbeKernel final : public foamnordic::inference::PackedModelKernel {
+public:
+    foamnordic::fjord::Tensor evaluate(
+        foamnordic::fjord::TensorView features,
+        std::uint64_t exchange_index,
+        double physical_time,
+        std::uint32_t /*rank*/) override {
+        auto output = scalar_tensor(
+            "foamnordic.predictions",
+            std::vector<double>(features.shape.front(), 1.0));
+        output.shape = {features.shape.front(), 1};
+        output.time_index = exchange_index;
+        output.physical_time = physical_time;
+        return output;
+    }
+};
+
+class LoadedProbeConnector final : public foamnordic::backend::ModelConnector {
+public:
+    [[nodiscard]] std::string_view id() const noexcept override {
+        return "test-loaded-compiled";
+    }
+
+    [[nodiscard]] bool supports(
+        foamnordic::inference::ModelFormat format) const noexcept override {
+        return format == foamnordic::inference::ModelFormat::compiled;
+    }
+
+    [[nodiscard]] std::unique_ptr<foamnordic::inference::PackedModelKernel> load(
+        const std::filesystem::path& /*payload*/,
+        const foamnordic::inference::ModelArtifact& /*artifact*/) const override {
+        return std::make_unique<LoadedProbeKernel>();
+    }
+};
+
+void test_loaded_artifact_preserves_backend_synchronization_ownership() {
+    foamnordic::backend::register_connector(
+        std::make_unique<LoadedProbeConnector>());
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("foamnordic-loaded-kernel-"
+                         + std::to_string(std::random_device{}()) + ".fnom");
+    foamnordic::inference::write_manifest(
+        path,
+        {
+            2,
+            foamnordic::inference::ModelFormat::compiled,
+            "unused.cpp",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+            "cpp-v1",
+        });
+    auto loaded = foamnordic::inference::load_model(path);
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    require(
+        loaded.kernel->owns_backend_synchronization(),
+        "The real artifact loader hid the kernel synchronization boundary.");
 }
 
 void test_dense_affine_kernel_float64() {
@@ -825,6 +903,7 @@ int main() {
     test_smedja_packs_contiguous_and_sparse_cell_ranges();
     test_smedja_fuses_float_input_conversion_with_packing();
     test_artifact_kernel_owns_a_narrow_backend_lock();
+    test_loaded_artifact_preserves_backend_synchronization_ownership();
     test_dense_affine_kernel_float64();
     test_dense_affine_kernel_float32();
     test_manifest_round_trip_and_corruption_rejection();

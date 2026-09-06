@@ -169,7 +169,9 @@ fjord::Tensor& Smedja::pack_into(
     // Capacity is execution storage, not mesh state. Keep it for similarly
     // sized invocations but release a buffer more than four times the current
     // request so a temporary large topology does not pin memory indefinitely.
-    if (byte_count != 0 && bytes.capacity() / byte_count > 4) {
+    if (byte_count == 0) {
+        std::vector<std::byte>().swap(bytes);
+    } else if (bytes.capacity() / byte_count > 4) {
         std::vector<std::byte>(byte_count).swap(bytes);
     } else {
         bytes.resize(byte_count);

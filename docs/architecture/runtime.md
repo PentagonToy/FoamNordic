@@ -103,7 +103,9 @@ Each persistent runner thread owns an input workspace. Similar request sizes
 reuse byte capacity, but logical shape, metadata, and contents are reset on
 every call. A request smaller than one quarter of retained capacity releases
 the oversized allocation so a temporary topology does not pin rank-multiplied
-memory for the rest of a run.
+memory for the rest of a run. A zero-cell rank partition releases its retained
+packing allocation completely; later non-empty partitions reacquire and grow
+storage from their current contracts rather than stale mesh state.
 
 Contiguous active-cell ranges use a dedicated packing path. A single input is
 copied as one block, while multi-input packing avoids repeated active-index
@@ -127,7 +129,9 @@ aliased solver data.
 Request-local packing, scaling, validation, and staging remain outside the
 backend lock; only the backend evaluation is serialized for backends that
 require it. Arbitrary stateful kernels retain conservative worker-wide
-serialization.
+serialization. This synchronization ownership is preserved when kernels are
+wrapped by the public artifact loader, so loading an FNOM artifact cannot
+silently widen the critical section.
 
 ## Resident worker
 

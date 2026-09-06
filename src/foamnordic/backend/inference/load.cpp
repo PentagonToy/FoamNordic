@@ -43,6 +43,10 @@ public:
             inputs, active_cells, exchange_index, physical_time, rank);
     }
 
+    [[nodiscard]] bool owns_backend_synchronization() const noexcept override {
+        return kernel_.owns_backend_synchronization();
+    }
+
 private:
     std::unique_ptr<PackedModelKernel> packed_;
     ArtifactModelKernel kernel_;

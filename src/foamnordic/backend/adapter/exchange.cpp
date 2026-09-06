@@ -51,17 +51,47 @@ fjord::MutableTensorView require_field(
     return field;
 }
 
-void copy_values(
+enum class CopyKind {
+    direct,
+    widen_float,
+    narrow_float,
+};
+
+struct PreparedCopy {
+    const fjord::Tensor* source;
+    fjord::MutableTensorView destination;
+    CopyKind kind;
+};
+
+[[nodiscard]] CopyKind copy_kind(
     const fjord::Tensor& source,
     const fjord::MutableTensorView& destination) {
-    const auto count = source.view().element_count();
     if (source.element == destination.element) {
+        return CopyKind::direct;
+    }
+    if (source.element == fjord::Element::float32
+        && destination.element == fjord::Element::float64) {
+        return CopyKind::widen_float;
+    }
+    if (source.element == fjord::Element::float64
+        && destination.element == fjord::Element::float32) {
+        return CopyKind::narrow_float;
+    }
+    throw std::runtime_error(
+        "FoamNordic cannot convert the committed model output element type.");
+}
+
+void copy_values(
+    const fjord::Tensor& source,
+    const fjord::MutableTensorView& destination,
+    CopyKind kind) noexcept {
+    const auto count = source.view().element_count();
+    if (kind == CopyKind::direct) {
         std::memcpy(
             destination.bytes.data(), source.bytes.data(), source.bytes.size());
         return;
     }
-    if (source.element == fjord::Element::float32
-        && destination.element == fjord::Element::float64) {
+    if (kind == CopyKind::widen_float) {
         const auto* input = reinterpret_cast<const float*>(source.bytes.data());
         auto* output = reinterpret_cast<double*>(destination.bytes.data());
         std::transform(input, input + count, output, [](float value) {
@@ -69,17 +99,11 @@ void copy_values(
         });
         return;
     }
-    if (source.element == fjord::Element::float64
-        && destination.element == fjord::Element::float32) {
-        const auto* input = reinterpret_cast<const double*>(source.bytes.data());
-        auto* output = reinterpret_cast<float*>(destination.bytes.data());
-        std::transform(input, input + count, output, [](double value) {
-            return static_cast<float>(value);
-        });
-        return;
-    }
-    throw std::runtime_error(
-        "FoamNordic cannot convert the committed model output element type.");
+    const auto* input = reinterpret_cast<const double*>(source.bytes.data());
+    auto* output = reinterpret_cast<float*>(destination.bytes.data());
+    std::transform(input, input + count, output, [](double value) {
+        return static_cast<float>(value);
+    });
 }
 
 }  // namespace
@@ -213,6 +237,8 @@ void AtomicFieldExchange::execute(
         break;
     }
 
+    std::vector<PreparedCopy> copies;
+    copies.reserve(contract_.outputs.size());
     for (const auto& name : contract_.outputs) {
         const auto found = output_fields.find(name);
         if (found == output_fields.end()) {
@@ -236,11 +262,22 @@ void AtomicFieldExchange::execute(
             throw std::runtime_error(
                 "FoamNordic committed output does not match its field: " + name);
         }
+        const auto destination_begin = reinterpret_cast<std::uintptr_t>(
+            destination.bytes.data());
+        const auto destination_end = destination_begin + destination.bytes.size();
+        for (const auto& copy : copies) {
+            const auto other_begin = reinterpret_cast<std::uintptr_t>(
+                copy.destination.bytes.data());
+            const auto other_end = other_begin + copy.destination.bytes.size();
+            if (destination_begin < other_end && other_begin < destination_end) {
+                throw std::runtime_error(
+                    "FoamNordic committed outputs alias solver-owned storage.");
+            }
+        }
+        copies.push_back({&source, destination, copy_kind(source, destination)});
     }
-    for (const auto& name : contract_.outputs) {
-        const auto destination = output_fields.at(name);
-        const auto& source = prepared.at(name);
-        copy_values(source, destination);
+    for (const auto& copy : copies) {
+        copy_values(*copy.source, copy.destination, copy.kind);
     }
 
     previous_exchange_ = exchange_index;

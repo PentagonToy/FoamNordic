@@ -38,6 +38,14 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   and a non-empty copy of the same patch on its peer.
 - Fixed fresh `foamnordic build --without-onnx` installations by building the
   always-installed native inference core independently of the ONNX ModelHost.
+- Made solver-field publication fully transactional across multiple outputs.
+  Element conversions and destination-storage aliasing are now rejected before
+  any OpenFOAM-owned field is modified.
+- Preserved backend synchronization ownership through the public artifact
+  loader, keeping request preparation and output staging outside the narrow
+  model-evaluation lock.
+- Released retained Smedja packing storage for zero-cell rank partitions while
+  preserving safe workspace reuse and regrowth for subsequent mesh layouts.
 
 ### Solver boundary
 
