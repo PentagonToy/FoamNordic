@@ -190,6 +190,15 @@ wait for a missing completion marker or apply a partial prediction.
 This error boundary is exercised over both the socket-backed channel and the
 native SHM ring used after a same-node upgrade.
 
+All rank runners within a ModelHost share one pre-receive memory-credit pool.
+The Harbor validates each tensor header first, then obtains credit before
+allocating or reading its body. Credit covers the complete lifetime of the
+rank's atomic input exchange and is returned on success or failure. A failed
+rank cancels the pool and wakes blocked peers as part of fail-together
+shutdown. This admission limit is distinct from the execution-context budget:
+the former bounds resident input payloads, while the latter bounds model
+packing, inference, and output workspace.
+
 The current end-to-end native test sends `c`, `c_var`, and `T`
 through a real Fjord socket channel. It evaluates only cells selected by
 `c_var`, reconstructs the full `omega_c` field, and verifies the matching

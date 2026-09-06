@@ -53,7 +53,8 @@ public:
         const CellEvaluationPolicy& bypass,
         ModelKernel& kernel,
         std::uint64_t maximum_exchange_payload =
-            16ULL * 1024ULL * 1024ULL * 1024ULL);
+            16ULL * 1024ULL * 1024ULL * 1024ULL,
+        ReceiveCreditPool* receive_credits = nullptr);
 
     [[nodiscard]] bool run_one();
     void run();
@@ -64,6 +65,7 @@ private:
     const CellEvaluationPolicy& bypass_;
     ModelKernel& kernel_;
     std::uint64_t maximum_exchange_payload_;
+    ReceiveCreditPool* receive_credits_;
 };
 
 }  // namespace foamnordic::inference

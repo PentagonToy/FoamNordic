@@ -79,6 +79,10 @@ void WorkerOptions::validate() const {
     if (maximum_payload == 0) {
         throw std::invalid_argument("Native model worker payload limit must be positive.");
     }
+    if (maximum_receive_bytes == 0) {
+        throw std::invalid_argument(
+            "Native model worker receive-memory limit must be positive.");
+    }
     if (maximum_working_bytes == 0) {
         throw std::invalid_argument(
             "Native model worker working-memory limit must be positive.");
@@ -232,6 +236,7 @@ void ModelWorker::run() {
     ModelKernel& execution_kernel = kernel_->owns_backend_synchronization()
                                        ? *kernel_
                                        : static_cast<ModelKernel&>(synchronized);
+    ReceiveCreditPool receive_credits(options_.maximum_receive_bytes);
     std::mutex failure_mutex;
     std::exception_ptr failure;
     std::vector<std::thread> runners;
@@ -245,7 +250,8 @@ void ModelWorker::run() {
                         artifact_.contract,
                         bypass_,
                         execution_kernel,
-                        options_.maximum_payload);
+                        options_.maximum_payload,
+                        &receive_credits);
                     runner.run();
                 } catch (...) {
                     {
@@ -255,6 +261,7 @@ void ModelWorker::run() {
                         }
                     }
                     execution_kernel.cancel_pending();
+                    receive_credits.cancel();
                     for (auto& active : harbors) {
                         active->interrupt();
                     }
@@ -263,6 +270,7 @@ void ModelWorker::run() {
         }
     } catch (...) {
         execution_kernel.cancel_pending();
+        receive_credits.cancel();
         for (auto& active : harbors) {
             active->interrupt();
         }
@@ -275,6 +283,13 @@ void ModelWorker::run() {
         runner.join();
     }
     listener_.close();
+    const auto receive = receive_credits.snapshot();
+    if (receive.requests != 0) {
+        native::log(
+            native::LogLevel::info,
+            "Model receive peak: bytes="
+                + std::to_string(receive.peak_active_bytes));
+    }
     const auto resources = execution_kernel.execution_snapshot();
     if (resources.peak_active_contexts != 0) {
         native::log(

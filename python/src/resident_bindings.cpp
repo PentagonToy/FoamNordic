@@ -164,6 +164,7 @@ void bind_resident(nb::module_& module) {
            const std::string& ready_file,
            bool shared_memory,
            std::uint32_t model_threads,
+           std::uint64_t maximum_receive_bytes,
            std::uint64_t profile_every) {
             auto artifact = foamnordic::inference::read_manifest(manifest_path);
             if (artifact.format == foamnordic::inference::ModelFormat::onnx) {
@@ -174,6 +175,7 @@ void bind_resident(nb::module_& module) {
             options.connections = connections;
             options.model_threads = model_threads;
             options.shared_memory = shared_memory;
+            options.maximum_receive_bytes = maximum_receive_bytes;
             options.profile_every = profile_every;
             PythonPackedKernel packed(std::move(evaluator), output_width(artifact));
             foamnordic::inference::ArtifactModelKernel kernel(
@@ -206,6 +208,7 @@ void bind_resident(nb::module_& module) {
         "ready_file"_a = "",
         "shared_memory"_a = true,
         "model_threads"_a = 1,
+        "maximum_receive_bytes"_a = 16ULL * 1024ULL * 1024ULL * 1024ULL,
         "profile_every"_a = 0,
         "Run a managed Python model behind the native Fjord worker.");
 }

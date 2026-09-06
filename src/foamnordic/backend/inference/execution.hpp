@@ -42,6 +42,47 @@ struct ExecutionSnapshot {
     std::uint64_t output_nanoseconds{0};
 };
 
+struct ReceiveCreditSnapshot {
+    std::uint64_t requests{0};
+    std::uint64_t active_bytes{0};
+    std::uint64_t peak_active_bytes{0};
+};
+
+class ReceiveCreditPool final {
+public:
+    class Reservation final {
+    public:
+        explicit Reservation(ReceiveCreditPool& owner) noexcept;
+        Reservation(const Reservation&) = delete;
+        Reservation& operator=(const Reservation&) = delete;
+        Reservation(Reservation&&) = delete;
+        Reservation& operator=(Reservation&&) = delete;
+        ~Reservation();
+
+        void acquire(std::uint64_t bytes);
+
+    private:
+        ReceiveCreditPool* owner_;
+        std::uint64_t bytes_{0};
+    };
+
+    explicit ReceiveCreditPool(std::uint64_t maximum_bytes);
+
+    void acquire(std::uint64_t bytes);
+    void release(std::uint64_t bytes) noexcept;
+    void cancel() noexcept;
+    [[nodiscard]] ReceiveCreditSnapshot snapshot() const;
+
+private:
+    std::uint64_t maximum_bytes_;
+    mutable std::mutex mutex_;
+    std::condition_variable available_;
+    std::uint64_t requests_{0};
+    std::uint64_t active_bytes_{0};
+    std::uint64_t peak_active_bytes_{0};
+    bool cancelled_{false};
+};
+
 class ExecutionContextPool final {
 public:
     class Lease final {

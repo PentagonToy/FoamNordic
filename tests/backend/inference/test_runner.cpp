@@ -1,4 +1,7 @@
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <memory>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -25,6 +28,61 @@ void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+void test_shared_receive_credit_blocks_and_cancels() {
+    using namespace std::chrono_literals;
+    foamnordic::inference::ReceiveCreditPool credits(64);
+    std::atomic<bool> waiting{false};
+    std::atomic<bool> admitted{false};
+    auto first = std::make_unique<
+        foamnordic::inference::ReceiveCreditPool::Reservation>(credits);
+    first->acquire(48);
+    std::thread waiter([&] {
+        waiting.store(true);
+        foamnordic::inference::ReceiveCreditPool::Reservation second(credits);
+        second.acquire(32);
+        admitted.store(true);
+    });
+    while (!waiting.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(10ms);
+    require(!admitted.load(), "Shared receive credit did not apply back-pressure.");
+    first.reset();
+    waiter.join();
+    const auto snapshot = credits.snapshot();
+    require(snapshot.active_bytes == 0, "Receive credit leaked after release.");
+    require(snapshot.peak_active_bytes <= 64, "Receive credit exceeded its limit.");
+
+    bool oversized = false;
+    try {
+        credits.acquire(65);
+    } catch (const std::length_error&) {
+        oversized = true;
+    }
+    require(oversized, "Receive credit accepted an oversized tensor.");
+
+    foamnordic::inference::ReceiveCreditPool cancelled(16);
+    cancelled.acquire(16);
+    std::atomic<bool> cancellation_waiting{false};
+    std::atomic<bool> woke{false};
+    std::thread blocked([&] {
+        cancellation_waiting.store(true);
+        try {
+            cancelled.acquire(1);
+        } catch (const std::runtime_error&) {
+            woke.store(true);
+        }
+    });
+    while (!cancellation_waiting.load()) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(10ms);
+    cancelled.cancel();
+    blocked.join();
+    require(woke.load(), "Cancellation did not wake a receive-credit waiter.");
+    cancelled.release(16);
 }
 
 Tensor field(
@@ -504,6 +562,7 @@ void test_worker_failure_is_reported_to_solver(bool sharedMemory) {
 }  // namespace
 
 int main() {
+    test_shared_receive_credit_blocks_and_cancels();
     test_native_combustion_exchange(false);
     test_native_combustion_exchange(true);
     test_scaled_affine_exchange(false);

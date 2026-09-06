@@ -632,6 +632,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--connections", type=int, default=1)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--receive-bytes", type=int, default=16 * 1024**3)
     parser.add_argument("--profile-every", type=int, default=0)
     parser.add_argument("--ready-file", default="")
     parser.add_argument("--key", default=Key((42, 0)).to_json())
@@ -648,6 +649,8 @@ def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     if arguments.profile_every < 0:
         raise ValueError("profile_every must not be negative")
+    if arguments.receive_bytes <= 0:
+        raise ValueError("receive_bytes must be positive")
     model_threads = _configure_model_threads(arguments.threads)
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
@@ -688,6 +691,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.ready_file,
         not arguments.no_shm,
         model_threads,
+        arguments.receive_bytes,
         arguments.profile_every,
     )
     return 0

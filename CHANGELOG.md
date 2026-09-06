@@ -61,6 +61,10 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
 - Added opt-in sampled ModelHost stage timing through
   `Longship.launch(profile_every=N)`; disabled production runs do not read a
   clock or update timing counters.
+- Added a ModelHost-wide pre-receive memory-credit pool. Rank runners now
+  reserve validated tensor payloads before body allocation, retain credit for
+  the atomic exchange, and wake together on cancellation. The limit is
+  configurable with `Longship.launch(receive_memory_bytes=N)`.
 
 ### Solver boundary
 

@@ -24,12 +24,14 @@ InferenceRunner::InferenceRunner(
     ProgramContract contract,
     const CellEvaluationPolicy& bypass,
     ModelKernel& kernel,
-    std::uint64_t maximum_exchange_payload)
+    std::uint64_t maximum_exchange_payload,
+    ReceiveCreditPool* receive_credits)
     : harbor_(harbor),
       exchange_(std::move(contract)),
       bypass_(bypass),
       kernel_(kernel),
-      maximum_exchange_payload_(maximum_exchange_payload) {
+      maximum_exchange_payload_(maximum_exchange_payload),
+      receive_credits_(receive_credits) {
     if (maximum_exchange_payload_ == 0) {
         throw std::invalid_argument(
             "Model exchange payload limit must be positive.");
@@ -37,13 +39,25 @@ InferenceRunner::InferenceRunner(
 }
 
 bool InferenceRunner::run_one() {
+    std::optional<ReceiveCreditPool::Reservation> receive_reservation;
+    if (receive_credits_ != nullptr) {
+        receive_reservation.emplace(*receive_credits_);
+    }
     bool started = false;
     std::uint32_t received_tensors = 0;
     std::uint64_t received_payload_bytes = 0;
     try {
         while (true) {
             auto message = harbor_.receive_message(
-                maximum_exchange_payload_ - received_payload_bytes);
+                maximum_exchange_payload_ - received_payload_bytes,
+                receive_reservation.has_value()
+                    ? fjord::PayloadAdmission{
+                          &*receive_reservation,
+                          [](void* context, std::uint64_t bytes) {
+                              static_cast<ReceiveCreditPool::Reservation*>(context)
+                                  ->acquire(bytes);
+                          }}
+                    : fjord::PayloadAdmission{});
             if (message.kind == fjord::RuneKind::shutdown) {
                 if (started) {
                     throw std::runtime_error("Model exchange was interrupted by shutdown.");

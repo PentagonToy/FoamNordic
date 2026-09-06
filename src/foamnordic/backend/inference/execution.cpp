@@ -26,6 +26,65 @@ void ExecutionResources::validate() const {
     }
 }
 
+ReceiveCreditPool::Reservation::Reservation(ReceiveCreditPool& owner) noexcept
+    : owner_(&owner) {}
+
+ReceiveCreditPool::Reservation::~Reservation() {
+    owner_->release(bytes_);
+}
+
+void ReceiveCreditPool::Reservation::acquire(std::uint64_t bytes) {
+    owner_->acquire(bytes);
+    bytes_ += bytes;
+}
+
+ReceiveCreditPool::ReceiveCreditPool(std::uint64_t maximum_bytes)
+    : maximum_bytes_(maximum_bytes) {
+    if (maximum_bytes_ == 0) {
+        throw std::invalid_argument("Model receive-memory limit must be positive.");
+    }
+}
+
+void ReceiveCreditPool::acquire(std::uint64_t bytes) {
+    if (bytes > maximum_bytes_) {
+        throw std::length_error(
+            "Model tensor exceeds the shared receive-memory limit: required "
+            + std::to_string(bytes) + " bytes, limit "
+            + std::to_string(maximum_bytes_) + " bytes.");
+    }
+    std::unique_lock lock(mutex_);
+    available_.wait(lock, [&] {
+        return cancelled_ || bytes <= maximum_bytes_ - active_bytes_;
+    });
+    if (cancelled_) {
+        throw std::runtime_error("Model input reception was cancelled.");
+    }
+    ++requests_;
+    active_bytes_ += bytes;
+    peak_active_bytes_ = std::max(peak_active_bytes_, active_bytes_);
+}
+
+void ReceiveCreditPool::release(std::uint64_t bytes) noexcept {
+    {
+        std::scoped_lock lock(mutex_);
+        active_bytes_ -= bytes;
+    }
+    available_.notify_all();
+}
+
+void ReceiveCreditPool::cancel() noexcept {
+    {
+        std::scoped_lock lock(mutex_);
+        cancelled_ = true;
+    }
+    available_.notify_all();
+}
+
+ReceiveCreditSnapshot ReceiveCreditPool::snapshot() const {
+    std::scoped_lock lock(mutex_);
+    return {requests_, active_bytes_, peak_active_bytes_};
+}
+
 ExecutionContextPool::Lease::Lease(
     ExecutionContextPool& owner,
     std::size_t index,

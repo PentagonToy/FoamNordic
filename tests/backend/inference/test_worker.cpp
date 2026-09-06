@@ -285,6 +285,16 @@ void test_worker_rejects_an_empty_model_cpu_budget() {
         rejected = true;
     }
     require(rejected, "Resident worker accepted a zero working-memory budget.");
+
+    options.maximum_working_bytes = 1;
+    options.maximum_receive_bytes = 0;
+    rejected = false;
+    try {
+        options.validate();
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(rejected, "Resident worker accepted a zero receive-memory budget.");
 }
 
 #ifdef FOAMNORDIC_HAVE_UCX

@@ -29,6 +29,7 @@ struct WorkerOptions {
     std::uint32_t connections{1};
     std::uint32_t model_threads{1};
     std::uint64_t maximum_payload{16ULL * 1024ULL * 1024ULL * 1024ULL};
+    std::uint64_t maximum_receive_bytes{16ULL * 1024ULL * 1024ULL * 1024ULL};
     std::uint64_t maximum_working_bytes{16ULL * 1024ULL * 1024ULL * 1024ULL};
     std::uint64_t profile_every{0};
 

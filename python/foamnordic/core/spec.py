@@ -602,6 +602,7 @@ class Longship:
         start_timeout: float | None = None,
         verbose: bool | None = None,
         profile_every: int = 0,
+        receive_memory_bytes: int | None = None,
     ) -> Run:
         """Prepare an isolated case and return a non-blocking native Run."""
 
@@ -618,6 +619,13 @@ class Longship:
             raise TypeError("profile_every must be an integer")
         if profile_every < 0:
             raise ValueError("profile_every must not be negative")
+        if receive_memory_bytes is not None:
+            if not isinstance(receive_memory_bytes, int) or isinstance(
+                receive_memory_bytes, bool
+            ):
+                raise TypeError("receive_memory_bytes must be an integer or None")
+            if receive_memory_bytes < 1:
+                raise ValueError("receive_memory_bytes must be positive")
         run = launch(
             self,
             readiness_timeout=readiness_timeout,
@@ -625,6 +633,7 @@ class Longship:
             orphan_timeout=orphan_timeout,
             verbose=selected_verbose,
             profile_every=profile_every,
+            receive_memory_bytes=receive_memory_bytes,
         )
         if selected_verbose:
             if self.scheduler is None:
