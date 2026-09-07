@@ -75,9 +75,18 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   reserve validated tensor payloads before body allocation, retain credit for
   the atomic exchange, and wake together on cancellation. The limit is
   configurable with `Longship.launch(receive_memory_bytes=N)`.
+- Made `clobber` remove the `current` selector together with its selected
+  immutable runtime generation, preventing a dangling active-runtime link.
 
 ### Solver boundary
 
+- Advanced Rune to version 3 with request-level input admission. Solver
+  adapters announce the complete tensor count and payload size before sending
+  bodies, so independently admissible ranks are no longer held behind a
+  partial sender and malformed bodies cannot allocate beyond their reservation.
+- Reject non-finite floating-point model outputs before the atomic publication
+  boundary; no solver-owned output is updated when any result contains NaN or
+  infinity.
 - Fixed partial-exchange receive-credit deadlock with cancellable reception
   ownership and cumulative request rejection. Completed and failed exchanges
   release input storage before returning credit.

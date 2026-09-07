@@ -56,6 +56,7 @@ struct HarborMessage {
     std::optional<Tensor> tensor;
     std::uint64_t exchange_index{0};
     std::uint32_t tensor_count{0};
+    std::uint64_t payload_bytes{0};
 };
 
 struct PayloadAdmission {
@@ -81,10 +82,12 @@ public:
 
     void send(const TensorView& tensor);
     void publish(std::uint64_t exchange_index, std::span<const TensorView> tensors);
+    void publish_request(std::uint64_t exchange_index, std::span<const TensorView> tensors);
     [[nodiscard]] HarborMessage receive_message(
         std::uint64_t maximum_tensor_payload =
             std::numeric_limits<std::uint64_t>::max(),
-        PayloadAdmission admit_payload = {});
+        PayloadAdmission admit_payload = {},
+        bool reveal_request = false);
     [[nodiscard]] Tensor receive();
     [[nodiscard]] SessionHello connect_session(const SessionHello& offer);
     [[nodiscard]] SessionHello accept_session(const SessionHello& support);

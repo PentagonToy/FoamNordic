@@ -790,6 +790,19 @@ def _clobber(args: argparse.Namespace, stream: TextIO) -> int:
         action = "would remove" if args.dry_run else "remove"
         print(f"{action} [{kind}]: {target}", file=stream)
         if not args.dry_run:
+            # Managed runtimes are immutable generations selected by a sibling
+            # ``current`` symlink.  Removing the selected generation must also
+            # remove that selector; leaving it dangling makes a later build or
+            # directory query appear to have an active, damaged runtime.
+            if target.parent.name == "generations":
+                current = target.parent.parent / "current"
+                if current.is_symlink():
+                    try:
+                        selected = current.resolve(strict=True)
+                    except OSError:
+                        selected = None
+                    if selected == target.resolve():
+                        current.unlink()
             shutil.rmtree(target)
         removed += 1
     if removed == 0:

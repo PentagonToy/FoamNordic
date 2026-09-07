@@ -55,6 +55,7 @@ void validate_prefix(const RunePrefix& prefix) {
         case RuneKind::shm_ready:
         case RuneKind::ucx_offer:
         case RuneKind::ucx_ready:
+        case RuneKind::request:
             break;
         default:
             throw std::runtime_error("Unsupported Rune message kind.");
@@ -74,6 +75,12 @@ void validate_prefix(const RunePrefix& prefix) {
         }
         if (prefix.shape_bytes != static_cast<std::uint32_t>(prefix.dimensions) * 8U) {
             throw std::runtime_error("Rune tensor shape metadata has an invalid length.");
+        }
+    } else if (prefix.kind == RuneKind::request) {
+        if (prefix.flags == 0
+            || prefix.name_bytes != 0 || prefix.shape_bytes != 0
+            || prefix.dimensions != 0) {
+            throw std::runtime_error("Rune request metadata is invalid.");
         }
     } else if ((prefix.kind != RuneKind::shm_offer
                 && prefix.kind != RuneKind::ucx_offer

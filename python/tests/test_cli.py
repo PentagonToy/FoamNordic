@@ -484,6 +484,26 @@ class CliTests(unittest.TestCase):
             self.assertFalse(build.exists())
             self.assertTrue(unowned.exists())
 
+    def test_clobber_removes_current_selector_with_active_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "runtime/linux-aarch64/openfoam-v2512"
+            generation = root / "generations/build-one"
+            mark_generated(generation, kind="native-runtime")
+            root.mkdir(parents=True, exist_ok=True)
+            (root / "current").symlink_to(
+                generation.relative_to(root), target_is_directory=True
+            )
+            with (
+                patch("foamnordic._cli.active_runtime_candidates", return_value=(generation,)),
+                patch("foamnordic._cli.profile", return_value=None),
+                patch("pathlib.Path.home", return_value=Path(directory) / "empty-home"),
+                redirect_stdout(StringIO()),
+            ):
+                status = main(["clobber"])
+            self.assertEqual(status, 0)
+            self.assertFalse(generation.exists())
+            self.assertFalse((root / "current").is_symlink())
+
 
 if __name__ == "__main__":
     unittest.main()

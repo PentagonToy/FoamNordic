@@ -20,6 +20,14 @@ OpenFOAM / Python / native model
 
 No transport may define its own tensor format or exchange lifecycle.
 
+Rune version 3 precedes every solver-to-model tensor batch with request
+metadata containing the exchange identity, tensor count, and aggregate payload
+bytes. ModelHost validates and reserves that complete request before reading
+its tensor bodies. The reservation is independent for each rank: a rank that
+has announced a partial transfer does not retain global reception ownership,
+while total admitted bytes remain bounded. Tensor prefixes are checked against
+the announcement before their bodies are allocated.
+
 ## Permanent contracts
 
 ### Rune

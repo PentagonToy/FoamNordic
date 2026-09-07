@@ -11,6 +11,7 @@
 
 #include "foamnordic/backend/inference/runner.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <stdexcept>
 #include <limits>
@@ -54,20 +55,28 @@ bool InferenceRunner::run_one() {
         receive_reservation.emplace(*receive_credits_);
     }
     bool started = false;
+    bool announced = false;
+    std::uint32_t announced_tensors = 0;
+    std::uint64_t announced_payload_bytes = 0;
     std::uint32_t received_tensors = 0;
     std::uint64_t received_payload_bytes = 0;
     try {
         while (true) {
+            const auto remaining_payload = maximum_exchange_payload_ - received_payload_bytes;
+            const auto admitted_remaining = announced
+                ? announced_payload_bytes - received_payload_bytes
+                : remaining_payload;
             auto message = harbor_.receive_message(
-                maximum_exchange_payload_ - received_payload_bytes,
-                receive_reservation.has_value()
+                std::min(remaining_payload, admitted_remaining),
+                receive_reservation.has_value() && !announced
                     ? fjord::PayloadAdmission{
                           &*receive_reservation,
                           [](void* context, std::uint64_t bytes) {
                               static_cast<ReceiveCreditPool::Reservation*>(context)
                                   ->acquire(bytes);
                           }}
-                    : fjord::PayloadAdmission{});
+                    : fjord::PayloadAdmission{},
+                true);
             if (message.kind == fjord::RuneKind::shutdown) {
                 if (started) {
                     throw std::runtime_error("Model exchange was interrupted by shutdown.");
@@ -76,6 +85,22 @@ bool InferenceRunner::run_one() {
             }
             if (message.kind == fjord::RuneKind::error) {
                 throw std::runtime_error("The remote endpoint reported an exchange error.");
+            }
+            if (message.kind == fjord::RuneKind::request) {
+                if (started || announced) {
+                    throw std::runtime_error("Model request metadata arrived out of order.");
+                }
+                if (message.payload_bytes > maximum_exchange_payload_) {
+                    throw std::runtime_error("Model request exceeds the exchange payload limit.");
+                }
+                announced = true;
+                announced_tensors = message.tensor_count;
+                announced_payload_bytes = message.payload_bytes;
+                if (receive_reservation) {
+                    receive_reservation->acquire(announced_payload_bytes);
+                    receive_reservation->seal();
+                }
+                continue;
             }
             if (message.kind == fjord::RuneKind::tensor) {
                 if (!message.tensor.has_value() || message.tensor->shape.empty()) {
@@ -101,6 +126,11 @@ bool InferenceRunner::run_one() {
                 if (message.tensor_count != received_tensors) {
                     throw std::runtime_error(
                         "Model atomic commit does not match its prepared tensor batch.");
+                }
+                if (announced && (announced_tensors != received_tensors
+                    || announced_payload_bytes != received_payload_bytes)) {
+                    throw std::runtime_error(
+                        "Model request body does not match its admission metadata.");
                 }
                 break;
             }
