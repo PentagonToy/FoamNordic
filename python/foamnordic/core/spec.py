@@ -34,16 +34,12 @@ def _frozen_mapping(
     return MappingProxyType(normalized)
 
 
-def _program_key(value: Key | int | None, seed: int | None, label: str) -> Key:
-    if value is not None and seed is not None:
-        raise ValueError(f"{label} accepts either key or seed, not both")
-    if value is not None:
-        if isinstance(value, int) and not isinstance(value, bool):
-            return random_key(value)
-        if not isinstance(value, Key):
-            raise TypeError(f"{label} key must be a Random.Key")
-        return value
-    return random_key(42 if seed is None else seed)
+def _program_key(value: Key | None, label: str) -> Key:
+    if value is None:
+        return random_key(42)
+    if not isinstance(value, Key):
+        raise TypeError(f"{label} key must be a Random.Key")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,8 +81,7 @@ class Operator:
         request ``key``, ``exchange_index``, ``physical_time``, or ``rank``
         as keyword parameters. Random keys are derived deterministically from
         the field-program key, stable program identity, exchange index, and
-        optionally the solver rank. Compatibility ``seed`` and NumPy ``rng``
-        injection remain available for source compatibility.
+        optionally the solver rank.
         """
 
         return cls("function", function)
@@ -139,10 +134,9 @@ class Closure:
         operator: Operator | None = None,
         inputs: Mapping[str, FieldExpression] | None = None,
         outputs: Mapping[str, FieldExpression] | None = None,
-        key: Key | int | None = None,
+        key: Key | None = None,
         *,
         artifact: PathInput | None = None,
-        seed: int | None = None,
     ) -> None:
         if (artifact is None) == (operator is None):
             raise ValueError("closure requires exactly one of operator or artifact")
@@ -164,7 +158,7 @@ class Closure:
         object.__setattr__(self, "operator", selected)
         object.__setattr__(self, "inputs", inputs)
         object.__setattr__(self, "outputs", outputs)
-        object.__setattr__(self, "key", _program_key(key, seed, "closure"))
+        object.__setattr__(self, "key", _program_key(key, "closure"))
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -193,13 +187,6 @@ class Closure:
             "key": self.key.to_plan(),
         }
 
-    @property
-    def seed(self) -> int:
-        """Compatibility view of the low 32 bits of the root entropy."""
-
-        return self.key.entropy[0]
-
-
 @dataclass(frozen=True, slots=True, init=False)
 class Transform:
     """Apply one general field-to-field model at a declared solver boundary."""
@@ -218,9 +205,7 @@ class Transform:
         inputs: Mapping[str, FieldExpression] | None = None,
         outputs: Mapping[str, FieldExpression] | None = None,
         at: str = "time_step_start",
-        key: Key | int | None = None,
-        *,
-        seed: int | None = None,
+        key: Key | None = None,
     ) -> None:
         if inputs is None or outputs is None:
             if operator.kind != "model":
@@ -239,7 +224,7 @@ class Transform:
         object.__setattr__(self, "inputs", inputs)
         object.__setattr__(self, "outputs", outputs)
         object.__setattr__(self, "at", at)
-        object.__setattr__(self, "key", _program_key(key, seed, "transform"))
+        object.__setattr__(self, "key", _program_key(key, "transform"))
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -286,13 +271,6 @@ class Transform:
             "at": self.at,
             "key": self.key.to_plan(),
         }
-
-    @property
-    def seed(self) -> int:
-        """Compatibility view of the low 32 bits of the root entropy."""
-
-        return self.key.entropy[0]
-
 
 @dataclass(frozen=True, slots=True)
 class Observe:
@@ -579,7 +557,6 @@ class Longship:
 
         runtime = compile_runtime_plan(self)
         value = {
-            "schema_version": 2,
             "name": self.name,
             "case": self.case.to_plan(),
             "closures": [closure.to_plan() for closure in self.closure_programs],

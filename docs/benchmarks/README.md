@@ -6,7 +6,7 @@ not confused with architectural promises.
 
 | Record | Contents |
 |---|---|
-| [Transport and performance](transport-and-performance.md) | macOS and Roihu transport measurements plus the OpenFOAM performance gate |
+| [Transport and performance](transport-performance.md) | macOS and Roihu transport measurements plus the OpenFOAM performance gate |
 | [HPC transport](hpc-transport.md) | Implemented data planes, UCX environment, and portable site checks |
 | [OpenFOAM cases](openfoam-cases.md) | Laminar, RAS, LES, and copied-case compatibility evidence |
 | [Closure validation](closure-validation.md) | Mathematical parity and learned-closure accuracy and timing |

@@ -5,7 +5,7 @@ broker dependency.
 
 The names describe three deliberately small responsibilities:
 
-- **Rune** defines the versioned binary tensor frame.
+- **Rune** defines the binary tensor frame.
 - **Fjord** moves an exact number of bytes through a channel.
 - **Harbor** sends and receives tensors over a Fjord channel.
 
@@ -27,7 +27,7 @@ the normal node-local payload path, while TCP is the portable multi-node
 baseline and UCX is an explicit high-performance option. The selected endpoint
 and capability negotiation remain visible in the compiled plan and logs.
 
-## Rune version 1
+## Rune frame
 
 Every integer is encoded little-endian. A frame contains:
 
@@ -36,7 +36,7 @@ Every integer is encoded little-endian. A frame contains:
 3. one unsigned 64-bit extent per dimension;
 4. the contiguous tensor payload.
 
-The prefix records the protocol version, message kind, capabilities, element
+The prefix records the protocol identity, message kind, capabilities, element
 type, dimension count, metadata lengths, payload length, exchange index, MPI
 rank identity, physical time, session ID, and negotiated payload limit. Rune
 does not prescribe an OpenFOAM field, Python object, transport, scheduler, or

@@ -267,7 +267,7 @@ def _compiled(
     """Export a supported estimator as portable C++ in one FNOM artifact.
 
     The source is compiled once for the target machine and retained in the
-    FoamNordic cache. Supported v1 estimators are linear regressors, fitted
+    FoamNordic cache. Supported estimators are linear regressors, fitted
     scikit-learn forests, KNN and gradient boosting, XGBoost, LightGBM, and
     VotingRegressor compositions of supported models.
     """
@@ -282,7 +282,7 @@ def _compiled(
     output_contract = _contracts(outputs, "outputs")
     dtypes = {tensor.dtype for tensor in (*inputs.values(), *outputs.values())}
     if dtypes != {"float64"}:
-        raise ValueError("compiled v1 artifacts currently require float64 tensors")
+        raise ValueError("compiled artifacts currently require float64 tensors")
     input_width = sum(width for _, width in input_contract)
     output_width = sum(width for _, width in output_contract)
     if forest:
@@ -305,7 +305,7 @@ def _compiled(
             outputs,
             x_scaler=x_scaler,
             y_scaler=y_scaler,
-            runtime="forest-v1" if forest else "cpp-v1",
+            runtime="forest" if forest else "compiled",
         )
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -418,7 +418,7 @@ def equinox(
         with temporary.open("wb") as stream:
             cloudpickle.dump(
                 {
-                    "schema": "foamnordic.equinox/v1",
+                    "schema": "foamnordic.equinox",
                     "model": model,
                     "batched": batched,
                 },
@@ -474,7 +474,7 @@ def _display_export(
     rows = [
         ("Artifact", manifest.name),
         ("Payload", f"embedded {model.suffix}"),
-        ("Format", f"{format_name} + FNOM v{metadata['schema_version']}"),
+        ("Format", f"{format_name} + FNOM"),
         ("Dtype", dtype),
         ("Inputs", ", ".join(f"{key}[{value.components}]" for key, value in inputs.items())),
         ("Outputs", ", ".join(f"{key}[{value.components}]" for key, value in outputs.items())),

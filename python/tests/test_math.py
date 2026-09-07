@@ -7,11 +7,6 @@ import foamnordic as fno
 
 
 class MathTests(unittest.TestCase):
-    def test_native_selectors_reuse_field_expression_contract(self) -> None:
-        self.assertEqual(fno.Math.field("U"), fno.field("U"))
-        self.assertEqual(fno.Math.grad("U"), fno.grad("U"))
-        self.assertEqual(fno.Math.filter_width(), fno.filter_width())
-
     def test_grouped_field_vocabulary_is_compact_and_strict(self) -> None:
         self.assertEqual(fno.Field("k"), fno.field("k"))
         self.assertEqual(fno.Field.field("U"), fno.field("U"))
@@ -23,8 +18,8 @@ class MathTests(unittest.TestCase):
             fno.Field.coordinate("X")
 
     def test_openfoam_operations_build_nested_expression_trees(self) -> None:
-        strain = fno.Math.dev(fno.Math.symm(fno.Math.grad("U")))
-        contraction = fno.Math.ddot(fno.Math.grad("U"), strain)
+        strain = fno.Math.dev(fno.Math.symm(fno.Field.grad("U")))
+        contraction = fno.Math.ddot(fno.Field.grad("U"), strain)
 
         self.assertEqual(strain.canonical, "dev(symm(grad(U)))")
         self.assertEqual(
@@ -38,25 +33,25 @@ class MathTests(unittest.TestCase):
         )
 
     def test_openfoam_flux_and_coefficient_operations_are_unambiguous(self) -> None:
-        self.assertEqual(fno.Math.div("U").canonical, "div(U)")
-        self.assertEqual(fno.Math.div("phi", "U").canonical, "div(phi,U)")
+        self.assertEqual(fno.Field.div("U").canonical, "div(U)")
+        self.assertEqual(fno.Field.div("phi", "U").canonical, "div(phi,U)")
         self.assertEqual(
-            fno.Math.laplacian("nu", "U").canonical,
+            fno.Field.laplacian("nu", "U").canonical,
             "laplacian(nu,U)",
         )
-        self.assertEqual(fno.Math.curl("U").canonical, "curl(U)")
+        self.assertEqual(fno.Field.curl("U").canonical, "curl(U)")
         self.assertEqual(
-            fno.Math.dot(fno.Math.grad("T"), fno.Math.grad("c")).canonical,
+            fno.Math.dot(fno.Field.grad("T"), fno.Field.grad("c")).canonical,
             "dot(grad(T),grad(c))",
         )
 
     def test_openfoam_operation_arity_is_checked_before_launch(self) -> None:
         with self.assertRaisesRegex(ValueError, "div requires 1 or 2"):
-            fno.Math.div()
+            fno.Field.div()
         with self.assertRaisesRegex(TypeError, "positional"):
-            fno.Math.curl(fno.Math.grad("U"), fno.Math.grad("T"))
+            fno.Field.curl(fno.Field.grad("U"), fno.Field.grad("T"))
         with self.assertRaisesRegex(ValueError, "OpenFOAM word"):
-            fno.Math.grad("grad(U)")
+            fno.Field.grad("grad(U)")
 
     def test_scalar_elementwise_operations_do_not_require_numpy(self) -> None:
         self.assertEqual(fno.Math.maximum(-1.0, 0.0), 0.0)

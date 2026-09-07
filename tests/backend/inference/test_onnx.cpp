@@ -128,7 +128,6 @@ int main() {
     foamnordic::inference::write_bundle(
         manifest_path,
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             model_path.filename().string(),
             {

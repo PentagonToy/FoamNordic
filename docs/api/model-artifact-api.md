@@ -11,8 +11,6 @@ import foamnordic as fno
 artifact = fno.Models.load("reaction-rate.fnom")
 
 print(artifact.name)
-print(artifact.container_version)
-print(artifact.schema_version)
 print(artifact.backend)
 print(artifact.inputs)
 print(artifact.outputs)
@@ -24,7 +22,7 @@ artifact.validate()
 `FnomArtifact` is immutable. `validate()` re-reads the file through the native
 FNOM parser without importing or executing its embedded backend payload.
 Joblib, Equinox, and portable C++ payloads are classified as code-bearing;
-ONNX and native `forest-v1` payloads are classified as data-only.
+ONNX and native forest payloads are classified as data-only.
 `foamnordic inspect` reports this distinction. Calling `Operator.model()` or
 `foamnordic compile` is the execution decision; no redundant trust flag is
 required.
@@ -46,12 +44,12 @@ foamnordic diff reference.fnom candidate.fnom --json
 ```
 
 `diff` validates both artefacts, compares their complete execution manifests
-and streams embedded or legacy external payloads through SHA-256. File names,
+and streams embedded or external payloads through SHA-256. File names,
 external payload paths, and container padding do not affect equivalence, and
 neither model payload is executed.
 
 See the [FNOM format specification](../architecture/fnom.md) for binary
-layout, trust boundaries, and compatibility policy.
+layout and trust boundaries.
 
 ## Compiled estimator backend
 

@@ -1,6 +1,6 @@
 # Compiled estimator prototype
 
-This development benchmark compares the `cpp-v1` compiled FNOM backend with
+This development benchmark compares the compiled FNOM backend with
 the existing uncompressed, directly mapped Joblib backend. It measures model
 execution only; it is not an OpenFOAM wall-time result.
 
@@ -20,7 +20,7 @@ input narrowing before applying stored float64 thresholds.
 
 ## Artefact and startup
 
-| Measurement | Joblib | Compiled `cpp-v1` |
+| Measurement | Joblib | Compiled |
 |---|---:|---:|
 | Export time [s] | 0.177 | 0.530 |
 | FNOM size [MB] | 32.11 | 24.68 |
@@ -56,7 +56,7 @@ call is included in every timing.
 Keep both backends. Compiled FNOM is the preferred path when the estimator graph
 is supported and startup, resident memory, or repeated inference matters.
 Joblib remains the compatibility backend for unsupported estimators. GPR and
-custom estimator graphs are not claimed by `cpp-v1`.
+custom estimator graphs are not claimed by the compiled backend.
 
 ## ExtraTrees and KNN voting
 
@@ -66,7 +66,7 @@ warm repetitions are reduced by their median. Exact KNN search is intentional;
 both backends therefore retain linear dependence on the number of training
 samples.
 
-| Measurement | Joblib | Compiled `cpp-v1` |
+| Measurement | Joblib | Compiled |
 |---|---:|---:|
 | Export time [s] | 0.227 | 0.639 |
 | FNOM size [MB] | 43.75 | 36.64 |

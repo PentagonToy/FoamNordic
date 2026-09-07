@@ -23,7 +23,7 @@ _SUPPORTED = {
 
 
 def supports(model: object) -> bool:
-    """Return whether one fitted estimator graph has a compiled v1 lowering."""
+    """Return whether one fitted estimator graph has a compiled lowering."""
 
     if model.__class__.__name__ in _SUPPORTED:
         return True
@@ -75,7 +75,7 @@ class _Generator:
             self._voting(name, estimator)
         else:
             raise TypeError(
-                f"compiled v1 does not support {class_name}; use "
+                f"compiled backend does not support {class_name}; use "
                 "fno.Export.sklearn(..., backend='joblib')"
             )
         return name
@@ -85,10 +85,10 @@ class _Generator:
 
         coefficients = np.asarray(getattr(estimator, "coef_", None), dtype=np.float64)
         if coefficients.ndim != 1 or len(coefficients) != self.input_width:
-            raise ValueError("compiled v1 linear models require one scalar output")
+            raise ValueError("compiled linear models require one scalar output")
         intercept = np.asarray(getattr(estimator, "intercept_", 0.0), dtype=np.float64)
         if intercept.size != 1:
-            raise ValueError("compiled v1 linear models require one scalar output")
+            raise ValueError("compiled linear models require one scalar output")
         weights = f"{name}_weights"
         self.definitions.extend(
             (
@@ -112,13 +112,13 @@ class _Generator:
         if features.ndim != 2 or features.shape[1] != self.input_width:
             raise ValueError("compiled KNN input width does not match the FNOM contract")
         if targets.ndim != 1 or len(targets) != len(features):
-            raise ValueError("compiled v1 KNN requires one scalar output")
+            raise ValueError("compiled KNN requires one scalar output")
         neighbors = int(getattr(estimator, "n_neighbors", 0))
         if not 1 <= neighbors <= len(features):
             raise ValueError("compiled KNN has an invalid neighbor count")
         weights = getattr(estimator, "weights", "uniform")
         if weights not in {"uniform", "distance"}:
-            raise TypeError("compiled v1 KNN supports uniform or distance weights")
+            raise TypeError("compiled KNN supports uniform or distance weights")
         metric = getattr(estimator, "effective_metric_", None)
         parameters = getattr(estimator, "effective_metric_params_", {})
         if metric == "euclidean":
@@ -128,7 +128,7 @@ class _Generator:
         elif metric == "minkowski" and int(parameters.get("p", 2)) in {1, 2}:
             power = int(parameters.get("p", 2))
         else:
-            raise TypeError("compiled v1 KNN supports Euclidean and Manhattan distance")
+            raise TypeError("compiled KNN supports Euclidean and Manhattan distance")
         prefix = f"{name}_knn"
         distance_term = (
             "const double difference = x[column] - "
@@ -197,11 +197,11 @@ class _Generator:
 
         estimators = np.asarray(getattr(estimator, "estimators_", None), dtype=object)
         if estimators.ndim != 2 or estimators.shape[1] != 1 or len(estimators) == 0:
-            raise ValueError("compiled v1 gradient boosting requires one scalar output")
+            raise ValueError("compiled gradient boosting requires one scalar output")
         initial = getattr(estimator, "init_", None)
         constant = np.asarray(getattr(initial, "constant_", None), dtype=np.float64)
         if constant.size != 1:
-            raise TypeError("compiled v1 requires a constant GradientBoosting initializer")
+            raise TypeError("compiled backend requires a constant GradientBoosting initializer")
         children = [self._tree(name, index, tree) for index, tree in enumerate(estimators[:, 0])]
         learning_rate = _number(getattr(estimator, "learning_rate", 0.0))
         expression = " + ".join(f"{child}(x)" for child in children)
@@ -221,10 +221,10 @@ class _Generator:
         learner = configuration["learner"]
         parameters = learner["learner_model_param"]
         if int(parameters["num_target"]) != 1 or int(parameters["num_class"]) != 0:
-            raise ValueError("compiled v1 XGBoost requires one scalar regression output")
+            raise ValueError("compiled XGBoost requires one scalar regression output")
         objective = learner["objective"]["name"]
         if objective not in {"reg:squarederror", "reg:absoluteerror"}:
-            raise TypeError(f"compiled v1 does not support XGBoost objective {objective!r}")
+            raise TypeError(f"compiled backend does not support XGBoost objective {objective!r}")
         base_score = float(str(parameters["base_score"]).strip("[]"))
         trees = [json.loads(value) for value in booster.get_dump(dump_format="json")]
         children = []
@@ -250,7 +250,7 @@ class _Generator:
             return f"{indent}return {_number(node['leaf'])};"
         split = str(node["split"])
         if not split.startswith("f") or not split[1:].isdigit():
-            raise TypeError("compiled v1 XGBoost requires positional feature names")
+            raise TypeError("compiled XGBoost requires positional feature names")
         column = int(split[1:])
         if column >= self.input_width:
             raise ValueError("XGBoost feature index exceeds the FNOM input width")
@@ -274,7 +274,7 @@ class _Generator:
         dump = estimator.booster_.dump_model()
         objective = str(dump.get("objective", ""))
         if not objective.startswith(("regression", "l1", "huber", "fair", "quantile")):
-            raise TypeError(f"compiled v1 does not support LightGBM objective {objective!r}")
+            raise TypeError(f"compiled backend does not support LightGBM objective {objective!r}")
         children = []
         for item in dump["tree_info"]:
             child = f"{name}_lgb_tree_{int(item['tree_index'])}"
@@ -297,7 +297,7 @@ class _Generator:
         if "leaf_value" in node:
             return f"{indent}return {_number(node['leaf_value'])};"
         if str(node.get("decision_type", "<=")) != "<=":
-            raise TypeError("compiled v1 LightGBM does not support categorical splits")
+            raise TypeError("compiled LightGBM does not support categorical splits")
         column = int(node["split_feature"])
         if column >= self.input_width:
             raise ValueError("LightGBM feature index exceeds the FNOM input width")
@@ -320,7 +320,7 @@ class _Generator:
                 f"{'true' if default_left else 'false'} : {comparison}"
             )
         else:
-            raise TypeError(f"compiled v1 does not support LightGBM missing type {missing_type!r}")
+            raise TypeError(f"compiled LightGBM does not support missing type {missing_type!r}")
         return (
             f"{indent}if ({condition}) {{\n"
             + self._lightgbm_node(node["left_child"], indent + "  ")
@@ -335,7 +335,7 @@ class _Generator:
         tree = estimator.tree_
         values = np.asarray(tree.value)
         if values.shape[1:] != (1, 1):
-            raise ValueError("compiled v1 trees require one scalar output")
+            raise ValueError("compiled trees require one scalar output")
         name = f"{owner}_boost_tree_{index}"
         self.definitions.extend(
             (
@@ -385,7 +385,7 @@ class _Generator:
             tree = tree_estimator.tree_
             values = np.asarray(tree.value)
             if values.shape[1:] != (1, 1):
-                raise ValueError("compiled v1 forests require one scalar output")
+                raise ValueError("compiled forests require one scalar output")
             base = offsets[-1]
             left.extend(-1 if item < 0 else base + int(item) for item in tree.children_left)
             right.extend(-1 if item < 0 else base + int(item) for item in tree.children_right)
@@ -498,7 +498,7 @@ def generate_source(model: object, *, input_width: int, output_width: int) -> st
     if input_width < 1:
         raise ValueError("compiled models require at least one input feature")
     if output_width != 1:
-        raise ValueError("compiled v1 currently requires one scalar output")
+        raise ValueError("compiled backend currently requires one scalar output")
     generator = _Generator(input_width)
     root = generator.model(model)
     root_batch = generator.batches[root]
@@ -508,7 +508,7 @@ def generate_source(model: object, *, input_width: int, output_width: int) -> st
     if not template.is_file():
         template = package.parents[1] / "src/foamnordic/runtime/executor.hpp"
     executor = template.read_text(encoding="utf-8")
-    return f"""// Generated by FoamNordic compiled runtime v1. Do not edit.
+    return f"""// Generated by FoamNordic compiled runtime. Do not edit.
 #include <cstddef>
 #include <algorithm>
 #include <cmath>

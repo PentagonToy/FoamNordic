@@ -12,12 +12,12 @@ import foamnordic as fno
 class FunctionOperatorTests(unittest.TestCase):
     def test_unused_random_state_is_not_constructed(self) -> None:
         package = {
-            "schema": "foamnordic.function/v1",
+            "schema": "foamnordic.function",
             "function": lambda value: value + 1.0,
             "inputs": ("value",),
             "input_widths": (1,),
             "outputs": ("result",),
-            "seed": 42,
+            "key": fno.Random.key(42).to_plan(),
         }
         values = np.asarray([[1.0], [2.0]], dtype=np.float64)
         evaluator = _function_evaluator(package, (("result", 1),))
@@ -39,7 +39,7 @@ class FunctionOperatorTests(unittest.TestCase):
             return k + delta * production
 
         package = {
-            "schema": "foamnordic.function/v1",
+            "schema": "foamnordic.function",
             "function": keqn,
             "inputs": ("k", "velocity_grad", "delta"),
             "input_widths": (1, 9, 1),
@@ -56,7 +56,7 @@ class FunctionOperatorTests(unittest.TestCase):
             "output_layouts": (
                 {"kind": "scalar", "physical_shape": [], "transport_width": 1},
             ),
-            "seed": 42,
+            "key": fno.Random.key(42).to_plan(),
         }
         rows = 2
         k = np.asarray([[1.0], [2.0]])
@@ -89,14 +89,14 @@ class FunctionOperatorTests(unittest.TestCase):
             "transport_width": 6,
         }
         package = {
-            "schema": "foamnordic.function/v1",
+            "schema": "foamnordic.function",
             "function": identity,
             "inputs": ("stress",),
             "input_widths": (6,),
             "input_layouts": (layout,),
             "outputs": ("stress",),
             "output_layouts": (layout,),
-            "seed": 42,
+            "key": fno.Random.key(42).to_plan(),
         }
         values = np.arange(12, dtype=np.float64).reshape(2, 6)
         evaluator = _function_evaluator(package, (("stress", 6),))
@@ -105,18 +105,20 @@ class FunctionOperatorTests(unittest.TestCase):
 
         np.testing.assert_array_equal(actual, values)
 
-    def test_named_fields_and_seeded_rng_are_deterministic(self) -> None:
-        def perturb(velocity, *, rng, exchange_index, physical_time):
-            scale = rng.uniform(0.995, 1.005, size=(velocity.shape[0], 1))
+    def test_named_fields_and_random_key_are_deterministic(self) -> None:
+        def perturb(velocity, *, key, exchange_index, physical_time):
+            scale = fno.Random.uniform(
+                key, shape=(velocity.shape[0], 1), low=0.995, high=1.005
+            )
             return {"updated": velocity * scale + 0 * exchange_index + 0 * physical_time}
 
         package = {
-            "schema": "foamnordic.function/v1",
+            "schema": "foamnordic.function",
             "function": perturb,
             "inputs": ("velocity",),
             "input_widths": (3,),
             "outputs": ("updated",),
-            "seed": 42,
+            "key": fno.Random.key(42).to_plan(),
         }
         outputs = (("updated", 3),)
         values = np.arange(12, dtype=np.float64).reshape(4, 3)
@@ -133,12 +135,12 @@ class FunctionOperatorTests(unittest.TestCase):
             return np.column_stack((x_coordinate, pressure, x_coordinate + pressure))
 
         package = {
-            "schema": "foamnordic.function/v1",
+            "schema": "foamnordic.function",
             "function": predict,
             "inputs": ("x_coordinate", "pressure"),
             "input_widths": (1, 1),
             "outputs": ("velocity",),
-            "seed": 42,
+            "key": fno.Random.key(42).to_plan(),
         }
         evaluator = _function_evaluator(package, (("velocity", 3),))
         values = np.asarray([[1.0, 3.0], [2.0, 4.0]], dtype=np.float64)
@@ -157,7 +159,7 @@ class FunctionOperatorTests(unittest.TestCase):
 
         values = np.ones((3, 3), dtype=np.float64)
         base = {
-            "schema": "foamnordic.function/v1",
+            "schema": "foamnordic.function",
             "function": perturb,
             "program": "perturbVelocity",
             "inputs": ("velocity",),

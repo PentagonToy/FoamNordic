@@ -42,8 +42,6 @@ class AdapterContractTests(unittest.TestCase):
     def test_model_closure_infers_builtin_semantic_bindings(self, load) -> None:
         load.return_value = FnomArtifact(
             path=Path("model.fnom"),
-            container_version=2,
-            schema_version=1,
             name="model",
             format="onnx",
             inputs=(
@@ -73,7 +71,7 @@ class AdapterContractTests(unittest.TestCase):
     @patch("foamnordic.contracts.bindings.load")
     def test_inference_rejects_incompatible_tensor_width(self, load) -> None:
         artifact = FnomArtifact(
-            path=Path("model.fnom"), container_version=2, schema_version=1,
+            path=Path("model.fnom"),
             name="model", format="onnx",
             inputs=(TensorContract("velocity_grad", 6, "float32"),),
             outputs=(TensorContract("eddy_viscosity", 1, "float32"),),
@@ -90,7 +88,7 @@ class AdapterContractTests(unittest.TestCase):
     @patch("foamnordic.contracts.bindings.load")
     def test_inference_rejects_incomplete_builtin_contract(self, load) -> None:
         load.return_value = FnomArtifact(
-            path=Path("model.fnom"), container_version=2, schema_version=1,
+            path=Path("model.fnom"),
             name="model", format="onnx",
             inputs=(TensorContract("velocity_grad", 9, "float32"),),
             outputs=(TensorContract("eddy_viscosity", 1, "float32"),),
@@ -113,7 +111,7 @@ class AdapterContractTests(unittest.TestCase):
     @patch("foamnordic.contracts.bindings.load")
     def test_transform_infers_common_stored_fields(self, load) -> None:
         load.return_value = FnomArtifact(
-            path=Path("model.fnom"), container_version=2, schema_version=1,
+            path=Path("model.fnom"),
             name="model", format="onnx",
             inputs=(
                 TensorContract("pressure", 1, "float32"),
@@ -144,7 +142,7 @@ class AdapterContractTests(unittest.TestCase):
     @patch("foamnordic.contracts.bindings.load")
     def test_transform_rejects_unknown_semantics(self, load) -> None:
         load.return_value = FnomArtifact(
-            path=Path("model.fnom"), container_version=2, schema_version=1,
+            path=Path("model.fnom"),
             name="model", format="onnx",
             inputs=(TensorContract("mystery", 1, "float32"),),
             outputs=(TensorContract("temperature", 1, "float32"),),

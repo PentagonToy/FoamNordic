@@ -53,9 +53,8 @@ int main() {
     { std::ofstream stream(payload, std::ios::binary);
       stream.write(reinterpret_cast<const char*>(data.data()), data.size()); }
     inference::ModelArtifact artifact;
-    artifact.schema_version = 2;
     artifact.format = inference::ModelFormat::compiled;
-    artifact.runtime = "forest-v1";
+    artifact.runtime = "forest";
     artifact.artifact_path = "model.data";
     artifact.contract = {"forest", {{"x", fjord::Element::float64, 1}},
                          {{"y", fjord::Element::float64, 1}}};

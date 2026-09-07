@@ -60,11 +60,10 @@ This remains invariant across float precision, field scale, and MPI
 decomposition. A model-specific `atol` or `rtol` should be exposed explicitly
 only when its equations do not provide a defined zero-limit policy.
 
-For compatibility, existing declaration methods under `fno.Math` remain
-available. New code should use `fno.Field.grad("U")` for a native
-`FieldExpression`, while `fno.Math.symm(array)` evaluates immediately using the
-array's backend. Spatial derivatives of arbitrary arrays are not approximated
-in Python because they require the OpenFOAM mesh and discretisation scheme.
+Use `fno.Field.grad("U")` for a native `FieldExpression`, while
+`fno.Math.symm(array)` evaluates immediately using the array's backend. Spatial
+derivatives of arbitrary arrays are not approximated in Python because they
+require the OpenFOAM mesh and discretisation scheme.
 
 Expressions compose without manually constructing strings:
 
@@ -125,5 +124,4 @@ invocation key. `scope="rank"` additionally folds in the negotiated rank.
 automatically. NumPy and JAX are reproducible within their backend but do not
 promise bit-identical samples across backends.
 
-The `seed=` declaration and `rng`/`seed` function injections remain available
-for source compatibility. New code should pass `key=`.
+Stochastic declarations and function operators use `key=` exclusively.

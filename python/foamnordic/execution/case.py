@@ -752,7 +752,7 @@ def _package_function(
         )
         cloudpickle.dump(
             {
-                "schema": "foamnordic.function/v1",
+                "schema": "foamnordic.function",
                 "function": program.operator.source,
                 "inputs": tuple(program.inputs),
                 "input_widths": tuple(

@@ -14,8 +14,29 @@ payload together with tensor contracts, scaling, runtime requirements, and
 compatibility metadata. Fjord moves fields over shared memory, Unix sockets,
 UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
 
-Release baseline: `1.0.5` (Python 3.11–3.12).
-See [CHANGELOG.md](CHANGELOG.md) for release notes and upgrade guidance.
+Python 3.11 and 3.12 are supported. See [CHANGELOG.md](CHANGELOG.md) for
+release notes and upgrade guidance.
+
+```text
+                 Python declaration
+                         |
+                         v
+                     Longship
+                         |
+              +----------+----------+
+              |                     |
+              v                     v
+       +------------+         +------------+
+       |  OpenFOAM  |<------->| ModelHost  |
+       +------------+         +------------+
+              |                     |
+           fields                  FNOM
+              |                     |
+              +----------+----------+
+                         |
+                         v
+                       Result
+```
 
 ## Install
 
@@ -151,8 +172,7 @@ run = fno.Longship(case=case, scheduler=scheduler, transforms=(transform,)).laun
 ```
 
 Same-node bulk exchange uses shared memory; multi-node runs place a resident
-worker beside each node's solver ranks. The two-node identity gate has exact
-`U` and `p` parity on OpenFOAM v2512.
+worker beside each node's solver ranks.
 
 ## Development
 

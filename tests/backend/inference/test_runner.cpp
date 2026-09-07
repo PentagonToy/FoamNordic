@@ -408,7 +408,6 @@ void test_scaled_affine_exchange(bool shared_memory) {
         {1.0});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "artifact/reference-affine.onnx",
             {
@@ -560,7 +559,6 @@ void test_k_eqn_fjord_contract() {
         11, 3, std::move(weights), {0.0, 0.0, 0.0});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "artifact/kEqnFjord.onnx",
             {

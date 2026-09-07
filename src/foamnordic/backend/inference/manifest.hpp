@@ -32,10 +32,6 @@ struct BundlePayloadRegion {
 [[nodiscard]] ModelArtifact decode_manifest(
     std::span<const std::byte> bytes);
 
-void write_manifest(
-    const std::filesystem::path& path,
-    const ModelArtifact& artifact);
-
 void write_bundle(
     const std::filesystem::path& path,
     const ModelArtifact& artifact,

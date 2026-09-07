@@ -186,7 +186,7 @@ runtime were restored after the measurement.
 
 A startup microbenchmark on CSC Roihu login nodes used Python 3.12, NumPy
 2.5.2, Joblib 1.5.3, and a 32 MiB uncompressed array embedded in one
-`FNOBND2` file. The payload began at byte 192, a 64-byte boundary. Its Joblib
+FNOM file. The payload began at byte 192, a 64-byte boundary. Its Joblib
 array began 272 bytes into the payload and was mapped at absolute FNOM byte
 464. The mapped address was 16-byte aligned, the backing filename was the
 `.fnom` bundle itself, and prediction and end-to-end payload checks passed.

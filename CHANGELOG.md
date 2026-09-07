@@ -1,175 +1,56 @@
 # Changelog
 
-Release notes are maintained here and reused verbatim as GitHub release bodies.
-Version 1.0.5 establishes the documented distribution baseline; its feature
-summary consolidates earlier development rather than claiming every feature
-was introduced in this patch. Publication dates are recorded by GitHub releases.
+This file records user-visible changes. Internal refactors and historical
+protocol revisions are intentionally omitted; the documentation describes the
+current FoamNordic contract only.
 
 ## Unreleased
 
-### Native model execution
+### Execution and memory
 
-- Added FIFO receive/context admission, cancellable backend admission and
-  output-publication reservations that survive slow receivers and failure.
-- Added persistent compiled-estimator threads and bounded reusable forest
-  scratch; managed compiled workers now call the native C ABI without a Python
-  evaluation callback.
-- Added an explicit data-only `forest` export backend for scalar scikit-learn
-  ExtraTrees and RandomForest regression, with checked native loading.
-- Published successful native builds as immutable runtime generations, with
-  build locks, atomic selection and receipt-based unchanged-build detection.
+- Model requests announce their complete tensor count and payload size before
+  transfer, allowing the worker to admit or reject the request atomically.
+- Receive buffers, active execution storage, retained workspaces, and output
+  publication have bounded ownership. Idle workspace storage is released when
+  it would prevent an admissible request.
+- Floating-point model outputs are checked before publication. A non-finite or
+  malformed output leaves every OpenFOAM-owned destination unchanged.
+- Runtime generations are immutable. Active runs pin the selected generation;
+  cleanup preserves the current, recent, pinned, incomplete, and damaged
+  generations.
 
-- Added the Smedja model-execution boundary. Immutable tensor layouts are
-  compiled once, while tensor addresses and shapes are rebound and validated
-  for every invocation so dynamic OpenFOAM storage remains safe.
-- Moved field-name lookup outside the hot cell loop and added a zero-copy
-  ownership transfer for compatible single-output staging buffers.
-- Narrowed artefact-kernel serialisation to backend evaluation; request-local
-  packing, scaling, validation, and staging no longer share the worker lock.
-- Reused rank-local input workspace capacity across stable invocations, with
-  automatic downsizing after large dynamic-mesh requests.
-- Added a contiguous-cell Smedja packing path while preserving the general
-  sparse gather path and per-invocation topology validation.
-- Reused packed backend staging for the widest field during multi-output
-  unpacking, removing one full-field allocation without exposing aliases.
-- Allowed floating-point solver/model dtype differences to be converted during
-  Smedja packing, with a specialised three-scalar float64-to-float32 path.
-- Verified that changing payload sizes, including tensors larger than one SHM
-  slot, stream through one session without unsafe shared-region replacement.
-- Added internal surface-field dispatch alongside the existing volume-field
-  bridge and accepted zero-cell rank-local exchanges as valid no-op batches.
-- Added first-class boundary-patch metadata for closures and transforms.
-  Patch storage is rebound from the current mesh for every invocation, empty
-  rank-local patches remain valid, and explicit patch outputs are not replaced
-  by an implicit whole-field boundary correction.
-- Added an OpenFOAM `dynamicFvMesh` conformance probe that updates the mesh
-  before each patch exchange and verifies repeated rank-local SHM rebinding.
-- Verified the moving-mesh probe under MPI with a zero-face patch on one rank
-  and a non-empty copy of the same patch on its peer.
-- Fixed fresh `foamnordic build --without-onnx` installations by building the
-  always-installed native inference core independently of the ONNX ModelHost.
-- Made solver-field publication fully transactional across multiple outputs.
-  Element conversions and destination-storage aliasing are now rejected before
-  any OpenFOAM-owned field is modified.
-- Preserved backend synchronisation ownership through the public artefact
-  loader, keeping request preparation and output staging outside the narrow
-  model-evaluation lock.
-- Released retained Smedja packing storage for zero-cell rank partitions while
-  preserving safe workspace reuse and regrowth for subsequent mesh layouts.
-- Replaced rank-thread-local packing storage with a bounded execution-context
-  pool. Context and working-byte admission now constrain concurrent model work,
-  while explicit backend capabilities permit safe native concurrency without
-  multiplying ONNX or managed-runtime thread pools.
-- Bounded complete input exchanges before allocating each subsequent tensor
-  body, and made execution-context admission cancellable during fail-together
-  worker shutdown.
-- Added `foamnordic diff` for non-executing comparison of validated FNOM
-  manifests and streamed embedded-payload digests.
-- Bound static-width ONNX outputs directly to their final FoamNordic tensor
-  storage, removing one allocation and full output copy while preserving the
-  fallback for dynamically sized output features.
-- Added opt-in sampled ModelHost stage timing through
-  `Longship.launch(profile_every=N)`; disabled production runs do not read a
-  clock or update timing counters.
-- Added a ModelHost-wide pre-receive memory-credit pool. Rank runners now
-  reserve validated tensor payloads before body allocation, retain credit for
-  the atomic exchange, and wake together on cancellation. The limit is
-  configurable with `Longship.launch(receive_memory_bytes=N)`.
-- Made `clobber` remove the `current` selector together with its selected
-  immutable runtime generation, preventing a dangling active-runtime link.
-- Counted active execution estimates and idle retained workspace capacity under
-  one context budget, transferring ownership on lease acquisition and evicting
-  idle cache when it would block admissible work.
-- Added strict numerics planning. Strict runs reject missing derived-field
-  schemes; convenient runs record every actual `fvSchemes` insertion in
-  `numerics-changes.tsv` inside the immutable run directory.
-- Classified FNOM payload trust in non-executing inspection. Joblib, Equinox,
-  and portable C++ are reported as code-bearing while ONNX and native forests
-  are data-only; the existing execution API remains unchanged.
-- Pinned the exact runtime generation selected by an active run and added
-  conservative post-build GC that preserves current, recent, pinned,
-  incomplete, and damaged generations.
+### Reproducibility and artifacts
 
-### Solver boundary
+- `Longship(..., numerics="strict")` rejects a missing derived-field scheme.
+  The default convenient mode adds only required schemes and records actual
+  changes in `numerics-changes.tsv` inside the run directory.
+- FNOM inspection identifies data-only and code-bearing payloads without
+  executing them.
+- `foamnordic diff` compares validated manifests and payload digests without
+  loading the model.
+- Sampled ModelHost timing is available through
+  `Longship.launch(profile_every=N)`.
 
-- Advanced Rune to version 3 with request-level input admission. Solver
-  adapters announce the complete tensor count and payload size before sending
-  bodies, so independently admissible ranks are no longer held behind a
-  partial sender and malformed bodies cannot allocate beyond their reservation.
-- Reject non-finite floating-point model outputs before the atomic publication
-  boundary; no solver-owned output is updated when any result contains NaN or
-  infinity.
-- Fixed partial-exchange receive-credit deadlock with cancellable reception
-  ownership and cumulative request rejection. Completed and failed exchanges
-  release input storage before returning credit.
-- Removed concurrent reads of active workspace vector metadata; retention is
-  published at lease return. Added concurrent multi-rank SHM regression coverage.
-- Separated sampled context admission and backend lock waiting from inference.
+### Runtime and integration
 
-- FoamNordic now builds and installs only the solver-agnostic native runtime,
-  ModelHost, field hooks, and OpenFOAM adapter SDK. The bundled
-  progress-variable solver and combustion-model registrations moved out of
-  the common runtime and are owned by their domain solver project.
-- `Longship` uses one closure/transform contract for stock and custom solvers;
-  the progress-variable-specific `combustion=` branch was removed.
-- `foamnordic dir --runtime`, `--include`, and `--openfoam-library` provide
-  scriptable ABI-specific SDK paths, allowing external solver adapters to
-  build without a FoamNordic source checkout.
+- Native runtime builds are content-addressed and selected per OpenFOAM ABI.
+- Local and Slurm runs share the same lifecycle, readiness, shutdown, logging,
+  observation, and result contracts.
+- Generic transforms and equation-level closures use the same field-program
+  transport and model execution path.
 
-## [1.0.5]
+## 1.0.5
 
-FoamNordic 1.0.5 establishes the reference release baseline for packaging,
-installation, and the documented Python API. FoamNordic remains active research
-software; this baseline is not a guarantee for every OpenFOAM or HPC environment.
+FoamNordic 1.0.5 is the distribution baseline for CPython 3.11 and 3.12 on
+Linux x86_64, Linux aarch64, and Apple Silicon. Wheels contain the Python API,
+native control extension, and build kit. OpenFOAM and its matching compiler and
+MPI environment remain system dependencies.
 
-### Baseline capabilities
+Upgrade the Python package, restart long-lived Python processes, load the
+target OpenFOAM environment, and rebuild its integration:
 
-- A common `Longship` interface for baseline OpenFOAM cases, field transforms,
-  equation-level closures, and progress-variable combustion workflows.
-- Self-contained FNOM artefacts with input/output tensor contracts, scaling,
-  and runtime metadata. Export paths cover ONNX, sklearn-compatible estimators
-  (supported compiled models or Joblib), and Equinox models.
-- Local and Slurm execution, model placement, runtime observations, and result
-  collection, with generic field-program inference separated from closure hooks.
-- ABI-specific persistent OpenFOAM runtimes built with `foamnordic build` and
-  environment diagnostics through `foamnordic doctor`.
-
-### Packaging and runtime improvements
-
-- Wheels include the complete native build kit, including Longship sources.
-  Wheel CI compiles the installed runtime, adapter, inference library, and
-  Longship executable and checks its command-line entry point.
-- Native wheel distribution for CPython 3.11 and 3.12 on Linux x86_64,
-  Linux aarch64, and macOS arm64. Wheels provide the Python package, native
-  control extension, and build kit; the OpenFOAM integration is built locally.
-- Persistent runtimes include the Longship executable and retain custom
-  OpenFOAM runtime libraries.
-- Native builds respect the selected OpenFOAM compiler environment when
-  isolated Python environments introduce competing compiler paths.
-- Version consistency and changelog extraction checks accompany wheel
-  preparation. Release notes come from this changelog, not a separate summary.
-
-### Compatibility and upgrade notes
-
-- Earlier development names that treated all inference as closures have been
-  removed. Update integrations to the documented field-program/model-host API;
-  removed compatibility aliases are not restored by this release.
-- Upgrade the Python package and its `_native` extension together, then rebuild
-  the OpenFOAM runtime. `foamnordic build` is not a Python-package reinstall.
-  Restart Python processes and notebook kernels after upgrading.
-- For a regular virtual environment:
-
-  ```bash
-  python -m pip install --upgrade foamnordic==1.0.5
-  # Activate your supported OpenFOAM/compiler environment first.
-  foamnordic build
-  foamnordic doctor
-  ```
-
-- Tykky/container users must ensure the launcher selects matching Python and
-  native packages. Site-specific installation and migration instructions live
-  in [CSC-HPC-Guide](https://github.com/PentagonToy/CSC-HPC-Guide/tree/main/python-environment).
-  Changes to that installer are separate from this PyPI release.
-- OpenFOAM, its matching compiler/MPI environment, and optional execution
-  dependencies are not supplied by the Python wheel. This release does not
-  distribute Windows wheels or source distributions.
+```console
+python -m pip install --upgrade foamnordic
+foamnordic build
+foamnordic doctor
+```

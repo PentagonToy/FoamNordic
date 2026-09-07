@@ -13,8 +13,7 @@ except ImportError:
 
 
 _BUNDLE_MAGIC = {
-    b"FNOBND1\0": 1,
-    b"FNOBND2\0": 2,
+    b"FNOMBIN\0": 1,
 }
 
 
@@ -32,8 +31,6 @@ class FnomArtifact:
     """Validated, read-only metadata for one FoamNordic model artifact."""
 
     path: Path
-    container_version: int | None
-    schema_version: int
     name: str
     format: str
     inputs: tuple[TensorContract, ...]
@@ -56,7 +53,7 @@ class FnomArtifact:
         """Return whether loading the payload may execute supplied code."""
 
         return self.format in {"joblib", "equinox"} or (
-            self.format == "compiled" and self.runtime != "forest-v1"
+            self.format == "compiled" and self.runtime != "forest"
         )
 
     @property
@@ -116,7 +113,8 @@ def load(path: str | Path) -> FnomArtifact:
     metadata: Mapping[str, object] = native.read_model_manifest(str(selected))
     with selected.open("rb") as stream:
         prefix = stream.read(8)
-    container_version = _BUNDLE_MAGIC.get(prefix)
+    if prefix not in _BUNDLE_MAGIC:
+        raise ValueError("FNOM artifact does not use the canonical container")
     bundled = bool(metadata["bundled"])
     payload_offset: int | None = None
     payload_size: int | None = None
@@ -127,8 +125,6 @@ def load(path: str | Path) -> FnomArtifact:
 
     return FnomArtifact(
         path=selected,
-        container_version=container_version,
-        schema_version=int(metadata["schema_version"]),
         name=str(metadata["name"]),
         format=str(metadata["format"]),
         inputs=_ports(metadata["inputs"]),

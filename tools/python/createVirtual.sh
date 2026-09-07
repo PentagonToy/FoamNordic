@@ -115,7 +115,7 @@ import sys
 root = Path(sys.argv[1]).resolve()
 (root / ".foamnordic-generated.json").write_text(
     json.dumps(
-        {"schema_version": 1, "kind": "virtual-environment", "root": str(root)},
+        {"kind": "virtual-environment", "root": str(root)},
         indent=2,
         sort_keys=True,
     ) + "\n",

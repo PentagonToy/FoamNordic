@@ -117,7 +117,6 @@ void test_resident_worker_lifecycle() {
     foamnordic::inference::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
@@ -133,7 +132,6 @@ void test_resident_worker_lifecycle() {
         foamnordic::inference::ModelWorker worker(
             foamnordic::fjord::FjordAddress::local(socket_path.string()),
             {
-                1,
                 foamnordic::inference::ModelFormat::onnx,
                 "reference.onnx",
                 contract,
@@ -212,7 +210,6 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
     foamnordic::inference::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
@@ -231,7 +228,6 @@ void test_one_resident_host_serves_multiple_solver_ranks() {
         foamnordic::inference::ModelWorker worker(
             foamnordic::fjord::FjordAddress::local(socket_path.string()),
             {
-                1,
                 foamnordic::inference::ModelFormat::onnx,
                 "reference.onnx",
                 contract,
@@ -322,7 +318,6 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
     foamnordic::inference::DenseAffineKernel affine(2, 1, {2.0, -1.0}, {0.5});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,
@@ -346,7 +341,6 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
     foamnordic::inference::ModelWorker worker(
         worker_address,
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "reference.onnx",
             contract,

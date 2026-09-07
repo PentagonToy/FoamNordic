@@ -11,7 +11,7 @@ from typing import Mapping
 from ..core.layout import FieldLayout, field_layout
 
 
-_SCHEMA = "foamnordic.openfoam-adapters/v1"
+_SCHEMA = "foamnordic.openfoam-adapters"
 
 
 @dataclass(frozen=True, slots=True)

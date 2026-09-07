@@ -26,17 +26,12 @@ namespace {
 
 constexpr std::array<std::byte, 8> magic{
     std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'M'},
-    std::byte{'A'}, std::byte{'N'}, std::byte{'1'}, std::byte{0},
-};
-constexpr std::array<std::byte, 8> legacy_bundle_magic{
-    std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'},
-    std::byte{'N'}, std::byte{'D'}, std::byte{'1'}, std::byte{0},
+    std::byte{'M'}, std::byte{'E'}, std::byte{'T'}, std::byte{'A'},
 };
 constexpr std::array<std::byte, 8> bundle_magic{
-    std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'},
-    std::byte{'N'}, std::byte{'D'}, std::byte{'2'}, std::byte{0},
+    std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'M'},
+    std::byte{'B'}, std::byte{'I'}, std::byte{'N'}, std::byte{0},
 };
-constexpr std::uint64_t legacy_bundle_header_bytes = 24;
 constexpr std::uint64_t bundle_header_bytes = 32;
 constexpr std::uint64_t bundle_payload_alignment = 64;
 constexpr std::uint32_t maximum_entries = 65536;
@@ -162,20 +157,16 @@ BundleLayout read_bundle_layout(
     const auto count = static_cast<std::streamsize>(
         std::min<std::uint64_t>(file_bytes, header.size()));
     stream.read(reinterpret_cast<char*>(header.data()), count);
-    if (stream.gcount() < static_cast<std::streamsize>(legacy_bundle_magic.size())) {
+    if (stream.gcount() < static_cast<std::streamsize>(bundle_magic.size())) {
         throw std::runtime_error("FNOM bundle is truncated: " + path.string());
     }
 
     const auto prefix = std::span<const std::byte>(header).first(8);
-    const bool legacy = std::ranges::equal(prefix, legacy_bundle_magic);
-    const bool current = std::ranges::equal(prefix, bundle_magic);
-    if (!legacy && !current) {
+    if (!std::ranges::equal(prefix, bundle_magic)) {
         throw std::invalid_argument("FNOM file does not contain an embedded payload.");
     }
 
-    const auto required_header = legacy
-                                     ? legacy_bundle_header_bytes
-                                     : bundle_header_bytes;
+    const auto required_header = bundle_header_bytes;
     if (file_bytes < required_header
         || stream.gcount() < static_cast<std::streamsize>(required_header)) {
         throw std::runtime_error("FNOM bundle is truncated: " + path.string());
@@ -184,7 +175,7 @@ BundleLayout read_bundle_layout(
     Reader values(std::span<const std::byte>(header).subspan(
         8, static_cast<std::size_t>(required_header - 8)));
     const auto manifest_bytes = values.u64();
-    auto payload_offset = legacy ? 0 : values.u64();
+    const auto payload_offset = values.u64();
     const auto payload_bytes = values.u64();
 
     if (manifest_bytes == 0 || manifest_bytes > maximum_manifest_bytes
@@ -193,15 +184,11 @@ BundleLayout read_bundle_layout(
         throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
     }
     const auto manifest_end = required_header + manifest_bytes;
-    if (legacy) {
-        payload_offset = manifest_end;
-    }
     if (payload_offset < manifest_end || payload_offset > file_bytes
         || payload_bytes != file_bytes - payload_offset) {
         throw std::runtime_error("FNOM bundle size is invalid: " + path.string());
     }
-    if (!legacy
-        && payload_offset != align_up(manifest_end, bundle_payload_alignment)) {
+    if (payload_offset != align_up(manifest_end, bundle_payload_alignment)) {
         throw std::runtime_error("FNOM bundle payload alignment is invalid: " + path.string());
     }
     stream.clear();
@@ -374,7 +361,6 @@ std::vector<std::byte> encode_manifest(const ModelArtifact& artifact) {
     artifact.validate();
     Writer writer;
     writer.raw(magic);
-    writer.u32(artifact.schema_version);
     writer.u8(encode_format(artifact.format));
     writer.string(artifact.artifact_path);
     writer.string(artifact.contract.name);
@@ -399,9 +385,7 @@ std::vector<std::byte> encode_manifest(const ModelArtifact& artifact) {
         writer.u64(leaf.byte_offset);
         writer.u64(leaf.byte_count);
     }
-    if (artifact.schema_version >= 2) {
-        writer.string(artifact.runtime);
-    }
+    writer.string(artifact.runtime);
     return std::move(writer).finish();
 }
 
@@ -414,7 +398,6 @@ ModelArtifact decode_manifest(std::span<const std::byte> bytes) {
         throw std::invalid_argument("Manifest magic is invalid.");
     }
     ModelArtifact artifact;
-    artifact.schema_version = reader.u32();
     artifact.format = decode_format(reader.u8());
     artifact.artifact_path = reader.string();
     artifact.contract.name = reader.string();
@@ -443,30 +426,12 @@ ModelArtifact decode_manifest(std::span<const std::byte> bytes) {
         leaf.byte_count = reader.u64();
         artifact.tree_leaves.push_back(std::move(leaf));
     }
-    if (artifact.schema_version >= 2) {
-        artifact.runtime = reader.string();
-    }
+    artifact.runtime = reader.string();
     if (!reader.empty()) {
         throw std::invalid_argument("Manifest contains trailing data.");
     }
     artifact.validate();
     return artifact;
-}
-
-void write_manifest(
-    const std::filesystem::path& path,
-    const ModelArtifact& artifact) {
-    const auto bytes = encode_manifest(artifact);
-    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-    if (!stream) {
-        throw std::runtime_error("Could not open manifest for writing: " + path.string());
-    }
-    stream.write(
-        reinterpret_cast<const char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size()));
-    if (!stream) {
-        throw std::runtime_error("Could not write manifest: " + path.string());
-    }
 }
 
 ModelArtifact read_manifest(const std::filesystem::path& path) {
@@ -485,17 +450,12 @@ ModelArtifact read_manifest(const std::filesystem::path& path) {
     if (!stream) {
         throw std::runtime_error("Could not read manifest: " + path.string());
     }
-    std::uint64_t manifest_bytes = file_bytes;
-    if (prefix == legacy_bundle_magic || prefix == bundle_magic) {
-        const auto layout = read_bundle_layout(stream, path, file_bytes);
-        manifest_bytes = layout.manifest_bytes;
-        stream.seekg(static_cast<std::streamoff>(layout.header_bytes));
-    } else {
-        if (file_bytes > maximum_manifest_bytes) {
-            throw std::runtime_error("Manifest file size is invalid: " + path.string());
-        }
-        stream.seekg(0);
+    if (prefix != bundle_magic) {
+        throw std::invalid_argument("FNOM file is not a self-contained bundle: " + path.string());
     }
+    const auto layout = read_bundle_layout(stream, path, file_bytes);
+    const auto manifest_bytes = layout.manifest_bytes;
+    stream.seekg(static_cast<std::streamoff>(layout.header_bytes));
     std::vector<std::byte> bytes(static_cast<std::size_t>(manifest_bytes));
     stream.read(
         reinterpret_cast<char*>(bytes.data()),
@@ -513,7 +473,7 @@ bool is_bundle(const std::filesystem::path& path) {
     }
     std::array<std::byte, 8> prefix{};
     stream.read(reinterpret_cast<char*>(prefix.data()), prefix.size());
-    return stream && (prefix == legacy_bundle_magic || prefix == bundle_magic);
+    return stream && prefix == bundle_magic;
 }
 
 BundlePayloadRegion bundle_payload_region(const std::filesystem::path& path) {
