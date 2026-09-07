@@ -34,6 +34,6 @@ Microbenchmarks report `median ± maximum deviation` over at least seven warm ru
 
 ## Current validation
 
-The native gate ran 223 Python tests, 17 native tests and `foamnordic doctor` on the MacBook and a Roihu CPU node. Jobs `1092472` and `1093015` covered two-node TCP and UCX. Interactive job `1095041` covered the 16-rank OpenFOAM comparisons.
+The native gate ran 223 Python tests, 17 native tests and `foamnordic doctor` on the MacBook and a Roihu CPU node. Jobs `1092472` and `1093015` covered two-node TCP and UCX. Interactive job `1095041` covered the 16-rank Smagorinsky and kEqn comparisons; job `1098732` added the repeated WALE performance comparison.
 
 Return to the [documentation index](../README.md).

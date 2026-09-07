@@ -39,6 +39,17 @@ The end-to-end wall ratio was `1.675`; the OpenFOAM execution-time ratio was `1.
 
 The standard OpenFOAM WALE model used `Cw=0.325`; FNO-coupled evaluated the same float64 velocity-gradient invariant expression through `nutFjord`.
 
+#### Performance
+
+Each path received one warm-up followed by seven measured 400-step runs in alternating order.
+
+| Path | End-to-end wall | OpenFOAM execution | OpenFOAM clock |
+|---|---:|---:|---:|
+| OF/FNO `WALE` | 5.684 ± 0.051 s | 2.770 ± 0.020 s | 3 ± 0 s |
+| FNO-coupled `nutFjord` | 9.480 ± 0.841 s | 4.370 ± 0.820 s | 5 ± 1 s |
+
+The end-to-end wall ratio was `1.668`; the OpenFOAM execution-time ratio was `1.578`. All seven measured pairs produced identical final-field metrics.
+
 #### Relative L2 error
 
 | Field | 1 step | 10 steps | 100 steps | 400 steps |
@@ -55,7 +66,7 @@ The standard OpenFOAM WALE model used `Cw=0.325`; FNO-coupled evaluated the same
 | `p` | 5.267e-14 | 6.376e-12 | 2.318e-12 | 3.211e-12 |
 | `nut` | 1.597e-6 | 2.380e-6 | 3.246e-6 | 4.146e-6 |
 
-The columns correspond to physical times `1e-5`, `1e-4`, `1e-3` and `4e-3`. All values were finite and the direct float64 functions remained nonnegative. The runnable scripts are `tools/hpc/benchmarkSmagorinskyInteractive.sh` and `tools/hpc/validateNutClosure.sh`.
+The columns correspond to physical times `1e-5`, `1e-4`, `1e-3` and `4e-3`. All values were finite and the direct float64 functions remained nonnegative. The runnable scripts are `tools/hpc/benchmarkSmagorinskyInteractive.sh`, `tools/hpc/benchmarkWaleInteractive.sh` and `tools/hpc/validateNutClosure.sh`.
 
 ## NACA4412 kEqn closure
 
