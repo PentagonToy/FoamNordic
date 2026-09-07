@@ -481,7 +481,7 @@ def _display_export(
         ("Input scaler", "none" if input_scaler is None else input_scaler["kind"]),
         ("Output scaler", "none" if output_scaler is None else output_scaler["kind"]),
         ("Compression", "none (load once at worker startup)"),
-        ("Payload size", f"{model.stat().st_size} B"),
+        ("Payload size", f"{model.stat().st_size / 1024**2:.2f} MiB"),
     ]
     if metadata.get("runtime") is not None:
         rows.insert(3, ("Runtime", metadata["runtime"]))
