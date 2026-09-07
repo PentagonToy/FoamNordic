@@ -20,20 +20,20 @@ The preserved pre-refactor records are in [`benchmarks-legacy`](../benchmarks-le
 
 Roihu jobs use only the resources stated with each result. The relevant partitions are:
 
-| Partition | Nodes | CPU and memory | Limit | Use here |
-|---|---:|---|---:|---|
-| `interactive` | 1 | up to 32 CPUs and 64 GiB | 36 h | debugging |
-| `test` | 1 ~ 2 | up to 384 CPUs and 744 GiB per node | 15 min | short CPU validation and microbenchmarks |
-| `small` | 1 | up to 384 CPUs and 1,500 GiB | 72 h | one-node measurements |
-| `medium` | 1 ~ 6 | full nodes, 384 CPUs and 744 GiB per node | 36 h | multi-node measurements |
-| `gputest` | 1 ~ 2 | 1 ~ 4 GH200 GPUs per node; 217 GiB per GPU | 15 min | GPU validation |
+| Partition | Nodes | CPU and memory | Limit |
+|---|---:|---|---|
+| `interactive` | 1 | up to 32 CPUs and 64 GiB | 36 h |
+| `test` | 1 ~ 2 | up to 384 CPUs and 744 GiB per node | 15 min |
+| `small` | 1 | up to 384 CPUs and 1,500 GiB | 72 h |
+| `medium` | 1 ~ 6 | full nodes, 384 CPUs and 744 GiB per node | 36 h |
+| `gputest` | 1 ~ 2 | 1 ~ 4 GH200 GPUs per node; 217 GiB per GPU | 15 min |
 
 ## Method
 
-Correctness must pass before timing. Microbenchmarks report the median and range of at least seven warm runs. OpenFOAM comparisons keep the case, allocation, decomposition and output policy identical, and report solver, model and orchestration time separately.
+Correctness must pass before timing. Microbenchmarks report the median and the maximum observed deviation from that median as `median ± deviation` over at least seven warm runs. OpenFOAM comparisons keep the case, allocation, decomposition and output policy identical, and report solver, model and orchestration time separately.
 
 ## Current validation
 
-The post-refactor native gate passed on the MacBook and one Roihu CPU node. Job `1087903` passed 223 Python tests, 17 native tests and `foamnordic doctor`. Multi-node and OpenFOAM performance gates remain pending.
+The post-refactor native gate passed on the MacBook and one Roihu CPU node. Job `1087903` passed 223 Python tests, 17 native tests and `foamnordic doctor`. The two-node TCP and UCX gates passed in jobs `1092472` and `1093015`. Interactive job `1095041` completed the first repeated 16-rank NACA4412 OpenFOAM-via-FoamNordic versus FoamNordic-coupled comparison; its performance and numerical results are recorded in the [OpenFOAM benchmark](openfoam.md).
 
 Return to the [documentation index](../README.md).

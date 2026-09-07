@@ -83,6 +83,7 @@ case = fno.OpenFOAM.Case(
     case_dir=Path("cases/lidDrivenCavity"),
     run_dir=Path("output"),
     of_cmd="openfoam/2512",
+    shell="bash", # HPC: bash | macOS: zsh
     application="pimpleFoam",
 )
 case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
