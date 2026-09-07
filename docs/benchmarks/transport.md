@@ -13,9 +13,7 @@ The atomic-exchange benchmark sends three 400-cell float64 inputs and returns on
 | Roihu CPU | SHM, same process | 260,248 ± 12,690 | 3,176.9 ± 154.9 |
 | Roihu CPU | SHM, separate processes | 219,305 ± 29,860 | 2,677.1 ± 364.5 |
 
-The separate-process path exercises the production POSIX shared-memory mapping, wake path, atomic completion frame and receive-side ownership lifetime.
-
-Both measurements used runtime commit `89cf240` and a Release build. Roihu job `1089143` requested one `small` node, 8 CPUs and 32 GiB. All integrity checks passed; the wider separate-process range is retained in the table.
+The separate-process path uses the production POSIX shared-memory, wake and completion paths. Both measurements used commit `89cf240` and a Release build. Roihu job `1089143` requested one `small` node, 8 CPUs and 32 GiB.
 
 ## Cross-node channels
 
@@ -26,6 +24,6 @@ Both measurements used runtime commit `89cf240` and a Release build. Roihu job `
 | Roihu CPU, two nodes | UCX | 3,200 B | 100,000 | 80,520 ± 884 | 491.46 ± 5.39 |
 | Roihu CPU, two nodes | UCX | 1 MiB | 100 | 4,334 ± 104 | 8,668.83 ± 207.72 |
 
-Both measurements used runtime commit `89cf240` on two `medium` nodes, `rc5171` and `rc5172`, each with AMD EPYC 9965 processors. Each row is the median and range of seven warm runs. TCP job `1092472` finished in 3 minutes 24 seconds, and UCX job `1093015` finished in 39 seconds; both durations include configuration and compilation. UCX 1.20.0 used the `ib0` fabric address with `UCX_TLS=rc,ud,sm,self`, which excludes its TCP transport. The UCX data plane delivered 18.9 times the small-exchange rate and 78.6 times the large-payload throughput of TCP under this test. Both paths passed payload integrity, exchange identity and clean-shutdown checks.
+Both measurements used commit `89cf240` on two `medium` nodes, `rc5171` and `rc5172`. TCP job `1092472` took 3 minutes 24 seconds; UCX job `1093015` took 39 seconds, including configuration and compilation. UCX 1.20.0 used `ib0` with `UCX_TLS=rc,ud,sm,self`. UCX delivered 18.9 times the small-exchange rate and 78.6 times the large-payload throughput of TCP.
 
 These are FoamNordic data-plane measurements rather than standalone `ucx_perftest` results.

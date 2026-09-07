@@ -164,20 +164,38 @@ def write_markdown(
             "",
             "## Integrated trajectory",
             "",
-            "| Steps | Time | Field | Relative L2 error | Peak-relative error |",
-            "| ---: | ---: | --- | ---: | ---: |",
+            "### Relative L2 error",
+            "",
+            "| Field | " + " | ".join(f"{record['steps']} steps" for record in records) + " |",
+            "| --- | " + " | ".join("---:" for _ in records) + " |",
         ]
     )
-    for record in records:
-        for field in FIELDS:
-            values = record["fields"][field]
-            lines.append(
-                f"| {record['steps']} | {record['physical_time']:.6g} | {field} | "
-                f"{scientific(values['relative_l2'])} | "
-                f"{scientific(values['peak_relative'])} |"
-            )
+    for field in FIELDS:
+        values = " | ".join(
+            scientific(record["fields"][field]["relative_l2"])
+            for record in records
+        )
+        lines.append(f"| `{field}` | {values} |")
     lines.extend(
         [
+            "",
+            "### Peak-relative error",
+            "",
+            "| Field | " + " | ".join(f"{record['steps']} steps" for record in records) + " |",
+            "| --- | " + " | ".join("---:" for _ in records) + " |",
+        ]
+    )
+    for field in FIELDS:
+        values = " | ".join(
+            scientific(record["fields"][field]["peak_relative"])
+            for record in records
+        )
+        lines.append(f"| `{field}` | {values} |")
+    times = ", ".join(f"`{record['physical_time']:.6g}`" for record in records)
+    lines.extend(
+        [
+            "",
+            f"The columns correspond to physical times {times}, respectively.",
             "",
             "The one-step result covers packing, Fjord exchange, evaluation, publication, and OpenFOAM field application. Later checkpoints show how small coupled-path rounding differences accumulate through nonlinear time integration.",
             "",

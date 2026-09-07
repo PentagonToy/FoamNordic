@@ -145,15 +145,25 @@ def write_outputs(root: Path, report: dict[str, object]) -> None:
         "# nutFjord numerical validation",
         "",
         "OpenFOAM via FoamNordic (OF/FNO) uses the standard OpenFOAM LES model. FNO-coupled replaces its eddy-viscosity evaluation with the corresponding float64 function through nutFjord.",
-        "",
-        "| Model | Steps | Time | Field | Relative L2 error | Peak-relative error |",
-        "| --- | ---: | ---: | --- | ---: | ---: |",
     ]
     for model, record in report["models"].items():
-        for point in record["trajectory"]:
+        trajectory = record["trajectory"]
+        headings = " | ".join(f"{point['steps']} step" if point["steps"] == 1 else f"{point['steps']} steps" for point in trajectory)
+        alignment = " | ".join("---:" for _ in trajectory)
+        lines.extend(["", f"## {model}", ""])
+        for title, metric in (("Relative L2 error", "relative_l2"), ("Peak-relative error", "peak_relative")):
+            lines.extend([
+                f"### {title}",
+                "",
+                f"| Field | {headings} |",
+                f"| --- | {alignment} |",
+            ])
             for field in FIELDS:
-                values = point["fields"][field]
-                lines.append(f"| {model} | {point['steps']} | {point['physical_time']:.6g} | {field} | {values['relative_l2']:.3e} | {values['peak_relative']:.3e} |")
+                values = " | ".join(f"{point['fields'][field][metric]:.3e}" for point in trajectory)
+                lines.append(f"| `{field}` | {values} |")
+            lines.append("")
+        times = ", ".join(f"`{point['physical_time']:.6g}`" for point in trajectory)
+        lines.append(f"The columns correspond to physical times {times}, respectively.")
     lines.append("")
     (root / "README.md").write_text("\n".join(lines), encoding="utf-8")
 

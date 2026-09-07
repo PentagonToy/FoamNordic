@@ -1,6 +1,6 @@
 # Benchmarks and validation
 
-This directory is the post-refactor benchmark record for FoamNordic. The measurement series starts at commit `89cf240` and does not silently mix older results with the current runtime, transport, ownership, or artefact lifecycle.
+These records use the post-refactor runtime beginning at commit `89cf240`.
 
 | Record | Scope |
 |---|---|
@@ -8,7 +8,7 @@ This directory is the post-refactor benchmark record for FoamNordic. The measure
 | [Runtime](runtime.md) | Field preparation, model execution, memory and artefacts |
 | [OpenFOAM](openfoam.md) | Solver, MPI and end-to-end coupled comparisons |
 
-The preserved pre-refactor records are in [`benchmarks-legacy`](../benchmarks-legacy/README.md). They are historical context, not the current performance baseline.
+Pre-refactor records are preserved in [`benchmarks-legacy`](../benchmarks-legacy/README.md).
 
 ## Systems
 
@@ -30,10 +30,10 @@ Roihu jobs use only the resources stated with each result. The relevant partitio
 
 ## Method
 
-Correctness must pass before timing. Microbenchmarks report the median and the maximum observed deviation from that median as `median ± deviation` over at least seven warm runs. OpenFOAM comparisons keep the case, allocation, decomposition and output policy identical, and report solver, model and orchestration time separately.
+Microbenchmarks report `median ± maximum deviation` over at least seven warm runs. OpenFOAM comparisons keep the case, allocation, decomposition and output policy identical.
 
 ## Current validation
 
-The post-refactor native gate passed on the MacBook and one Roihu CPU node. Job `1087903` passed 223 Python tests, 17 native tests and `foamnordic doctor`. The two-node TCP and UCX gates passed in jobs `1092472` and `1093015`. Interactive job `1095041` completed the first repeated 16-rank NACA4412 OpenFOAM-via-FoamNordic versus FoamNordic-coupled comparison; its performance and numerical results are recorded in the [OpenFOAM benchmark](openfoam.md).
+The native gate ran 223 Python tests, 17 native tests and `foamnordic doctor` on the MacBook and a Roihu CPU node. Jobs `1092472` and `1093015` covered two-node TCP and UCX. Interactive job `1095041` covered the 16-rank OpenFOAM comparisons.
 
 Return to the [documentation index](../README.md).
