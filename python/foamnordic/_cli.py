@@ -471,7 +471,7 @@ def _native_build_environment() -> dict[str, str]:
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
     if args.dry_run:
         return _build_direct(args, stream)
-    from .build.generations import complete, dependency_identity, fingerprint, locked, publish, tool_identity
+    from .build.generations import collect_garbage, complete, dependency_identity, fingerprint, locked, publish, tool_identity
     import uuid
 
     source = _source_root(args.source)
@@ -504,6 +504,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         result = _build_direct(modified, stream)
         if result == 0:
             publish(root, generation, identity)
+            collect_garbage(root)
         return result
 
 
@@ -833,6 +834,8 @@ def _artifact_record(artifact) -> dict[str, object]:
         "container_version": artifact.container_version,
         "schema_version": artifact.schema_version,
         "backend": artifact.backend,
+        "executable_payload": artifact.executable_payload,
+        "trust_policy": artifact.trust_policy,
         "runtime": artifact.runtime,
         "bundled": artifact.bundled,
         "size": artifact.size,
@@ -881,6 +884,7 @@ def _inspect_fnom(args: argparse.Namespace, stream: TextIO) -> int:
         ),
         ("Manifest", f"schema {artifact.schema_version}"),
         ("Backend", artifact.backend),
+        ("Trust", artifact.trust_policy),
         ("Runtime", artifact.runtime or "default"),
         ("Inputs", inputs),
         ("Outputs", outputs),

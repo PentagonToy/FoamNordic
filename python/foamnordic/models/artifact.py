@@ -52,6 +52,20 @@ class FnomArtifact:
         return self.format
 
     @property
+    def executable_payload(self) -> bool:
+        """Return whether loading the payload may execute supplied code."""
+
+        return self.format in {"joblib", "equinox"} or (
+            self.format == "compiled" and self.runtime != "forest-v1"
+        )
+
+    @property
+    def trust_policy(self) -> str:
+        """Return the execution policy required by this backend."""
+
+        return "explicit-trust-required" if self.executable_payload else "data-only"
+
+    @property
     def size(self) -> int:
         """Return the complete FNOM file size in bytes."""
 

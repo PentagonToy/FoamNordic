@@ -113,7 +113,8 @@ run = fno.Longship(case=case, transforms=(transform,)).launch()
 ```
 
 FNOM selects compiled C++, ONNX, Joblib, or Equinox internally, so model
-loading does not alter the solver-facing API. Stochastic functions use
+loading does not alter the solver-facing API. `foamnordic inspect` reports
+whether a backend is data-only or code-bearing. Stochastic functions use
 `fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
 
 External solvers can add an equation-level adapter without including the

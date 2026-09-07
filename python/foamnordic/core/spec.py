@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field as dataclass_field
 import hashlib
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Callable, Mapping
+from typing import TYPE_CHECKING, Callable, Literal, Mapping
 
 from .. import openfoam
 from ..contracts import infer_model_bindings, infer_transform_bindings
@@ -529,6 +529,7 @@ class Longship:
     scheduler: Slurm | None = None
     name: str | None = None
     verbose: bool = False
+    numerics: Literal["convenient", "strict"] = "convenient"
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -541,6 +542,8 @@ class Longship:
         object.__setattr__(self, "observations", tuple(self.observations))
         if not isinstance(self.verbose, bool):
             raise TypeError("verbose must be a boolean")
+        if self.numerics not in {"convenient", "strict"}:
+            raise ValueError("numerics must be 'convenient' or 'strict'")
         programs = self.field_programs
         names = [program.name for program in programs]
         if len(names) != len(set(names)):
@@ -584,6 +587,7 @@ class Longship:
             "observations": [item.to_plan() for item in self.observations],
             "placement": self.placement.to_plan(),
             "scheduler": None if self.scheduler is None else self.scheduler.to_plan(),
+            "numerics": self.numerics,
             "runtime": runtime,
         }
         return CompiledPlan.create(value)

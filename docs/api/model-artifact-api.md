@@ -16,12 +16,18 @@ print(artifact.schema_version)
 print(artifact.backend)
 print(artifact.inputs)
 print(artifact.outputs)
+print(artifact.trust_policy)
 
 artifact.validate()
 ```
 
 `FnomArtifact` is immutable. `validate()` re-reads the file through the native
 FNOM parser without importing or executing its embedded backend payload.
+Joblib, Equinox, and portable C++ payloads are classified as code-bearing;
+ONNX and native `forest-v1` payloads are classified as data-only.
+`foamnordic inspect` reports this distinction. Calling `Operator.model()` or
+`foamnordic compile` is the execution decision; no redundant trust flag is
+required.
 
 OpenFOAM scalar precision and model precision may differ. The native exchange
 boundary accepts `float32` and `float64` model contracts with either

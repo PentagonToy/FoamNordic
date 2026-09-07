@@ -77,6 +77,18 @@ was introduced in this patch. Publication dates are recorded by GitHub releases.
   configurable with `Longship.launch(receive_memory_bytes=N)`.
 - Made `clobber` remove the `current` selector together with its selected
   immutable runtime generation, preventing a dangling active-runtime link.
+- Counted active execution estimates and idle retained workspace capacity under
+  one context budget, transferring ownership on lease acquisition and evicting
+  idle cache when it would block admissible work.
+- Added strict numerics planning. Strict runs reject missing derived-field
+  schemes; convenient runs record every actual `fvSchemes` insertion in
+  `numerics-changes.tsv` inside the immutable run directory.
+- Classified FNOM payload trust in non-executing inspection. Joblib, Equinox,
+  and portable C++ are reported as code-bearing while ONNX and native forests
+  are data-only; the existing execution API remains unchanged.
+- Pinned the exact runtime generation selected by an active run and added
+  conservative post-build GC that preserves current, recent, pinned,
+  incomplete, and damaged generations.
 
 ### Solver boundary
 

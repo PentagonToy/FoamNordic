@@ -1110,6 +1110,24 @@ class PlanTests(unittest.TestCase):
         self.assertIn("foamnordic_default", commands)
         self.assertNotIn("-entry divSchemes/default -set", commands)
 
+        recorded = "\n".join(
+            _scheme_commands(longship, Path("/runs/case"), Path("/runs/work"))
+        )
+        self.assertIn("numerics-changes.tsv", recorded)
+
+        strict = fno.Longship(
+            case=example.case, closures=(closure,), numerics="strict"
+        )
+        strict_commands = "\n".join(
+            _scheme_commands(strict, Path("/runs/case"), Path("/runs/work"))
+        )
+        self.assertIn("strict numerics", strict_commands)
+        self.assertNotIn("numerics-changes.tsv", strict_commands)
+        self.assertNotIn("-set 'Gauss linear'", strict_commands)
+
+        with self.assertRaisesRegex(ValueError, "numerics"):
+            fno.Longship(case=example.case, numerics="relaxed")
+
     def test_ntasks_must_divide_evenly_across_nodes(self) -> None:
         with self.assertRaisesRegex(ValueError, "divide evenly"):
             fno.Slurm(

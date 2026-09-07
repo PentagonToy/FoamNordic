@@ -35,6 +35,7 @@ separately.
 ```python
 artifact = fno.Models.load("model.fnom")
 artifact.backend
+artifact.trust_policy
 artifact.inputs
 artifact.outputs
 artifact.validate()
@@ -44,6 +45,12 @@ artifact.validate()
 scalers, tree metadata, and payload layout. It deliberately does not unpickle
 Joblib or Equinox payloads, compile C++ source, or execute an ONNX graph.
 Backend loading remains an execution-time validation performed by ModelHost.
+
+Validation is non-executing. Portable C++ (`compiled/cpp-v1`), Joblib, and
+Equinox payloads are code-bearing; ONNX and the checked native `forest-v1`
+graph are data-only formats. The distinction is exposed by inspection, while
+the explicit `Operator.model()` or `foamnordic compile` call remains the trust
+decision and keeps the solver-facing API backend-neutral.
 
 ### Data-only forests
 

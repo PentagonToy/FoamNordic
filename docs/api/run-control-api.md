@@ -317,6 +317,8 @@ model port name; those modes require an explicit solver-side contract.
 
 `Operator.model()` accepts only `.fnom`; its metadata selects ONNX, compiled
 C++, Joblib, or Equinox without exposing backend-specific launch classes.
+Inspection identifies code-bearing artifacts, while calling `Operator.model()`
+is itself the explicit execution decision.
 `Operator.function()` packages a callable and its inferred stored-field
 contract inside the marker-owned run directory. Logical input names become
 keyword arguments and a returned mapping uses logical output names:

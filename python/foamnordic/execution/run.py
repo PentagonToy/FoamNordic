@@ -694,6 +694,8 @@ class Run:
         if self._result is not None:
             return self._result
         self._log_stream.close()
+        for path in self._cleanup_paths:
+            path.unlink(missing_ok=True)
         cancelled = self._cancel_requested or exit_code == 130
         status = (
             RunStatus.CANCELLED
@@ -992,6 +994,7 @@ def _launch_local(
     plan_digest: str | None = None,
     name: str = "foamnordic",
     observation_sources: int = 1,
+    cleanup_paths: Sequence[Path] = (),
 ) -> Run:
     """Launch one local host-and-solver plan under the native supervisor."""
 
@@ -1030,7 +1033,7 @@ def _launch_local(
         solver_log=solver_log,
         plan_digest=plan_digest,
         name=name,
-        cleanup_paths=ready_files,
+        cleanup_paths=(*ready_files, *cleanup_paths),
         observation_sources=observation_sources,
     )
 
@@ -1086,6 +1089,8 @@ def _launch_process(
         )
     except Exception:
         stream.close()
+        for path in cleanup_paths:
+            Path(path).unlink(missing_ok=True)
         for descriptor in (owner_reader, owner_writer):
             if descriptor is not None:
                 os.close(descriptor)
