@@ -1,29 +1,20 @@
 # Maintainer assets
 
-This directory keeps publication-facing assets and small maintainer tools out
-of the runtime package.
+This directory keeps publication-facing assets and small maintainer tools out of the runtime package.
 
-End users do not need to run these tools. The PyPI README becomes package
-metadata, and the icon is referenced remotely; the maintainer scripts and tests
-are not part of the configured wheel payload. Keep them tracked so releases
-can be reproduced. Ignore generated wheelhouses, not this directory.
+End users do not need to run these tools. The PyPI README becomes package metadata, and the icon is referenced remotely; the maintainer scripts and tests are not part of the configured wheel payload. Keep them tracked so releases can be reproduced. Ignore generated wheelhouses, not this directory.
 
 | Path | Purpose |
 | --- | --- |
-| `README.pypi.md` | PyPI project description |
-| `icon.png` | PyPI and repository artwork |
-| `wheel-maker` | GitHub Actions wheel preparation frontend |
-| [`publishing.md`](publishing.md) | Clean-install validation and PyPI release gate |
-| `release_notes.py` | Version checks and exact CHANGELOG release-body extraction |
-| `check_wheel_buildkit.py` | Compile the installed wheel's standalone build kit and test Longship |
-| `tests/` | Offline release-metadata regression tests |
+| [`release/`](release/README.md) | PyPI metadata, wheel preparation, release validation and tests |
+| `assets/` | PyPI and repository artwork |
 
 ## Prepare release wheels
 
 From a clean, pushed `main` branch:
 
 ```console
-./others/wheel-maker
+./others/release/wheel-maker
 ```
 
 The command:
@@ -36,15 +27,12 @@ The command:
 6. includes `release-notes.md` from the version's CHANGELOG section;
 7. generates `upload-pypi` inside the wheelhouse.
 
-The destination is `wheelhouse-<version>-<run-id>/` by default and is ignored
-by Git. Publishing remains a deliberate second command:
+The destination is `wheelhouse-<version>-<run-id>/` by default and is ignored by Git. Publishing remains a deliberate second command:
 
 ```console
 ./wheelhouse-<version>-<run-id>/upload-pypi
 ```
 
-The upload helper publishes to production PyPI, prompts for a PyPI token through Twine, and does not
-store it. Both commands use an isolated temporary Twine environment when the
-active Python environment does not already provide Twine.
+The upload helper publishes to production PyPI, prompts for a PyPI token through Twine, and does not store it. Both commands use an isolated temporary Twine environment when the active Python environment does not already provide Twine.
 
-Run `./others/wheel-maker --help` to select another pushed ref or output path.
+Run `./others/release/wheel-maker --help` to select another pushed ref or output path.

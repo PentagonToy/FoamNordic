@@ -1,21 +1,14 @@
 <p align="center">
-  <img src="others/icon.png" alt="FoamNordic" width="220">
+  <img src="others/assets/icon.png" alt="FoamNordic" width="220">
 </p>
 
 # FoamNordic
 
-FoamNordic couples OpenFOAM fields to mathematical and machine-learning
-operators without making Python part of the solver loop. The same `Longship`
-interface runs an unchanged OpenFOAM case, a field transform, or an
-equation-level closure supplied by any compatible solver adapter.
+FoamNordic couples OpenFOAM fields to mathematical and machine-learning operators without making Python part of the solver loop. The same `Longship` interface runs an unchanged OpenFOAM case, a field transform, or an equation-level closure supplied by any compatible solver adapter.
 
-FNOM is FoamNordic's self-contained model artefact. It stores the executable
-payload together with tensor contracts, scaling, runtime requirements, and
-compatibility metadata. Fjord moves fields over shared memory, Unix sockets,
-UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
+FNOM is FoamNordic's self-contained model artefact. It stores the executable payload together with tensor contracts, scaling, runtime requirements, and compatibility metadata. Fjord moves fields over shared memory, Unix sockets, UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
 
-Python 3.11 and 3.12 are supported. See [CHANGELOG.md](CHANGELOG.md) for
-release notes and upgrade guidance.
+Python 3.11 and 3.12 are supported. See [CHANGELOG.md](CHANGELOG.md) for release notes and upgrade guidance.
 
 ```text
                  Python declaration
@@ -47,8 +40,7 @@ python -m pip install --upgrade pip
 python -m pip install foamnordic
 ```
 
-Wheels include the Python API and native control runtime. Build the small
-OpenFOAM integration for each compiler/ABI used on the machine:
+Wheels include the Python API and native control runtime. Build the small OpenFOAM integration for each compiler/ABI used on the machine:
 
 ```console
 # Linux/HPC
@@ -60,17 +52,13 @@ openfoam
 foamnordic build
 ```
 
-Check the active Python, native, OpenFOAM, MPI, and ABI-matched runtime without
-starting a CFD workload:
+Check the active Python, native, OpenFOAM, MPI, and ABI-matched runtime without starting a CFD workload:
 
 ```console
 foamnordic doctor
 ```
 
-The runtime is installed below
-`~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple
-OpenFOAM ABIs can coexist and are selected from `Case.of_cmd` at launch.
-`FOAMNORDIC_OPENFOAM_LIB` is an advanced override, not a normal setup step.
+The runtime is installed below `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple OpenFOAM ABIs can coexist and are selected from `Case.of_cmd` at launch. `FOAMNORDIC_OPENFOAM_LIB` is an advanced override, not a normal setup step.
 
 To use the current source directly:
 
@@ -82,9 +70,7 @@ module load openfoam/2512
 foamnordic build
 ```
 
-On macOS, replace the module command with `openfoam`. Offline ONNX builds may
-set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive;
-workflows that do not need native ONNX can use `foamnordic build --without-onnx`.
+On macOS, replace the module command with `openfoam`. Offline ONNX builds may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive; workflows that do not need native ONNX can use `foamnordic build --without-onnx`.
 
 ## Run an OpenFOAM case
 
@@ -109,17 +95,11 @@ post = result.postprocess
 post.statistics(["U", "p"], time_idx=-1, verbose=True)
 ```
 
-The source case is copied into an isolated run directory and is never modified.
-`0.orig/` is accepted when `0/` is absent. With no scheduler, rank one runs
-directly and multiple ranks use the MPI launcher from the declared OpenFOAM
-environment.
+The source case is copied into an isolated run directory and is never modified. `0.orig/` is accepted when `0/` is absent. With no scheduler, rank one runs directly and multiple ranks use the MPI launcher from the declared OpenFOAM environment.
 
 ## Couple a model or function
 
-`Transform` mutates ordinary registered fields at a solver stage. `Closure`
-enters an equation-specific adapter. FoamNordic ships generic field hooks and
-two LES adapters (`nutFjord` and `kEqnFjord`) as integration examples; domain
-solvers own their conservation equations and physical closure semantics.
+`Transform` mutates ordinary registered fields at a solver stage. `Closure` enters an equation-specific adapter. FoamNordic ships generic field hooks and two LES adapters (`nutFjord` and `kEqnFjord`) as integration examples; domain solvers own their conservation equations and physical closure semantics.
 
 ```python
 transform = fno.Transform(
@@ -133,20 +113,13 @@ transform = fno.Transform(
 run = fno.Longship(case=case, transforms=(transform,)).launch()
 ```
 
-FNOM selects compiled C++, ONNX, Joblib, or Equinox internally, so model
-loading does not alter the solver-facing API. `foamnordic inspect` reports
-whether a backend is data-only or code-bearing. Stochastic functions use
-`fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
+FNOM selects compiled C++, ONNX, Joblib, or Equinox internally, so model loading does not alter the solver-facing API. `foamnordic inspect` reports whether a backend is data-only or code-bearing. Stochastic functions use `fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
 
-External solvers can add an equation-level adapter without including the
-FoamNordic source tree. See the installed-SDK
-[`externalNutFjord` example](examples/openfoam/externalNutFjord/README.md).
+External solvers can add an equation-level adapter without including the FoamNordic source tree. See the installed-SDK [`externalNutFjord` example](examples/openfoam/externalNutFjord/README.md).
 
 ## Slurm resources
 
-OpenFOAM and the node-local model worker have explicit resource declarations.
-One model worker is placed on every OpenFOAM node only when a coupled program
-is present.
+OpenFOAM and the node-local model worker have explicit resource declarations. One model worker is placed on every OpenFOAM node only when a coupled program is present.
 
 ```python
 openfoam_resources = fno.Slurm.openfoam(
@@ -171,8 +144,7 @@ case.initialize(ranks=16, mesh=None, validate_mesh=True)
 run = fno.Longship(case=case, scheduler=scheduler, transforms=(transform,)).launch()
 ```
 
-Same-node bulk exchange uses shared memory; multi-node runs place a resident
-worker beside each node's solver ranks.
+Same-node bulk exchange uses shared memory; multi-node runs place a resident worker beside each node's solver ranks.
 
 ## Development
 
@@ -183,9 +155,7 @@ ctest --test-dir build --output-on-failure
 python -m unittest discover -s python/tests -v
 ```
 
-Supported build targets are Linux `x86_64`, Linux `aarch64`, and Apple Silicon.
-Linux/OpenFOAM v2512 is the primary HPC target; OpenFOAM.app provides the
-native macOS environment.
+Supported build targets are Linux `x86_64`, Linux `aarch64`, and Apple Silicon. Linux/OpenFOAM v2512 is the primary HPC target; OpenFOAM.app provides the native macOS environment.
 
 ## Documentation
 
@@ -195,6 +165,4 @@ native macOS environment.
 - [Tutorials](tutorials/README.md)
 - [Development and publishing](others/README.md)
 
-FoamNordic is GPL-3.0 licensed research software. It is developed by
-**Hanseul Kang** at Aalto University under the supervision of
-**Shervin Karimkashi**.
+FoamNordic is GPL-3.0 licensed research software. It is developed by **Hanseul Kang** at Aalto University under the supervision of **Shervin Karimkashi**.

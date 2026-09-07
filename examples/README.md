@@ -1,7 +1,6 @@
 # Examples
 
-Examples demonstrate public extension points and depend only on installed
-FoamNordic interfaces.
+Examples demonstrate public extension points and depend only on installed FoamNordic interfaces.
 
 | Example | Purpose |
 | --- | --- |

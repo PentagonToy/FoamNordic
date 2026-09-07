@@ -1,9 +1,7 @@
 # Design principles
 ## Stable public surface
 
-FoamNordic exposes cases, operators, field programs, placement, schedulers,
-runs, and results. Backend selection stays inside FNOM. Transport and process
-layout stay inside the compiled plan.
+FoamNordic exposes cases, operators, field programs, placement, schedulers, runs, and results. Backend selection stays inside FNOM. Transport and process layout stay inside the compiled plan.
 
 ## Ownership rules
 
@@ -24,12 +22,8 @@ layout stay inside the compiled plan.
 
 ## Reproducibility
 
-The plan records field bindings, stages, resources, placement, random keys, and
-numerics policy. Strict numerics refuses implicit scheme insertion. Convenient
-numerics records every actual insertion in the run directory.
+The plan records field bindings, stages, resources, placement, random keys, and numerics policy. Strict numerics refuses implicit scheme insertion. Convenient numerics records every actual insertion in the run directory.
 
 ## Non-goals
 
-FoamNordic is not a solver, turbulence theory, training framework, experiment
-database, or general workflow engine. It does not infer physical meaning from
-a model port name or place Python callbacks inside the solver loop.
+FoamNordic is not a solver, turbulence theory, training framework, experiment database, or general workflow engine. It does not infer physical meaning from a model port name or place Python callbacks inside the solver loop.

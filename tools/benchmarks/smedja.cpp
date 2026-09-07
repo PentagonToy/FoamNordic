@@ -26,7 +26,7 @@ foamnordic::fjord::Tensor tensor(std::string name, const std::vector<double>& va
 
 int main() {
     constexpr std::uint64_t cells = 1'000'000;
-    constexpr std::size_t repetitions = 20;
+    constexpr std::size_t repetitions = 200;
     foamnordic::inference::Smedja smedja({
         "dtype-pack",
         {

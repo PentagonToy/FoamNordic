@@ -33,7 +33,7 @@ using ChannelPair =
     std::pair<std::unique_ptr<foamnordic::fjord::FjordChannel>,
               std::unique_ptr<foamnordic::fjord::FjordChannel>>;
 
-constexpr std::size_t exchanges = 10'000;
+constexpr std::size_t exchanges = 100'000;
 constexpr std::size_t cells = 400;
 
 struct Result {

@@ -1,9 +1,6 @@
 # FNOM artefact API
 
-`fno.Export.sklearn()`, `fno.Export.equinox()`, and `fno.Export.onnx()` create
-self-contained `.fnom` files.
-`fno.Operator.model()` is the canonical execution entry point; inspection
-returns metadata rather than raw backend bytes.
+`fno.Export.sklearn()`, `fno.Export.equinox()`, and `fno.Export.onnx()` create self-contained `.fnom` files. `fno.Operator.model()` is the canonical execution entry point; inspection returns metadata rather than raw backend bytes.
 
 ```python
 import foamnordic as fno
@@ -19,19 +16,9 @@ print(artifact.trust_policy)
 artifact.validate()
 ```
 
-`FnomArtifact` is immutable. `validate()` re-reads the file through the native
-FNOM parser without importing or executing its embedded backend payload.
-Joblib, Equinox, and portable C++ payloads are classified as code-bearing;
-ONNX and native forest payloads are classified as data-only.
-`foamnordic inspect` reports this distinction. Calling `Operator.model()` or
-`foamnordic compile` is the execution decision; no redundant trust flag is
-required.
+`FnomArtifact` is immutable. `validate()` re-reads the file through the native FNOM parser without importing or executing its embedded backend payload. Joblib, Equinox, and portable C++ payloads are classified as code-bearing; ONNX and native forest payloads are classified as data-only. `foamnordic inspect` reports this distinction. Calling `Operator.model()` or `foamnordic compile` is the execution decision; no redundant trust flag is required.
 
-OpenFOAM scalar precision and model precision may differ. The native exchange
-boundary accepts `float32` and `float64` model contracts with either
-single- or double-precision OpenFOAM, and performs the required conversion
-while packing inputs and committing outputs. Equal-precision fields keep the
-direct copy path; a precision conversion is necessarily not zero-copy.
+OpenFOAM scalar precision and model precision may differ. The native exchange boundary accepts `float32` and `float64` model contracts with either single- or double-precision OpenFOAM, and performs the required conversion while packing inputs and committing outputs. Equal-precision fields keep the direct copy path; a precision conversion is necessarily not zero-copy.
 
 The equivalent CLI commands are:
 
@@ -43,18 +30,13 @@ foamnordic diff reference.fnom candidate.fnom
 foamnordic diff reference.fnom candidate.fnom --json
 ```
 
-`diff` validates both artefacts, compares their complete execution manifests
-and streams embedded or external payloads through SHA-256. File names,
-external payload paths, and container padding do not affect equivalence, and
-neither model payload is executed.
+`diff` validates both artefacts, compares their complete execution manifests and streams embedded or external payloads through SHA-256. File names, external payload paths, and container padding do not affect equivalence, and neither model payload is executed.
 
-See the [FNOM format specification](../architecture/fnom.md) for binary
-layout and trust boundaries.
+See the [FNOM format specification](../architecture/fnom.md) for binary layout and trust boundaries.
 
 ## Compiled estimator backend
 
-`sklearn()` selects the compiled backend for supported fitted estimators and
-uses Joblib for other sklearn-compatible models:
+`sklearn()` selects the compiled backend for supported fitted estimators and uses Joblib for other sklearn-compatible models:
 
 ```python
 artifact = fno.Export.sklearn(
@@ -66,17 +48,9 @@ artifact = fno.Export.sklearn(
 )
 ```
 
-The first load compiles portable C++ into FoamNordic's target-specific cache;
-later loads reuse it. Version 1 supports scalar-output linear and forest models,
-KNN, scikit-learn gradient boosting, XGBoost, LightGBM, and voting graphs
-composed from supported estimators. XGBoost and LightGBM are needed only while
-exporting their fitted models; the resulting FNOM has no dependency on either
-runtime. Selection can be fixed for reproducibility with `backend="compiled"`
-or `backend="joblib"`; the default is `backend="auto"`. The `runtime` argument
-applies only to Joblib selection.
+The first load compiles portable C++ into FoamNordic's target-specific cache; later loads reuse it. Version 1 supports scalar-output linear and forest models, KNN, scikit-learn gradient boosting, XGBoost, LightGBM, and voting graphs composed from supported estimators. XGBoost and LightGBM are needed only while exporting their fitted models; the resulting FNOM has no dependency on either runtime. Selection can be fixed for reproducibility with `backend="compiled"` or `backend="joblib"`; the default is `backend="auto"`. The `runtime` argument applies only to Joblib selection.
 
-Warm the cache before entering an HPC allocation when the login and compute
-nodes share the same target ABI:
+Warm the cache before entering an HPC allocation when the login and compute nodes share the same target ABI:
 
 ```console
 foamnordic compile smagorinsky.fnom

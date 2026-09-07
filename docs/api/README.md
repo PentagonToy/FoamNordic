@@ -1,14 +1,8 @@
 # Python API documentation
 
-FoamNordic's installable Python control plane compiles immutable case,
-field-program, observation, placement, and scheduler declarations into a deterministic native
-plan. `Longship.launch()` prepares an isolated case and returns the
-cancellation-safe `Run`; `Run.stop()` produces one durable `Result`.
+FoamNordic's installable Python control plane compiles immutable case, field-program, observation, placement, and scheduler declarations into a deterministic native plan. `Longship.launch()` prepares an isolated case and returns the cancellation-safe `Run`; `Run.stop()` produces one durable `Result`.
 
-Python describes experiments before launch and inspects compact results during
-or after selected exchanges. Native code owns solver timing, field views,
-feature evaluation, scaling, inference, atomic publication, and failure
-handling. A Python callback is never inserted into a production solver loop.
+Python describes experiments before launch and inspects compact results during or after selected exchanges. Native code owns solver timing, field views, feature evaluation, scaling, inference, atomic publication, and failure handling. A Python callback is never inserted into a production solver loop.
 
 | Guide | Contents |
 | --- | --- |
@@ -17,9 +11,4 @@ handling. A Python callback is never inserted into a production solver loop.
 | [Numerics](numerics.md) | `fno.Math`, OpenFOAM expressions, and reproducible random keys |
 | [Postprocessing](postprocess-api.md) | stored fields, statistics, and case comparisons |
 
-Public declarations are compiled before the solver starts. Explicit transport
-requests never silently fall back, observations cannot gate solver progress,
-and bulk field-program tensors do not pass through the notebook. Low-level contracts
-are documented under [architecture](../architecture/README.md); measured
-behaviour is kept under [benchmarks](../benchmarks/README.md). Wheel publication
-is a maintainer workflow documented in [others](../../others/publishing.md).
+Public declarations are compiled before the solver starts. Explicit transport requests never silently fall back, observations cannot gate solver progress, and bulk field-program tensors do not pass through the notebook. Low-level contracts are documented under [architecture](../architecture/README.md); measured behaviour is kept under [benchmarks](../benchmarks/README.md). Wheel publication is a maintainer workflow documented in [others](../../others/release/publishing.md).

@@ -8,9 +8,7 @@ Earlier notebooks used one `for step` loop for three different jobs:
 2. compute monitoring statistics;
 3. retain a field for plotting.
 
-Only the last two belong near an interactive notebook. Model progress and
-field replacement move entirely into the node-local native execution plan.
-The notebook becomes a read-only observer and never calls `step.send()`.
+Only the last two belong near an interactive notebook. Model progress and field replacement move entirely into the node-local native execution plan. The notebook becomes a read-only observer and never calls `step.send()`.
 
 The interface remains iterative without owning solver progress:
 
@@ -24,9 +22,7 @@ for observation in run.observe(progress=True):
     table.update(observation.summary)
 ```
 
-This loop consumes observation events. Stopping it, restarting the kernel, or
-rendering slowly does not pause a field-program invocation. It has no mutable
-solver field handle.
+This loop consumes observation events. Stopping it, restarting the kernel, or rendering slowly does not pause a field-program invocation. It has no mutable solver field handle.
 
 ## Three retention domains
 
@@ -34,17 +30,11 @@ Retention is not one global integer.
 
 ### Exchange retention
 
-Rune/SHM retains only the bounded slots required for an active atomic
-exchange. A slot is recycled as soon as its consumer advances the sequence.
-The default does not preserve ten full-resolution field snapshots.
+Rune/SHM retains only the bounded slots required for an active atomic exchange. A slot is recycled as soon as its consumer advances the sequence. The default does not preserve ten full-resolution field snapshots.
 
 ### Observation retention
 
-Compact summaries use a bounded ring. The public API declares only the
-solver-friendly `interval`. Internal queue length, byte limits, and stale-record
-eviction remain implementation safety details. When a nonessential observer
-falls behind, Closure or Transform execution never waits for free observation
-memory.
+Compact summaries use a bounded ring. The public API declares only the solver-friendly `interval`. Internal queue length, byte limits, and stale-record eviction remain implementation safety details. When a nonessential observer falls behind, Closure or Transform execution never waits for free observation memory.
 
 Useful policies are:
 
@@ -56,9 +46,7 @@ no Observe declaration             no live observation
 
 ### Artefact retention
 
-Full fields, checkpoints, VTK output, and final figures are explicit files.
-They use filesystem retention and are fetched on demand. A full-field snapshot
-is not silently copied into notebook memory merely because monitoring is on.
+Full fields, checkpoints, VTK output, and final figures are explicit files. They use filesystem retention and are fetched on demand. A full-field snapshot is not silently copied into notebook memory merely because monitoring is on.
 
 ## Node-local reduction
 
@@ -71,14 +59,11 @@ Before sending an observation across nodes, the node-local host may compute:
 - fixed-resolution visualisation grids;
 - explicitly requested sparse cell selections.
 
-MPI-wide summaries combine compact partial reductions. They do not gather all
-rank arrays into the orchestrator. A plane or surface is assembled only for
-the declared visualisation product.
+MPI-wide summaries combine compact partial reductions. They do not gather all rank arrays into the orchestrator. A plane or surface is assembled only for the declared visualisation product.
 
 ## Observation backpressure
 
-Observation transport is separate from field-program transport. Its default behaviour
-is lossy but bounded:
+Observation transport is separate from field-program transport. Its default behaviour is lossy but bounded:
 
 ```text
 producer faster than viewer
@@ -87,36 +72,15 @@ producer faster than viewer
   → continue solver and field-program execution
 ```
 
-Synchronous observation is diagnostic-only and must be requested explicitly.
-It reports that visualisation latency can enter solver wall time.
+Synchronous observation is diagnostic-only and must be requested explicitly. It reports that visualisation latency can enter solver wall time.
 
-This separation is also enforced by the native type system. An
-`ExecutionPlan` owns field writers and cannot contain observers. An
-`ObservationPlan` accepts read-only field views and cannot return modified
-values to OpenFOAM. Its publisher uses a non-waiting admission attempt; lock
-contention, an oversized record, or a full `drop_newest` buffer increments the
-dropped-observation count instead of delaying the solver. With the default
-`drop_oldest` policy, the newest bounded summary replaces stale display data.
-An independent native relay drains this ring with a condition-variable wakeup
-and frames records for Longship. There is no periodic polling and no write to
-the observation channel from the solver thread.
+This separation is also enforced by the native type system. An `ExecutionPlan` owns field writers and cannot contain observers. An `ObservationPlan` accepts read-only field views and cannot return modified values to OpenFOAM. Its publisher uses a non-waiting admission attempt; lock contention, an oversized record, or a full `drop_newest` buffer increments the dropped-observation count instead of delaying the solver. With the default `drop_oldest` policy, the newest bounded summary replaces stale display data. An independent native relay drains this ring with a condition-variable wakeup and frames records for Longship. There is no periodic polling and no write to the observation channel from the solver thread.
 
-Longship may merge any number of node-local receivers into one bounded stream.
-Every accepted record receives a monotonic `stream_index` at ingestion while
-retaining its source name, exchange index, and physical time. The merge always
-preserves each source's order. It deliberately does not delay a faster source
-to manufacture a physical-time ordering across nodes: observations are lossy,
-and a delayed or dropped source must never become a solver barrier. Consumers
-that require a timestep-wide summary combine matching source records by their
-explicit exchange metadata and report missing contributions.
+Longship may merge any number of node-local receivers into one bounded stream. Every accepted record receives a monotonic `stream_index` at ingestion while retaining its source name, exchange index, and physical time. The merge always preserves each source's order. It deliberately does not delay a faster source to manufacture a physical-time ordering across nodes: observations are lossy, and a delayed or dropped source must never become a solver barrier. Consumers that require a timestep-wide summary combine matching source records by their explicit exchange metadata and report missing contributions.
 
 ## Bypass is a different policy
 
-Physics bypass selects cells that do not require model evaluation and supplies
-their valid output analytically. Observation sampling selects data that a user
-wants to inspect. They may reuse native masks and reductions, but their
-semantics and failure behaviour are separate: dropping a plot must never change
-the modelled field.
+Physics bypass selects cells that do not require model evaluation and supplies their valid output analytically. Observation sampling selects data that a user wants to inspect. They may reuse native masks and reductions, but their semantics and failure behaviour are separate: dropping a plot must never change the modelled field.
 
 ## Notebook memory target
 
@@ -128,7 +92,4 @@ A run-control notebook should work within a 4 GiB allocation because it owns:
 - at most the declared reduced snapshots;
 - no OpenFOAM full-field history and no resident model parameters.
 
-JAX training arrays, optimiser state, synthetic datasets, and model export
-belong to a separate model-build notebook or batch task. A single document may
-link the resulting artefact into a Longship order, but training is not part of
-the run-control process.
+JAX training arrays, optimiser state, synthetic datasets, and model export belong to a separate model-build notebook or batch task. A single document may link the resulting artefact into a Longship order, but training is not part of the run-control process.

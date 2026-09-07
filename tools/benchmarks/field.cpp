@@ -8,7 +8,7 @@
 
 int main() {
     constexpr std::uint64_t cells = 1'000'000;
-    constexpr std::size_t repetitions = 20;
+    constexpr std::size_t repetitions = 200;
     std::vector<double> velocity(cells * 3, 1.0);
     foamnordic::fjord::MutableTensorView field{
         "U",

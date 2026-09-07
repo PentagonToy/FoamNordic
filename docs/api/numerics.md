@@ -1,10 +1,6 @@
 # Numerical APIs
 
-`fno.Math` is the backend-neutral numerical vocabulary used by closure and
-transform functions. `fno.Field` separately declares OpenFOAM fields, geometry,
-and finite-volume expressions. NumPy arrays remain in NumPy and JAX arrays or
-tracers remain in JAX; importing FoamNordic does not eagerly import either
-backend.
+`fno.Math` is the backend-neutral numerical vocabulary used by closure and transform functions. `fno.Field` separately declares OpenFOAM fields, geometry, and finite-volume expressions. NumPy arrays remain in NumPy and JAX arrays or tracers remain in JAX; importing FoamNordic does not eagerly import either backend.
 
 ```python
 def keqn(k, velocity_grad, filter_width, C_k=0.094, C_e=1.048):
@@ -19,18 +15,12 @@ def keqn(k, velocity_grad, filter_width, C_k=0.094, C_e=1.048):
 
 The public layer includes:
 
-- OpenFOAM declarations: `Field(name)`, `Field.grad`, `Field.delta`,
-  `Field.coordinate`, `Field.div`, `Field.laplacian`, and `Field.curl`;
-- element-wise operations: `abs`, `sqrt`, `square`, `exp`, `expm1`, `log`,
-  `log1p`, `sin`, `cos`, `tan`, `tanh`, `minimum`, `maximum`, `clip`, `where`;
-- reductions and layouts: `sum`, `mean`, `min`, `max`, `reshape`, `transpose`,
-  `stack`, `concatenate`, `einsum`, `matmul`;
+- OpenFOAM declarations: `Field(name)`, `Field.grad`, `Field.delta`, `Field.coordinate`, `Field.div`, `Field.laplacian`, and `Field.curl`;
+- element-wise operations: `abs`, `sqrt`, `square`, `exp`, `expm1`, `log`, `log1p`, `sin`, `cos`, `tan`, `tanh`, `minimum`, `maximum`, `clip`, `where`;
+- reductions and layouts: `sum`, `mean`, `min`, `max`, `reshape`, `transpose`, `stack`, `concatenate`, `einsum`, `matmul`;
 - physical tensor operations: `mag`, `symm`, `dev`, `dot`, `ddot`.
 
-Numerical safeguards belong to the model function rather than the shared math
-namespace. Prefer the analytical limit over an arbitrary absolute epsilon when
-that limit is known. For example, the WALE denominator and numerator both
-vanish in uniform flow, where the physical limit is exactly `nut = 0`:
+Numerical safeguards belong to the model function rather than the shared math namespace. Prefer the analytical limit over an arbitrary absolute epsilon when that limit is known. For example, the WALE denominator and numerator both vanish in uniform flow, where the physical limit is exactly `nut = 0`:
 
 ```python
 def wale(velocity_grad, delta, C_w=0.325):
@@ -56,14 +46,9 @@ def wale(velocity_grad, delta, C_w=0.325):
     return fno.Math.where(denominator > 0.0, nut, 0.0)
 ```
 
-This remains invariant across float precision, field scale, and MPI
-decomposition. A model-specific `atol` or `rtol` should be exposed explicitly
-only when its equations do not provide a defined zero-limit policy.
+This remains invariant across float precision, field scale, and MPI decomposition. A model-specific `atol` or `rtol` should be exposed explicitly only when its equations do not provide a defined zero-limit policy.
 
-Use `fno.Field.grad("U")` for a native `FieldExpression`, while
-`fno.Math.symm(array)` evaluates immediately using the array's backend. Spatial
-derivatives of arbitrary arrays are not approximated in Python because they
-require the OpenFOAM mesh and discretisation scheme.
+Use `fno.Field.grad("U")` for a native `FieldExpression`, while `fno.Math.symm(array)` evaluates immediately using the array's backend. Spatial derivatives of arbitrary arrays are not approximated in Python because they require the OpenFOAM mesh and discretisation scheme.
 
 Expressions compose without manually constructing strings:
 
@@ -81,27 +66,15 @@ inputs = {
 }
 ```
 
-The finite-volume operators use the copied case's `system/fvSchemes`. During
-case preparation FoamNordic preserves every exact scheme supplied by the user.
-If an exact entry is absent, a usable section `default` is preserved. Only when
-both are unavailable or the default is `none` does FoamNordic add an exact
-fallback from `derivedSchemes.json` inside the isolated run case. The source
-case is never changed. Current fallbacks are `Gauss linear` for gradient,
-curl, and divergence expressions and `Gauss linear corrected` for Laplacians.
+The finite-volume operators use the copied case's `system/fvSchemes`. During case preparation FoamNordic preserves every exact scheme supplied by the user. If an exact entry is absent, a usable section `default` is preserved. Only when both are unavailable or the default is `none` does FoamNordic add an exact fallback from `derivedSchemes.json` inside the isolated run case. The source case is never changed. Current fallbacks are `Gauss linear` for gradient, curl, and divergence expressions and `Gauss linear corrected` for Laplacians.
 
-This matters particularly for conservative expressions such as
-`div(phi, U)`: an existing solver scheme wins over the fallback. Unary
-`div(U)` is also supported, but requires either `div(U)` or a non-`none`
-`divSchemes/default`; FoamNordic supplies the exact fallback when necessary.
+This matters particularly for conservative expressions such as `div(phi, U)`: an existing solver scheme wins over the fallback. Unary `div(U)` is also supported, but requires either `div(U)` or a non-`none` `divSchemes/default`; FoamNordic supplies the exact fallback when necessary.
 
-This separation lets the same numerical function run with NumPy for a small
-test and with JAX for tracing or export without silently replacing OpenFOAM's
-finite-volume operators.
+This separation lets the same numerical function run with NumPy for a small test and with JAX for tracing or export without silently replacing OpenFOAM's finite-volume operators.
 
 ## Random keys
 
-FoamNordic uses immutable, backend-neutral keys for stochastic closures and
-field transforms:
+FoamNordic uses immutable, backend-neutral keys for stochastic closures and field transforms:
 
 ```python
 key = fno.Random.key(42, scope="global")
@@ -113,15 +86,8 @@ def perturb(velocity, *, key):
     return {"velocity": velocity * scale + noise}
 ```
 
-Keys are never consumed. Reusing a key repeats a draw; split it when one
-function needs independent draws. The public distributions are `uniform`,
-`normal`, `integers`, and `bernoulli`.
+Keys are never consumed. Reusing a key repeats a draw; split it when one function needs independent draws. The public distributions are `uniform`, `normal`, `integers`, and `bernoulli`.
 
-At execution time FoamNordic folds the stable program identity and exchange
-index into the root key. `scope="global"` gives every solver rank the same
-invocation key. `scope="rank"` additionally folds in the negotiated rank.
-`fno.Random.to_jax(key)` materialises a JAX typed key; Equinox residents do so
-automatically. NumPy and JAX are reproducible within their backend but do not
-promise bit-identical samples across backends.
+At execution time FoamNordic folds the stable program identity and exchange index into the root key. `scope="global"` gives every solver rank the same invocation key. `scope="rank"` additionally folds in the negotiated rank. `fno.Random.to_jax(key)` materialises a JAX typed key; Equinox residents do so automatically. NumPy and JAX are reproducible within their backend but do not promise bit-identical samples across backends.
 
 Stochastic declarations and function operators use `key=` exclusively.

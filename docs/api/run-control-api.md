@@ -1,6 +1,5 @@
 # Run control API
-FoamNordic describes a workload with immutable declarations and returns a
-non-blocking Run. The source case is copied before any preparation command.
+FoamNordic describes a workload with immutable declarations and returns a non-blocking Run. The source case is copied before any preparation command.
 
 ## Case
 
@@ -18,9 +17,7 @@ case = fno.OpenFOAM.Case(
 case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
 ```
 
-`of_cmd` may be an environment module shorthand or an explicit shell command.
-`mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into
-the isolated case.
+`of_cmd` may be an environment module shorthand or an explicit shell command. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
 
 ## Models and field programs
 
@@ -44,12 +41,9 @@ closure = fno.Closure(
 )
 ```
 
-`Transform` is a generic stored-field operation. `Closure` requires a
-solver-side equation adapter. FNOM selects ONNX, compiled, Joblib, or Equinox
-without changing this interface.
+`Transform` is a generic stored-field operation. `Closure` requires a solver-side equation adapter. FNOM selects ONNX, compiled, Joblib, or Equinox without changing this interface.
 
-Pure mathematical functions can use `Operator.function`; logical inputs become
-keyword arguments and returned mapping keys are logical outputs.
+Pure mathematical functions can use `Operator.function`; logical inputs become keyword arguments and returned mapping keys are logical outputs.
 
 ## Local launch
 
@@ -64,8 +58,7 @@ result = run.stop(timeout=3600, progress=True)
 result.summary(style="compact")
 ```
 
-With no scheduler, rank one runs directly and multiple ranks use the MPI
-launcher associated with the case environment.
+With no scheduler, rank one runs directly and multiple ranks use the MPI launcher associated with the case environment.
 
 ## Slurm launch
 
@@ -86,14 +79,11 @@ run = fno.Longship(
 ).launch(start_timeout=900)
 ```
 
-Solver and model resources are separate. Coupled jobs place a resident model
-worker on every solver node and fail together inside one allocation.
+Solver and model resources are separate. Coupled jobs place a resident model worker on every solver node and fail together inside one allocation.
 
 ## Observations
 
-`Observe` requests bounded native summaries at a declared interval. Observation
-records are monitoring data and never gate solver progress. Stored fields and
-full scientific comparison belong to `Result.postprocess`.
+`Observe` requests bounded native summaries at a declared interval. Observation records are monitoring data and never gate solver progress. Stored fields and full scientific comparison belong to `Result.postprocess`.
 
 ## Run ownership
 
@@ -101,14 +91,10 @@ full scientific comparison belong to `Result.postprocess`.
 - `run.stop()` waits for normal completion.
 - `run.stop(force=True)` requests bounded cancellation.
 - `run.detach()` allows the workload to outlive Python ownership.
-- `result.artifacts` exposes the isolated case, logs, observations, and Slurm
-  files.
+- `result.artifacts` exposes the isolated case, logs, observations, and Slurm files.
 
-Closing an owning Python process cancels its active workload after the orphan
-timeout. A detached run must be managed through its scheduler or supervisor.
+Closing an owning Python process cancels its active workload after the orphan timeout. A detached run must be managed through its scheduler or supervisor.
 
 ## Reproducibility
 
-The run marker stores the compiled plan and digest. It includes resources,
-placement, stages, bindings, random keys, and numerics policy. Convenient
-numerics records actual dictionary insertions in the run directory.
+The run marker stores the compiled plan and digest. It includes resources, placement, stages, bindings, random keys, and numerics policy. Convenient numerics records actual dictionary insertions in the run directory.
