@@ -27,7 +27,7 @@ def _identity(compiler: str) -> str:
         [compiler, "--version"], check=True, text=True, capture_output=True
     )
     first_line = result.stdout.splitlines()[0] if result.stdout else compiler
-    return f"{platform.system()}|{platform.machine()}|{first_line}|cpp-v1|-O3|-pthread"
+    return f"{platform.system()}|{platform.machine()}|{first_line}|compiled|-O3|-pthread"
 
 
 def compile_source(source: bytes) -> tuple[Path, bool, float]:

@@ -292,7 +292,7 @@ def main() -> int:
         arguments.atol,
     )
     report = {
-        "schema": "foamnordic.combustion-field-parity/v1",
+        "schema": "foamnordic.combustion-field-parity",
         "source": str(source),
         "application": arguments.application,
         "cells": cells,

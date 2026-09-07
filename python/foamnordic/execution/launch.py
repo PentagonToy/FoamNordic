@@ -371,6 +371,15 @@ def launch(
         integration_library,
         verbose=verbose,
     )
+    def pin_runtime() -> tuple[Path, ...]:
+        if integration_library is None:
+            return ()
+        generation = integration_library.resolve().parent.parent
+        if generation.parent.name != "generations":
+            return ()
+        from ..build.generations import pin
+
+        return (pin(generation, str(work_dir)),)
     local = longship.scheduler is None
     solver = _solver_command(
         longship,
@@ -415,6 +424,7 @@ def launch(
         )
     if local:
         assert host is not None
+        pin_cleanup = pin_runtime()
         return _launch_local(
             host=host,
             solver=solver,
@@ -425,11 +435,13 @@ def launch(
             plan_digest=plan.digest,
             name=longship.name,
             observation_sources=longship.case.ranks,
+            cleanup_paths=pin_cleanup,
         )
 
     for command in ("sbatch", "squeue", "sacct", "scancel"):
         if shutil.which(command) is None:
             raise RuntimeError(f"Slurm command is unavailable: {command}")
+    pin_cleanup = pin_runtime()
     batch = write_batch(
         longship,
         runtime,
@@ -458,4 +470,5 @@ def launch(
         observation_sources=longship.case.ranks,
         environment=_submission_environment(),
         orphan_timeout=orphan_timeout,
+        cleanup_paths=pin_cleanup,
     )

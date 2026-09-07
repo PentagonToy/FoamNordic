@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -21,6 +22,29 @@
 #include "foamnordic/runtime/log.hpp"
 
 namespace foamnordic::inference {
+namespace {
+
+template <class Value>
+bool finite_values(std::span<const std::byte> bytes) {
+    for (std::size_t offset = 0; offset < bytes.size(); offset += sizeof(Value)) {
+        Value value{};
+        std::memcpy(&value, bytes.data() + offset, sizeof(Value));
+        if (!std::isfinite(value)) return false;
+    }
+    return true;
+}
+
+bool finite_output(const fjord::Tensor& tensor) {
+    if (tensor.element == fjord::Element::float32) {
+        return finite_values<float>(tensor.bytes);
+    }
+    if (tensor.element == fjord::Element::float64) {
+        return finite_values<double>(tensor.bytes);
+    }
+    return true;
+}
+
+}  // namespace
 
 void FieldContract::validate() const {
     if (name.empty()) {
@@ -202,6 +226,10 @@ void CellInferenceExchange::seal_outputs(const CellEvaluationPolicy& policy) {
             throw std::logic_error("Model bypass did not produce every required output.");
         }
         validate_tensor(output->second, field, cell_count_);
+        if (!finite_output(output->second)) {
+            throw std::runtime_error(
+                "Model output field '" + field.name + "' contains NaN or infinity.");
+        }
     }
     state_ = ExchangeState::outputs_ready;
 }

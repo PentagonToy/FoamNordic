@@ -471,7 +471,7 @@ def _native_build_environment() -> dict[str, str]:
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
     if args.dry_run:
         return _build_direct(args, stream)
-    from .build.generations import complete, dependency_identity, fingerprint, locked, publish, tool_identity
+    from .build.generations import collect_garbage, complete, dependency_identity, fingerprint, locked, publish, tool_identity
     import uuid
 
     source = _source_root(args.source)
@@ -504,6 +504,7 @@ def _build(args: argparse.Namespace, stream: TextIO) -> int:
         result = _build_direct(modified, stream)
         if result == 0:
             publish(root, generation, identity)
+            collect_garbage(root)
         return result
 
 
@@ -746,24 +747,28 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
 
 
 def _clobber_targets(args: argparse.Namespace) -> list[Path]:
-    candidates = list(active_runtime_candidates())
-    selected = profile(required=False)
-    if selected is not None:
-        candidates.append(selected.build_dir)
-    for root in (
-        Path.home() / ".cache/foamnordic/build",
-        Path.home() / ".local/share/foamnordic/runtime",
-    ):
-        if root.is_dir():
-            candidates.extend(
-                marker.parent for marker in root.glob("*/*/.foamnordic-generated.json")
-            )
-    candidates.extend(
-        (
+    candidates: list[Path] = []
+    scoped = bool(args.workspace or args.virtual)
+    if not scoped:
+        candidates.extend(active_runtime_candidates())
+        selected = profile(required=False)
+        if selected is not None:
+            candidates.append(selected.build_dir)
+        for root in (
             Path.home() / ".cache/foamnordic/build",
-            Path.home() / ".local/share/foamnordic/native",
+            Path.home() / ".local/share/foamnordic/runtime",
+        ):
+            if root.is_dir():
+                candidates.extend(
+                    marker.parent
+                    for marker in root.glob("*/*/.foamnordic-generated.json")
+                )
+        candidates.extend(
+            (
+                Path.home() / ".cache/foamnordic/build",
+                Path.home() / ".local/share/foamnordic/native",
+            )
         )
-    )
     for workspace in args.workspace:
         runs = workspace.expanduser().resolve() / "runs"
         if runs.is_dir():
@@ -790,6 +795,19 @@ def _clobber(args: argparse.Namespace, stream: TextIO) -> int:
         action = "would remove" if args.dry_run else "remove"
         print(f"{action} [{kind}]: {target}", file=stream)
         if not args.dry_run:
+            # Managed runtimes are immutable generations selected by a sibling
+            # ``current`` symlink.  Removing the selected generation must also
+            # remove that selector; leaving it dangling makes a later build or
+            # directory query appear to have an active, damaged runtime.
+            if target.parent.name == "generations":
+                current = target.parent.parent / "current"
+                if current.is_symlink():
+                    try:
+                        selected = current.resolve(strict=True)
+                    except OSError:
+                        selected = None
+                    if selected == target.resolve():
+                        current.unlink()
             shutil.rmtree(target)
         removed += 1
     if removed == 0:
@@ -817,9 +835,9 @@ def _artifact_record(artifact) -> dict[str, object]:
     return {
         "path": str(artifact.path),
         "name": artifact.name,
-        "container_version": artifact.container_version,
-        "schema_version": artifact.schema_version,
         "backend": artifact.backend,
+        "executable_payload": artifact.executable_payload,
+        "trust_policy": artifact.trust_policy,
         "runtime": artifact.runtime,
         "bundled": artifact.bundled,
         "size": artifact.size,
@@ -856,18 +874,13 @@ def _inspect_fnom(args: argparse.Namespace, stream: TextIO) -> int:
     payload = (
         f"embedded, {artifact.payload_size} B"
         if artifact.bundled
-        else "external legacy payload"
+        else "external payload"
     )
     values = (
         ("File", artifact.path),
-        (
-            "Container",
-            f"FNOBND{artifact.container_version}"
-            if artifact.bundled
-            else "manifest-only",
-        ),
-        ("Manifest", f"schema {artifact.schema_version}"),
+        ("Container", "self-contained" if artifact.bundled else "external payload"),
         ("Backend", artifact.backend),
+        ("Trust", artifact.trust_policy),
         ("Runtime", artifact.runtime or "default"),
         ("Inputs", inputs),
         ("Outputs", outputs),
@@ -885,14 +898,9 @@ def _validate_fnom(args: argparse.Namespace, stream: TextIO) -> int:
     from .models import load
 
     artifact = load(args.artifact)
-    container = (
-        f"FNOBND{artifact.container_version}"
-        if artifact.bundled
-        else "manifest-only"
-    )
     print(
         f"Valid FNOM: {artifact.path} "
-        f"({container}, schema {artifact.schema_version}, "
+        f"({'self-contained' if artifact.bundled else 'external payload'}, "
         f"{artifact.backend})",
         file=stream,
     )
@@ -917,7 +925,7 @@ def _fnom_comparison_record(artifact) -> dict[str, object]:
                 remaining -= len(block)
     else:
         if not external_payload:
-            raise RuntimeError("Legacy FNOM manifest does not declare a model payload")
+            raise RuntimeError("External FNOM manifest does not declare a model payload")
         payload_path = Path(str(external_payload)).expanduser()
         if not payload_path.is_absolute():
             payload_path = artifact.path.parent / payload_path
@@ -970,8 +978,8 @@ def _compile_fnom(args: argparse.Namespace, stream: TextIO) -> int:
     from .models import load
 
     artifact = load(args.artifact)
-    if artifact.backend != "compiled" or artifact.runtime != "cpp-v1":
-        raise ValueError("foamnordic compile requires a compiled cpp-v1 FNOM artifact")
+    if artifact.backend != "compiled" or artifact.runtime != "compiled":
+        raise ValueError("foamnordic compile requires a portable compiled FNOM artifact")
     source = bytes(_native.read_model_payload(str(artifact.path)))
     library, cache_hit, seconds = compile_source(source)
     action = "Reused" if cache_hit else "Compiled"
@@ -987,7 +995,7 @@ def _parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="foamnordic",
-        description="Build and run native OpenFOAM closure workloads.",
+        description="Build and run OpenFOAM workloads with native model coupling.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subcommands = parser.add_subparsers(
@@ -1056,7 +1064,7 @@ def _parser() -> argparse.ArgumentParser:
         "validate",
         help="validate an FNOM container and execution contract",
         description=(
-            "Validate FNOM structure, bounds, versions, tensor contracts, scalers, "
+            "Validate FNOM structure, bounds, tensor contracts, scalers, "
             "and embedded payload layout without executing the model payload."
         ),
     )
@@ -1080,7 +1088,7 @@ def _parser() -> argparse.ArgumentParser:
         "compile",
         help="warm the target-native cache for a compiled FNOM artifact",
         description=(
-            "Compile a portable cpp-v1 FNOM payload for this target and retain "
+            "Compile a portable FNOM payload for this target and retain "
             "the shared library in FoamNordic's content-addressed cache."
         ),
     )

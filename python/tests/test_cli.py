@@ -94,7 +94,7 @@ class CliTests(unittest.TestCase):
                 os.chdir(previous)
 
     def test_public_version_and_directory_are_discoverable(self) -> None:
-        self.assertEqual(fno.__version__, "1.0.5")
+        self.assertEqual(fno.__version__, "1.0.6")
         self.assertIn("Longship", dir(fno))
         self.assertIn("export", dir(fno))
 
@@ -103,7 +103,7 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as stopped, redirect_stdout(output):
             main(["--version"])
         self.assertEqual(stopped.exception.code, 0)
-        self.assertEqual(output.getvalue().strip(), "foamnordic 1.0.5")
+        self.assertEqual(output.getvalue().strip(), "foamnordic 1.0.6")
 
     def test_top_level_help_lists_runtime_and_fnom_commands(self) -> None:
         output = StringIO()
@@ -136,7 +136,6 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(main(["inspect", str(path), "--json"]), 0)
             record = json.loads(output.getvalue())
             self.assertEqual(record["name"], "test-model")
-            self.assertEqual(record["container_version"], 2)
             self.assertEqual(record["backend"], "onnx")
 
             output = StringIO()
@@ -210,7 +209,7 @@ class CliTests(unittest.TestCase):
     def test_fnom_validate_rejects_corrupt_container(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "broken.fnom"
-            path.write_bytes(b"FNOBND2\0")
+            path.write_bytes(b"FNOMBIN\0")
             with patch("sys.stderr", new_callable=StringIO) as errors:
                 self.assertEqual(main(["validate", str(path)]), 1)
             self.assertIn("foamnordic: error", errors.getvalue())
@@ -428,7 +427,7 @@ class CliTests(unittest.TestCase):
             mark_generated(owned, kind="run")
             unowned.mkdir(parents=True)
             (unowned / MARKER).write_text(
-                '{"schema_version": 1, "kind": "run", "root": "/copied"}\n',
+                '{"kind": "run", "root": "/copied"}\n',
                 encoding="utf-8",
             )
             output = StringIO()
@@ -464,6 +463,25 @@ class CliTests(unittest.TestCase):
             self.assertFalse(virtual.exists())
             self.assertIn("virtual-environment", output.getvalue())
 
+    def test_scoped_clobber_does_not_select_active_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "workspace"
+            owned = workspace / "runs/owned"
+            mark_generated(owned, kind="run")
+            active = Path(directory) / "runtime/generations/current"
+            mark_generated(active, kind="native-runtime")
+            with (
+                patch(
+                    "foamnordic._cli.active_runtime_candidates",
+                    return_value=(active,),
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                status = main(["clobber", "--workspace", str(workspace)])
+            self.assertEqual(status, 0)
+            self.assertFalse(owned.exists())
+            self.assertTrue(active.exists())
+
     def test_clobber_discovers_all_marker_owned_abi_runtimes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -483,6 +501,26 @@ class CliTests(unittest.TestCase):
             self.assertFalse(runtime.exists())
             self.assertFalse(build.exists())
             self.assertTrue(unowned.exists())
+
+    def test_clobber_removes_current_selector_with_active_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "runtime/linux-aarch64/openfoam-v2512"
+            generation = root / "generations/build-one"
+            mark_generated(generation, kind="native-runtime")
+            root.mkdir(parents=True, exist_ok=True)
+            (root / "current").symlink_to(
+                generation.relative_to(root), target_is_directory=True
+            )
+            with (
+                patch("foamnordic._cli.active_runtime_candidates", return_value=(generation,)),
+                patch("foamnordic._cli.profile", return_value=None),
+                patch("pathlib.Path.home", return_value=Path(directory) / "empty-home"),
+                redirect_stdout(StringIO()),
+            ):
+                status = main(["clobber"])
+            self.assertEqual(status, 0)
+            self.assertFalse(generation.exists())
+            self.assertFalse((root / "current").is_symlink())
 
 
 if __name__ == "__main__":

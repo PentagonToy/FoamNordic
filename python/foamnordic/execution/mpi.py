@@ -113,7 +113,6 @@ def write_runtime_profile(runtime: RuntimeProfile) -> Path:
 
     policy = discover_mpi_policy(wrapper=platform.system() == "Darwin")
     document = {
-        "schema_version": 1,
         "platform": {
             "system": platform.system().lower(),
             "architecture": platform.machine().lower(),

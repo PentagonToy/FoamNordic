@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -199,6 +200,26 @@ void test_double_solver_input_is_accepted_by_float_model_contract() {
         "Float model output element was changed inside model inference.");
 }
 
+void test_non_finite_output_is_rejected_before_publication() {
+    foamnordic::inference::CellInferenceExchange exchange({
+        "finite-output", {{"x", Element::float64, 1}}, {{"y", Element::float64, 1}},
+    });
+    exchange.begin(13, 0.8, 2);
+    exchange.add_input(scalar_field("x", {1.0, 2.0}, 13, 0.8));
+    exchange.seal_inputs();
+    foamnordic::inference::EvaluateAllCells policy;
+    static_cast<void>(exchange.prepare(policy));
+    exchange.add_output(scalar_field(
+        "y", {1.0, std::numeric_limits<double>::quiet_NaN()}, 13, 0.8));
+    bool rejected = false;
+    try {
+        exchange.seal_outputs(policy);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    require(rejected, "A non-finite model output reached the publication boundary.");
+}
+
 }  // namespace
 
 int main() {
@@ -207,4 +228,5 @@ int main() {
     test_in_place_field_contract();
     test_empty_rank_local_field_is_a_valid_exchange();
     test_double_solver_input_is_accepted_by_float_model_contract();
+    test_non_finite_output_is_rejected_before_publication();
 }

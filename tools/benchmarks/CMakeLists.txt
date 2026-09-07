@@ -6,3 +6,7 @@ target_link_libraries(foamnordic_field_benchmark PRIVATE FoamNordic::adapter)
 
 add_executable(foamnordic_smedja_benchmark smedja.cpp)
 target_link_libraries(foamnordic_smedja_benchmark PRIVATE FoamNordic::inference)
+
+add_executable(foamnordic_resident_memory_benchmark resident_memory.cpp)
+target_link_libraries(
+    foamnordic_resident_memory_benchmark PRIVATE FoamNordic::inference)

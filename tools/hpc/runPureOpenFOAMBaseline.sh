@@ -72,7 +72,7 @@ done
 
 LATEST_TIME=$(foamListTimes -case "$CASE" -latestTime 2>/dev/null | tail -1)
 cat >"$RUN_ROOT/baseline.env" <<EOF
-schema=foamnordic.pure-openfoam-baseline/v1
+schema=foamnordic.pure-openfoam-baseline
 application=reactingFoam
 openfoam=${WM_PROJECT_VERSION:-unknown}
 job=${SLURM_JOB_ID:-interactive}

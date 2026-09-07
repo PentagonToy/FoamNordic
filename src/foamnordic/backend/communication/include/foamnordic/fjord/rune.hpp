@@ -23,7 +23,7 @@ namespace foamnordic::fjord {
 
 inline constexpr std::array<std::byte, 4> rune_mark{
     std::byte{'F'}, std::byte{'N'}, std::byte{'R'}, std::byte{'D'}};
-inline constexpr std::uint16_t rune_version = 2;
+inline constexpr std::uint16_t rune_version = 3;
 inline constexpr std::size_t rune_prefix_size = 80;
 
 enum class RuneKind : std::uint8_t {
@@ -38,6 +38,7 @@ enum class RuneKind : std::uint8_t {
     shm_ready = 9,
     ucx_offer = 10,
     ucx_ready = 11,
+    request = 12,
 };
 
 enum class Capability : std::uint32_t {

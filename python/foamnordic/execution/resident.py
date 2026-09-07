@@ -220,7 +220,7 @@ def _load_joblib(path, joblib):
                 return joblib.load(path), None, "file"
         return joblib.load(path), None, "buffered"
 
-    # FNOBND2 places the standalone Joblib stream at a 64-byte boundary.  The
+    # FNOM places the standalone Joblib stream at a 64-byte boundary.  The
     # unpickler starts at that absolute file position, so its NumPy array
     # offsets map directly into the single FNOM file on both Linux and macOS.
     if path.offset % 64 == 0:
@@ -244,7 +244,7 @@ def _joblib_evaluator(
     except ImportError as error:
         raise ImportError("Joblib is missing from this FoamNordic installation") from error
     model, payload_storage, payload_mode = _load_joblib(path, joblib)
-    if isinstance(model, dict) and model.get("schema") == "foamnordic.function/v1":
+    if isinstance(model, dict) and model.get("schema") == "foamnordic.function":
         return _function_evaluator(model, outputs)
     _configure_estimator_threads(model, threads)
     try:
@@ -289,9 +289,9 @@ def _compiled_evaluator(path, outputs, dtype: str, threads: int = 1):
     from ..build.compiler import compile_source
 
     if dtype != "float64":
-        raise ValueError("compiled v1 artifacts require float64 tensors")
+        raise ValueError("compiled artifacts require float64 tensors")
     if sum(width for _, width in outputs) != 1:
-        raise ValueError("compiled v1 artifacts require one scalar output")
+        raise ValueError("compiled artifacts require one scalar output")
     if isinstance(path, BytesIO):
         source = path.getvalue()
     elif isinstance(path, Path):
@@ -452,7 +452,6 @@ def _function_evaluator(package, outputs):
         parameters = inspect.signature(function).parameters
     except (TypeError, ValueError):
         parameters = {}
-    accepts_seed = "seed" in parameters and "seed" not in input_names
     accepts_exchange_index = (
         "exchange_index" in parameters and "exchange_index" not in input_names
     )
@@ -460,14 +459,9 @@ def _function_evaluator(package, outputs):
         "physical_time" in parameters and "physical_time" not in input_names
     )
     accepts_rank = "rank" in parameters and "rank" not in input_names
-    accepts_rng = "rng" in parameters and "rng" not in input_names
     accepts_key = "key" in parameters and "key" not in input_names
 
-    root_key = (
-        Key.from_plan(package["key"])
-        if "key" in package
-        else random_key(int(package.get("seed", 42)))
-    )
+    root_key = Key.from_plan(package["key"])
     program = str(package.get("program", "function"))
     def evaluate(
         buffer, rows, columns, dtype, exchange_index, physical_time, rank=0
@@ -488,25 +482,15 @@ def _function_evaluator(package, outputs):
 
         exchange_index = int(exchange_index)
         rank = int(rank)
-        if accepts_seed:
-            arguments["seed"] = root_key.entropy[0]
         if accepts_exchange_index:
             arguments["exchange_index"] = exchange_index
         if accepts_physical_time:
             arguments["physical_time"] = float(physical_time)
         if accepts_rank:
             arguments["rank"] = rank
-        if accepts_rng or accepts_key:
+        if accepts_key:
             call_key = invocation(root_key, program, exchange_index, rank)
-            if accepts_rng:
-                arguments["rng"] = np.random.default_rng(
-                    np.random.SeedSequence(
-                        call_key.entropy,
-                        spawn_key=call_key.path,
-                    )
-                )
-            if accepts_key:
-                arguments["key"] = call_key
+            arguments["key"] = call_key
         result = function(**arguments)
         if output_layouts is None:
             packed = _packed_result(result, outputs, rows, dtype)
@@ -544,10 +528,9 @@ def _equinox_evaluator(
     path,
     outputs,
     dtype: str,
-    key: Key | int | None = None,
+    key: Key | None = None,
     program: str = "model",
     *,
-    seed: int | None = None,
     threads: int = 1,
 ):
     _configure_model_threads(threads)
@@ -566,7 +549,7 @@ def _equinox_evaluator(
     else:
         path.seek(0)
         package = cloudpickle.load(path)
-    if not isinstance(package, dict) or package.get("schema") != "foamnordic.equinox/v1":
+    if not isinstance(package, dict) or package.get("schema") != "foamnordic.equinox":
         raise ValueError("unsupported Equinox payload schema")
     model = package["model"]
     try:
@@ -585,17 +568,7 @@ def _equinox_evaluator(
     else:
         function = model if batched else jax.vmap(model)
     compiled = jax.jit(function)
-    if key is not None and seed is not None:
-        raise ValueError("Equinox evaluator accepts either key or seed, not both")
-    if seed is not None:
-        key = seed
-    root_key = (
-        random_key(42)
-        if key is None
-        else random_key(key)
-        if isinstance(key, int)
-        else key
-    )
+    root_key = random_key(42) if key is None else key
 
     def evaluate(
         buffer,
@@ -655,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
     model_format = str(manifest["format"])
-    if manifest.get("runtime") == "forest-v1":
+    if manifest.get("runtime") == "forest":
         _native.run_native_worker(
             arguments.address, str(manifest_path), arguments.connections,
             arguments.ready_file, not arguments.no_shm, model_threads,

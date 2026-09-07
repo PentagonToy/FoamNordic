@@ -102,7 +102,6 @@ class ExportTests(unittest.TestCase):
                 runtime="sklearnex",
             )
             metadata = fno._native.read_model_manifest(str(manifest))
-        self.assertEqual(metadata["schema_version"], 2)
         self.assertEqual(metadata["runtime"], "sklearnex")
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
@@ -120,7 +119,7 @@ class ExportTests(unittest.TestCase):
                 },
                 outputs={"omega_c": fno.Tensor.scalar()},
             )
-            self.assertEqual(manifest.read_bytes()[:8], b"FNOBND2\0")
+            self.assertEqual(manifest.read_bytes()[:8], b"FNOMBIN\0")
             self.assertEqual(
                 fno._native.read_model_payload(str(manifest)), b"onnx-payload"
             )
@@ -139,8 +138,6 @@ class ExportTests(unittest.TestCase):
             artifact = fno.Models.load(path)
 
         self.assertEqual(artifact.name, "reaction-rate")
-        self.assertEqual(artifact.container_version, 2)
-        self.assertEqual(artifact.schema_version, 1)
         self.assertEqual(artifact.backend, "onnx")
         self.assertEqual(artifact.inputs[0].name, "c")
         self.assertEqual(artifact.outputs[0].name, "omega_c")
@@ -296,7 +293,6 @@ class ExportTests(unittest.TestCase):
             )
             metadata = fno._native.read_model_manifest(str(manifest))
             self.assertEqual(metadata["format"], "joblib")
-            self.assertEqual(metadata["schema_version"], 2)
             self.assertEqual(metadata["runtime"], "sklearn")
             self.assertTrue(metadata["bundled"])
             self.assertIsInstance(_payload(manifest, metadata), BytesIO)

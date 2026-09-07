@@ -1,70 +1,48 @@
-# FoamNordic architecture
+# Architecture
 
-FoamNordic separates declarations, lifecycle, transport, inference, and solver
-integration. Python describes a workload and prepares an isolated case; native
-components own every repeated field exchange.
+FoamNordic separates experiment declaration from repeated solver execution. Python prepares an immutable plan and an isolated case; native components own the solver loop, field exchange, model evaluation, and atomic publication.
 
 ```text
-Python declaration
-    -> immutable execution plan
-    -> Longship lifecycle
-    -> OpenFOAM adapter <-> Fjord transport <-> ModelHost Smedja
-    -> Result and observations
+                             Python API
+                                 |
+                                 v
+                        Longship lifecycle
+                     /                       \
+                    v                         v
+       +------------------+              +------------------+
+       | OpenFOAM adapter | <-- Fjord -->|     ModelHost    |
+       +------------------+              +------------------+
+                  |                                |
+                  v                                v
+            solver fields                       FNOM model
 ```
+
+Longship records logs, observations, and results without placing Python callbacks in the solver exchange loop.
 
 ## Ownership
 
-| Layer | Owns | Does not own |
-| --- | --- | --- |
-| Python API | declarations, validation, case preparation | solver loops and repeated field copies |
-| Longship | placement, startup, readiness, shutdown, logs | equations and model semantics |
-| OpenFOAM adapter | field selection, equation hook, result commit | model loading and scheduling |
-| Fjord | versioned tensor transport | OpenFOAM or ML objects |
-| ModelHost Smedja | request-local packing, FNOM loading, and inference | solver state and persistent OpenFOAM pointers |
-| Solver/model adapter | equations, correction order, thermodynamics | orchestration |
-
-This boundary also applies to domain solvers. A solver owns its transported
-variables and equations; FoamNordic evaluates a declared model; a thin solver
-adapter validates and commits the result.
-
-## Control and data planes
-
-The control plane may use Python, Slurm, files, and process supervision. The
-data plane carries packed numeric tensors through UDS, SHM, TCP, or UCX. A
-field exchange never passes through a notebook, scheduler command, database,
-or serialised Python object.
-
-Declarations compile before launch. The native plan fixes program order,
-ports, tensor layouts, stages, keys, placement, and observation schedules.
-Runtime code follows that plan and cannot invent fields or reorder field programs.
-
-## Placement
-
-Node-local inference is the public placement: one ModelHost is started per
-solver node and serves the ranks on that node. This keeps model payloads and
-shared memory local while preserving one fail-together Slurm allocation. Local
-runs use the same lifecycle without a scheduler. TCP and UCX remain native
-transport capabilities and validation tools, not a second public placement API.
-
-## Model execution
-
-FNOM is the sole deployed model contract. It contains the tensor contract,
-preprocessing, backend metadata, and payload required at runtime. ONNX and
-compiled estimators execute natively; Joblib and Equinox use a managed Python
-resident. Backend selection remains inside FNOM, so `Operator.model(...)` is
-backend-neutral.
-
-## Documents
-
-| Document | Contents |
+| Component | Owns |
 | --- | --- |
-| [Principles](principles.md) | Ownership, invariants, non-goals, and 1.x compatibility policy |
-| [Native runtime](runtime.md) | Exchanges, resident execution, bypass, and failures |
-| [Native transport](transport.md) | Rune, Fjord, Harbor, UDS, SHM, TCP, UCX, and MPI layout |
-| [FNOM](fnom.md) | Artefact encoding, compatibility, preprocessing, and trust |
-| [OpenFOAM integration](openfoam.md) | Field bridge, equation adapters, and native build contract |
-| [Lifecycle](lifecycle.md) | Node-local placement, resource plans, startup, and shutdown |
-| [Observations](observations.md) | Monitoring, reduction, retention, and backpressure |
+| Python API | declarations, validation, case preparation |
+| Longship | placement, startup, readiness, shutdown, logs |
+| OpenFOAM adapter | field access, equation hooks, atomic commit |
+| Fjord | bounded numeric tensor transport |
+| ModelHost | packing, scaling, inference, output validation |
+| Solver adapter | equations, correction order, physical meaning |
 
-Measured behaviour belongs in [benchmarks and validation](../benchmarks/README.md),
-not in architecture promises.
+No notebook callback, model object, or scheduler command appears in the solver exchange loop. A solver remains responsible for equations and boundary conditions; FoamNordic evaluates only the declared operator.
+
+## Runtime shape
+
+A local run and a Slurm run use the same plan. Coupled jobs place one resident model worker beside the solver ranks on each node. Same-node payloads normally use shared memory; Unix sockets provide control and fallback transport.
+
+FNOM is the deployed model boundary. It contains tensor contracts, scaling, backend metadata, and the payload.
+
+## Further reading
+
+- [Runtime](runtime.md): request ownership, inference, and failure behavior
+- [Transport](transport.md): Rune frames, channels, and admission
+- [FNOM](fnom.md): artifact contents, inspection, and trust
+- [OpenFOAM](openfoam.md): field and equation integration
+- [Lifecycle](lifecycle.md): local and Slurm process ownership
+- [Observations](observations.md): bounded monitoring data

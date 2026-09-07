@@ -176,25 +176,69 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
         if (cancelled_) {
             return true;
         }
-        const auto has_context = std::any_of(
-            slots_.begin(), slots_.end(), [](const auto& slot) {
-                return !slot.active;
+        if (waiters_.front() != &ticket) {
+            return false;
+        }
+        auto can_admit = [&] {
+            const auto retained = retained_bytes_locked();
+            return std::any_of(slots_.begin(), slots_.end(), [&](const auto& slot) {
+                if (slot.active) {
+                    return false;
+                }
+                // Reusing a slot transfers ownership of its retained workspace to
+                // the active request.  Count every other idle workspace, but do
+                // not count this slot twice as both retained and active memory.
+                const auto idle_elsewhere = retained - slot.retained_bytes;
+                if (idle_elsewhere > resources_.maximum_working_bytes
+                    || admitted_bytes_ > resources_.maximum_working_bytes - idle_elsewhere) {
+                    return false;
+                }
+                return working_bytes <= resources_.maximum_working_bytes
+                    - idle_elsewhere - admitted_bytes_;
             });
-        return waiters_.front() == &ticket && has_context
-            && working_bytes <= resources_.maximum_working_bytes - admitted_bytes_;
+        };
+        if (can_admit()) {
+            return true;
+        }
+        // Idle retained capacity is a cache, never an admission dependency.
+        // Drop it when it alone would otherwise prevent queued work.
+        for (auto& slot : slots_) {
+            if (slot.active) {
+                continue;
+            }
+            if (slot.retained_bytes != 0) {
+                slot.workspace.release();
+                slot.retained_bytes = 0;
+                if (can_admit()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     });
     if (cancelled_) {
         std::erase(waiters_, &ticket);
         throw std::runtime_error("Model execution was cancelled.");
     }
     waiters_.pop_front();
+    const auto retained = retained_bytes_locked();
     const auto slot = std::find_if(
-        slots_.begin(), slots_.end(), [](const auto& candidate) {
-            return !candidate.active;
+        slots_.begin(), slots_.end(), [&](const auto& candidate) {
+            if (candidate.active) {
+                return false;
+            }
+            const auto idle_elsewhere = retained - candidate.retained_bytes;
+            return idle_elsewhere <= resources_.maximum_working_bytes
+                && admitted_bytes_ <= resources_.maximum_working_bytes - idle_elsewhere
+                && working_bytes <= resources_.maximum_working_bytes
+                    - idle_elsewhere - admitted_bytes_;
         });
     const auto index = static_cast<std::size_t>(slot - slots_.begin());
     ++requests_;
     slot->active = true;
+    // From this point the capacity belongs to the active lease and is covered
+    // by admitted_bytes_.  It becomes retained ownership again on release.
+    slot->retained_bytes = 0;
     ++active_contexts_;
     admitted_bytes_ += working_bytes;
     peak_active_contexts_ = std::max(peak_active_contexts_, active_contexts_);

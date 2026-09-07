@@ -22,7 +22,6 @@ def mark_generated(
     root.mkdir(parents=True, exist_ok=True)
     marker = root / MARKER
     value: dict[str, object] = {
-        "schema_version": 1,
         "kind": kind,
         "root": str(root),
     }
@@ -45,7 +44,7 @@ def generated_kind(path: Path) -> str | None:
         value = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return None
-    if value.get("schema_version") != 1 or value.get("root") != str(root):
+    if value.get("root") != str(root):
         return None
     kind = value.get("kind")
     return kind if isinstance(kind, str) and kind else None
@@ -67,7 +66,7 @@ def relocate_generated(path: Path, *, previous: Path) -> None:
         raise RuntimeError(
             f"FoamNordic ownership marker is unreadable: {marker}"
         ) from error
-    if value.get("schema_version") != 1 or value.get("root") != str(old_root):
+    if value.get("root") != str(old_root):
         raise RuntimeError(
             "FoamNordic refused to relocate an invalid ownership marker: "
             f"{marker}"

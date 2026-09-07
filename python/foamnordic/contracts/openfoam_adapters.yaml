@@ -1,4 +1,4 @@
-schema: foamnordic.openfoam-adapters/v1
+schema: foamnordic.openfoam-adapters
 
 adapters:
   kEqnFjord:

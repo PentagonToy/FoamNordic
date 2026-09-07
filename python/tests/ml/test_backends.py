@@ -152,7 +152,7 @@ class ModelBackendTests(unittest.TestCase):
             )
             metadata = fno._native.read_model_manifest(str(artifact))
             self.assertEqual(metadata["format"], "compiled")
-            self.assertEqual(metadata["runtime"], "cpp-v1")
+            self.assertEqual(metadata["runtime"], "compiled")
             with patch.dict(
                 "os.environ", {"FOAMNORDIC_COMPILED_CACHE": str(root / "cache")}
             ):
@@ -298,7 +298,7 @@ class ModelBackendTests(unittest.TestCase):
             expected = jax.vmap(model)(jnp.asarray(values))
             np.testing.assert_allclose(actual, expected, rtol=1.0e-6)
 
-    def test_equinox_key_is_derived_from_seed_and_exchange_index(self) -> None:
+    def test_equinox_key_is_derived_from_root_key_and_exchange_index(self) -> None:
         import cloudpickle
         import jax
         import jax.numpy as jnp
@@ -314,17 +314,17 @@ class ModelBackendTests(unittest.TestCase):
             with payload.open("wb") as stream:
                 cloudpickle.dump(
                     {
-                        "schema": "foamnordic.equinox/v1",
+                        "schema": "foamnordic.equinox",
                         "model": stochastic,
                         "batched": False,
                     },
                     stream,
                 )
             first = _equinox_evaluator(
-                payload, (("prediction", 1),), "float32", seed=42
+                payload, (("prediction", 1),), "float32", fno.Random.key(42)
             )
             second = _equinox_evaluator(
-                payload, (("prediction", 1),), "float32", seed=42
+                payload, (("prediction", 1),), "float32", fno.Random.key(42)
             )
             first_zero = first(memoryview(values), 2, 1, "float32", 0, 0.0)
             second_zero = second(memoryview(values), 2, 1, "float32", 0, 0.0)

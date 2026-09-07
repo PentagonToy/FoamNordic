@@ -1,14 +1,10 @@
 # FoamNordic Python package
 
-The Python package is FoamNordic's declarative control plane. It describes an
-OpenFOAM case, field programs, observations, placement, and scheduler
-resources, then compiles them into an immutable native plan. Solver equations
-and repeated field exchange remain outside Python.
+The Python package is FoamNordic's declarative control plane. It describes an OpenFOAM case, field programs, observations, placement, and scheduler resources, then compiles them into an immutable native plan. Solver equations and repeated field exchange remain outside Python.
 
 ## Public API
 
-Grouped namespaces use PascalCase, declarations use PascalCase, and functions
-use snake_case:
+Grouped namespaces use PascalCase, declarations use PascalCase, and functions use snake_case:
 
 ```python
 import foamnordic as fno
@@ -25,13 +21,9 @@ result = run.stop(progress=True)
 post = result.postprocess
 ```
 
-`fno.OpenFOAM`, `fno.Export`, `fno.Models`,
-`fno.Postprocess`, and `fno.Runtime` are the canonical grouped namespaces.
-Existing lowercase aliases remain part of the supported API. Filesystem
-arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
+`fno.OpenFOAM`, `fno.Export`, `fno.Models`, `fno.Postprocess`, and `fno.Runtime` are the canonical grouped namespaces. Existing lowercase aliases remain part of the supported API. Filesystem arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
 
-See the [API index](../docs/api/README.md) for closures, transforms, Slurm,
-observations, model export, and postprocessing.
+See the [API index](../docs/api/README.md) for closures, transforms, Slurm, observations, model export, and postprocessing.
 
 ## Package layout
 
@@ -48,9 +40,7 @@ observations, model export, and postprocessing.
 | `math.py`, `random.py` | backend-neutral numerical APIs |
 | `_cli.py` | installed `foamnordic` command entry point |
 
-Implementation modules may move between these categories; the exports in
-`foamnordic.__init__` and the documented grouped namespaces define the public
-surface.
+Implementation modules may move between these categories; the exports in `foamnordic.__init__` and the documented grouped namespaces define the public surface.
 
 ## Install from a checkout
 
@@ -63,18 +53,13 @@ foamnordic build
 foamnordic dir
 ```
 
-The same `foamnordic build` command works after PyPI, GitHub, or editable
-installation. It builds the OpenFOAM ABI-specific integration and reference
-solver below:
+The same `foamnordic build` command works after PyPI, GitHub, or editable installation. It builds the OpenFOAM ABI-specific integration and reference solver below:
 
 ```text
 ~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/
 ```
 
-On Apple Silicon, enter the OpenFOAM.app shell before building. On offline
-systems, provide an unpacked ONNX Runtime through
-`FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `foamnordic build --without-onnx` when
-ONNX execution is not required.
+On Apple Silicon, enter the OpenFOAM.app shell before building. On offline systems, provide an unpacked ONNX Runtime through `FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `foamnordic build --without-onnx` when ONNX execution is not required.
 
 The repository helper creates a marked development environment when desired:
 
@@ -83,8 +68,7 @@ bash tools/python/createVirtual.sh
 source ../Virtual/FoamNordic/bin/activate
 ```
 
-Site-managed HPC Python modules should be loaded before environment creation
-and each later activation.
+Site-managed HPC Python modules should be loaded before environment creation and each later activation.
 
 ## Runtime invariants
 
@@ -92,27 +76,19 @@ and each later activation.
 - A model-driven workload loads each FNOM artefact once per resident worker.
 - Node-local Slurm placement starts one ModelHost per solver node.
 - `Case.of_cmd` selects the matching installed OpenFOAM ABI at launch.
-- Generated cases and caches carry ownership markers; `clobber` removes only
-  matching marked paths.
-- `Run.stop()` returns one immutable `Result`; `run.detach()` deliberately
-  releases lifecycle ownership.
-- Slurm runs cancel after a 30-second ownership grace if their Python or
-  Jupyter process disappears abnormally.
+- Generated cases and caches carry ownership markers; `clobber` removes only matching marked paths.
+- `Run.stop()` returns one immutable `Result`; `run.detach()` deliberately releases lifecycle ownership.
+- Slurm runs cancel after a 30-second ownership grace if their Python or Jupyter process disappears abnormally.
 - Completed fields remain on disk and are independent from live observations.
 
 ## Tests
 
-Run the Python suite from the repository root in an installed development
-environment:
+Run the Python suite from the repository root in an installed development environment:
 
 ```console
 python -m unittest discover -s python/tests -v
 ```
 
-Native-extension tests skip when `_native` is not installed. Backend tests may
-also require their optional runtime libraries. The native C++ suite is built
-from the repository root with `FOAMNORDIC_TESTS=ON`; see the main README.
+Native-extension tests skip when `_native` is not installed. Backend tests may also require their optional runtime libraries. The native C++ suite is built from the repository root with `FOAMNORDIC_TESTS=ON`; see the main README.
 
-Architecture and ownership details are in
-[the architecture guide](../docs/architecture/README.md). Measured behaviour is
-kept separately under [benchmarks](../docs/benchmarks/README.md).
+Architecture and ownership details are in [the architecture guide](../docs/architecture/README.md). Measured behaviour is kept separately under [benchmarks](../docs/benchmarks/README.md).

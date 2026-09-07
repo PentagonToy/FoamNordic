@@ -6,13 +6,7 @@ import builtins
 import math as scalar_math
 from typing import Any, Iterable
 
-from .core.expressions import (
-    FieldExpression,
-    field,
-    filter_width,
-    grad,
-    operation,
-)
+from .core.expressions import FieldExpression, operation
 
 
 def _namespace(*values: object):
@@ -57,36 +51,13 @@ def _reduction(name: str, value: Any, *, axis=None, keepdims: bool = False):
 
 
 class Math:
-    """A small common vocabulary for native expressions, NumPy, and JAX.
+    """Numerical operations shared by Python scalars, NumPy, and JAX.
 
-    Field selectors create immutable declarations consumed by ``Closure``.
-    Numerical methods preserve the namespace of their input arrays, so a
-    function written with ``Math`` can run eagerly with NumPy and be traced by
-    JAX without selecting a backend in the model body.
+    Methods preserve the namespace of their input arrays, so a function can
+    run eagerly with NumPy and be traced by JAX without selecting a backend in
+    the model body. OpenFOAM field declarations live exclusively under
+    :class:`foamnordic.Field`.
     """
-
-    # Native OpenFOAM declarations supported by the current closure contract.
-    field = staticmethod(field)
-    grad = staticmethod(grad)
-    filter_width = staticmethod(filter_width)
-
-    @staticmethod
-    def div(*values: str | FieldExpression) -> FieldExpression:
-        """Request OpenFOAM divergence or conservative flux divergence."""
-
-        return operation("div", *values)
-
-    @staticmethod
-    def laplacian(*values: str | FieldExpression) -> FieldExpression:
-        """Request OpenFOAM Laplacian with an optional scalar coefficient."""
-
-        return operation("laplacian", *values)
-
-    @staticmethod
-    def curl(value: str | FieldExpression) -> FieldExpression:
-        """Request the OpenFOAM curl of a volume-vector expression."""
-
-        return operation("curl", value)
 
     # Element-wise functions shared by Python scalars, NumPy, and JAX.
     @staticmethod

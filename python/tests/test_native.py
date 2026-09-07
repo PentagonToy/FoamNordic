@@ -15,6 +15,7 @@ class NativeBindingTests(unittest.TestCase):
         self.assertIn("resource plan", _native.LongshipPlan.__doc__)
         self.assertIn("plan_longship", dir(_native))
         self.assertNotIn("Harbor", dir(_native))
+        self.assertNotIn("write_model_manifest", dir(_native))
 
     def test_runtime_plan_uses_native_resource_arithmetic(self) -> None:
         placement = _native.PlacementRequest()

@@ -108,19 +108,55 @@ void Harbor::publish(
     complete(exchange_index, static_cast<std::uint32_t>(tensors.size()));
 }
 
+void Harbor::publish_request(
+    std::uint64_t exchange_index,
+    std::span<const TensorView> tensors) {
+    if (tensors.empty() || tensors.size() > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::invalid_argument("An admitted request must contain tensors.");
+    }
+    std::uint64_t payload_bytes = 0;
+    for (const auto& tensor : tensors) {
+        tensor.validate();
+        if (tensor.time_index != exchange_index) {
+            throw std::invalid_argument("Every request tensor must share its exchange index.");
+        }
+        if (tensor.bytes.size() > std::numeric_limits<std::uint64_t>::max() - payload_bytes) {
+            throw std::overflow_error("Request payload byte count overflowed.");
+        }
+        payload_bytes += tensor.bytes.size();
+    }
+    const RunePrefix request{
+        .kind = RuneKind::request,
+        .flags = static_cast<std::uint32_t>(tensors.size()),
+        .payload_bytes = payload_bytes,
+        .exchange_index = exchange_index,
+        .rank = session_.rank,
+        .peers = session_.peers,
+        .session_id = session_.session_id,
+        .solver_time_index = tensors.front().solver_time_index,
+    };
+    channel_->write_all(encode_prefix(request));
+    publish(exchange_index, tensors);
+}
+
 HarborMessage Harbor::receive_message(
     std::uint64_t maximum_tensor_payload,
-    PayloadAdmission admit_payload) {
+    PayloadAdmission admit_payload,
+    bool reveal_request) {
     const auto prefix = receive_prefix();
     if (session_.session_id != 0 && prefix.session_id != session_.session_id) {
         throw std::runtime_error("Harbor received data for a different session.");
     }
     if (prefix.kind != RuneKind::tensor) {
         if (prefix.kind != RuneKind::complete && prefix.kind != RuneKind::shutdown
-            && prefix.kind != RuneKind::error) {
+            && prefix.kind != RuneKind::error && prefix.kind != RuneKind::request) {
             throw std::runtime_error("Harbor received an unexpected Rune message.");
         }
-        return {prefix.kind, std::nullopt, prefix.exchange_index, prefix.flags};
+        if (prefix.kind == RuneKind::request && !reveal_request) {
+            return receive_message(maximum_tensor_payload, admit_payload, false);
+        }
+        return {prefix.kind, std::nullopt, prefix.exchange_index, prefix.flags,
+                prefix.payload_bytes};
     }
 
     if (prefix.payload_bytes > session_.maximum_payload

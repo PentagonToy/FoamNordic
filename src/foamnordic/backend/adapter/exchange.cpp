@@ -199,7 +199,7 @@ void AtomicFieldExchange::execute(
         }
         inputs.push_back(std::move(input));
     }
-    harbor_.publish(exchange_index, inputs);
+    harbor_.publish_request(exchange_index, inputs);
 
     std::unordered_map<std::string, fjord::Tensor> prepared;
     while (true) {

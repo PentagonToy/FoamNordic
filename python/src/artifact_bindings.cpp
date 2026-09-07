@@ -243,7 +243,6 @@ std::vector<foamnordic::inference::TreeLeaf> leaves(
 
 nb::dict manifest_dict(const foamnordic::inference::ModelArtifact& artifact) {
     nb::dict result;
-    result["schema_version"] = artifact.schema_version;
     result["format"] = foamnordic::inference::name(artifact.format);
     result["artifact_path"] = artifact.artifact_path;
     result["name"] = artifact.contract.name;
@@ -304,7 +303,6 @@ foamnordic::inference::ModelArtifact make_artifact(
     const std::string& runtime) {
     const auto value_type = element(dtype);
     return {
-        runtime.empty() ? 1U : 2U,
         format(model_format),
         artifact_path,
         {name, fields(inputs, value_type), fields(outputs, value_type)},
@@ -318,46 +316,6 @@ foamnordic::inference::ModelArtifact make_artifact(
 }  // namespace
 
 void bind_artifacts(nb::module_& module) {
-    module.def(
-        "write_model_manifest",
-        [](const std::string& manifest_path,
-           const std::string& artifact_path,
-           const std::string& name,
-           const std::string& model_format,
-           const std::vector<Field>& inputs,
-           const std::vector<Field>& outputs,
-           const std::string& dtype,
-           const std::vector<Leaf>& tree_leaves,
-           nb::object x_scaler,
-           nb::object y_scaler,
-           const std::string& runtime) {
-            foamnordic::inference::write_manifest(
-                manifest_path,
-                make_artifact(
-                    artifact_path,
-                    name,
-                    model_format,
-                    inputs,
-                    outputs,
-                    dtype,
-                    tree_leaves,
-                    std::move(x_scaler),
-                    std::move(y_scaler),
-                    runtime));
-        },
-        "manifest_path"_a,
-        "artifact_path"_a,
-        "name"_a,
-        "format"_a,
-        "inputs"_a,
-        "outputs"_a,
-        "dtype"_a = "float64",
-        "tree_leaves"_a = std::vector<Leaf>{},
-        "x_scaler"_a = nb::none(),
-        "y_scaler"_a = nb::none(),
-        "runtime"_a = "",
-        "Write one backend-neutral FNOM manifest.");
-
     module.def(
         "write_model_bundle",
         [](const std::string& manifest_path,

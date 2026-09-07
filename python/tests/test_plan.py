@@ -539,7 +539,6 @@ class PlanTests(unittest.TestCase):
 
         self.assertEqual(first.digest, second.digest)
         self.assertTrue(first.digest.startswith("sha256:"))
-        self.assertEqual(first.schema_version, 2)
         self.assertEqual(first.as_dict(), second.as_dict())
 
     @unittest.skipUnless(native_available(), "nanobind extension is not installed")
@@ -782,24 +781,23 @@ class PlanTests(unittest.TestCase):
         )
         native.write_model_bundle.assert_called_once()
 
-    def test_compatibility_seed_is_normalized_to_a_public_key(self) -> None:
+    def test_program_key_requires_the_public_key_type(self) -> None:
         transform = fno.Transform(
-            "compatibilitySeed",
+            "keyedTransform",
             fno.Operator.model("model.fnom"),
             {"velocity": fno.field("U")},
             {"velocity": fno.field("U")},
             "time_step_start",
-            7,
+            fno.Random.key(7),
         )
         self.assertEqual(transform.key, fno.Random.key(7))
-        with self.assertRaisesRegex(ValueError, "either key or seed"):
+        with self.assertRaisesRegex(TypeError, "Random.Key"):
             fno.Transform(
-                name="ambiguousSeed",
+                name="integerKey",
                 operator=fno.Operator.model("model.fnom"),
                 inputs={"velocity": fno.field("U")},
                 outputs={"velocity": fno.field("U")},
-                key=fno.Random.key(7),
-                seed=8,
+                key=8,
             )
 
     def test_transform_renders_logical_keys_separately_from_fields(self) -> None:
@@ -811,7 +809,7 @@ class PlanTests(unittest.TestCase):
                 "pressure": fno.field("p"),
             },
             outputs={"predicted_velocity": fno.field("U")},
-            seed=7,
+            key=fno.Random.key(7),
         )
         rendered = render_transform_dictionary(
             transform,
@@ -892,9 +890,9 @@ class PlanTests(unittest.TestCase):
             name="kEqnFjord",
             artifact="model.fnom",
             inputs={
-                "convection": fno.Math.div("phi", "U"),
-                "diffusion": fno.Math.laplacian("nu", "U"),
-                "strain": fno.Math.dev(fno.Math.symm(fno.Math.grad("U"))),
+                "convection": fno.Field.div("phi", "U"),
+                "diffusion": fno.Field.laplacian("nu", "U"),
+                "strain": fno.Math.dev(fno.Math.symm(fno.Field.grad("U"))),
             },
             outputs={"nut": fno.field("nut")},
         )
@@ -1085,9 +1083,9 @@ class PlanTests(unittest.TestCase):
             name="nutFjord",
             artifact="model.fnom",
             inputs={
-                "convection": fno.Math.div("phi", "U"),
-                "diffusion": fno.Math.laplacian("nu", "U"),
-                "vorticity": fno.Math.curl("U"),
+                "convection": fno.Field.div("phi", "U"),
+                "diffusion": fno.Field.laplacian("nu", "U"),
+                "vorticity": fno.Field.curl("U"),
             },
             outputs={"nut": fno.field("nut")},
         )
@@ -1109,6 +1107,24 @@ class PlanTests(unittest.TestCase):
         self.assertIn("divSchemes/default", commands)
         self.assertIn("foamnordic_default", commands)
         self.assertNotIn("-entry divSchemes/default -set", commands)
+
+        recorded = "\n".join(
+            _scheme_commands(longship, Path("/runs/case"), Path("/runs/work"))
+        )
+        self.assertIn("numerics-changes.tsv", recorded)
+
+        strict = fno.Longship(
+            case=example.case, closures=(closure,), numerics="strict"
+        )
+        strict_commands = "\n".join(
+            _scheme_commands(strict, Path("/runs/case"), Path("/runs/work"))
+        )
+        self.assertIn("strict numerics", strict_commands)
+        self.assertNotIn("numerics-changes.tsv", strict_commands)
+        self.assertNotIn("-set 'Gauss linear'", strict_commands)
+
+        with self.assertRaisesRegex(ValueError, "numerics"):
+            fno.Longship(case=example.case, numerics="relaxed")
 
     def test_ntasks_must_divide_evenly_across_nodes(self) -> None:
         with self.assertRaisesRegex(ValueError, "divide evenly"):

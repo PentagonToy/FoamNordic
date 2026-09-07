@@ -39,7 +39,6 @@ struct TreeLeaf {
 };
 
 struct ModelArtifact {
-    std::uint32_t schema_version{1};
     ModelFormat format{ModelFormat::onnx};
     std::string artifact_path;
     ProgramContract contract;

@@ -172,6 +172,10 @@ class SlurmMetadataTests(unittest.TestCase):
                     "foamnordic.execution.run.find_spec",
                     return_value=Mock(origin=str(native)),
                 ),
+                patch(
+                    "foamnordic.execution.run.active_runtime_candidates",
+                    return_value=(),
+                ),
             ):
                 os.environ.pop("FOAMNORDIC_LONGSHIP", None)
                 self.assertEqual(_longship_executable(), executable.resolve())

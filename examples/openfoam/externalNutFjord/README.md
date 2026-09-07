@@ -1,15 +1,10 @@
 # Out-of-tree OpenFOAM adapter
 
-This is a complete equation-level adapter built against an installed
-FoamNordic SDK. It does not include or link files from the FoamNordic source
-tree. `externalNutFjord` is intentionally small: OpenFOAM owns the LES model
-and `nut` field, while the adapter performs one blocking `ClosureHook` call at
-`correctNut()`.
+This is a complete equation-level adapter built against an installed FoamNordic SDK. It does not include or link files from the FoamNordic source tree. `externalNutFjord` is intentionally small: OpenFOAM owns the LES model and `nut` field, while the adapter performs one blocking `ClosureHook` call at `correctNut()`.
 
 ## Prerequisites
 
-Install FoamNordic, activate the target OpenFOAM environment, and build its
-ABI-specific SDK once:
+Install FoamNordic, activate the target OpenFOAM environment, and build its ABI-specific SDK once:
 
 ```console
 python -m pip install foamnordic
@@ -18,8 +13,7 @@ foamnordic build
 foamnordic doctor
 ```
 
-On macOS, activate OpenFOAM with the site's normal shell command instead of
-the module command.
+On macOS, activate OpenFOAM with the site's normal shell command instead of the module command.
 
 ## Build outside FoamNordic
 
@@ -38,13 +32,11 @@ foamnordic dir --include
 foamnordic dir --openfoam-library
 ```
 
-There is no `FOAMNORDIC_SOURCE` or build-tree path. The resulting
-`libexternalNutFjord` is specific to the currently loaded OpenFOAM ABI.
+There is no `FOAMNORDIC_SOURCE` or build-tree path. The resulting `libexternalNutFjord` is specific to the currently loaded OpenFOAM ABI.
 
 ## Use
 
-Longship loads the ABI-matched FoamNordic integration. Add the external
-library to `system/controlDict` without a platform-specific suffix:
+Longship loads the ABI-matched FoamNordic integration. Add the external library to `system/controlDict` without a platform-specific suffix:
 
 ```text
 libs
@@ -53,8 +45,7 @@ libs
 );
 ```
 
-Select `externalNutFjord` and provide the same thin field contract used by an
-algebraic eddy-viscosity model:
+Select `externalNutFjord` and provide the same thin field contract used by an algebraic eddy-viscosity model:
 
 ```text
 LESModel externalNutFjord;
@@ -75,10 +66,6 @@ externalNutFjordCoeffs
 }
 ```
 
-The external project declares the corresponding FNOM contract. Production
-projects let Longship start the compatible ModelHost and render the integration
-library, address, and other lifecycle-owned dictionary values.
+The external project declares the corresponding FNOM contract. Production projects let Longship start the compatible ModelHost and render the integration library, address, and other lifecycle-owned dictionary values.
 
-The example duplicates only the thin equation call site so it can demonstrate
-the extension boundary. Transport, packing, model loading, scaling, failure
-handling, and lifecycle remain in the installed FoamNordic library.
+The example duplicates only the thin equation call site so it can demonstrate the extension boundary. Transport, packing, model loading, scaling, failure handling, and lifecycle remain in the installed FoamNordic library.

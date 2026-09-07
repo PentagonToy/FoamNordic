@@ -4,10 +4,36 @@ import unittest
 from unittest.mock import patch
 from argparse import Namespace
 from io import StringIO
-from foamnordic.build.generations import complete, fingerprint, publish, dependency_identity
+from foamnordic.build.generations import (
+    collect_garbage,
+    complete,
+    dependency_identity,
+    fingerprint,
+    pin,
+    publish,
+)
 
 
 class GenerationTests(unittest.TestCase):
+    def test_gc_preserves_current_recent_and_pinned_generations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generations = []
+            for index in range(4):
+                generation = root / "generations" / str(index)
+                generation.mkdir(parents=True)
+                (generation / "runtime").write_text(str(index))
+                publish(root, generation, str(index))
+                generations.append(generation)
+            marker = pin(generations[0], "active run")
+            removed = collect_garbage(root, keep=2)
+            self.assertEqual(set(removed), {generations[1]})
+            self.assertTrue(generations[0].is_dir())
+            self.assertTrue(generations[2].is_dir())
+            self.assertTrue(generations[3].is_dir())
+            marker.unlink()
+            self.assertEqual(collect_garbage(root, keep=2), (generations[0],))
+
     def test_publish_preserves_previous_and_detects_damage(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

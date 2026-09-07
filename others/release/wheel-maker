@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: others/wheel-maker [options]
+Usage: others/release/wheel-maker [options]
 
 Build FoamNordic wheels with GitHub Actions and prepare a checked wheelhouse.
 The script prepares artifacts only; publishing to PyPI is a separate command.
@@ -88,7 +88,7 @@ fi
 
 version=$(sed -nE 's/^version = "([^"]+)"/\1/p' python/pyproject.toml | head -1)
 [[ -n "$version" ]] || fail "could not read the FoamNordic version"
-python3 others/release_notes.py >/dev/null \
+python3 others/release/release_notes.py >/dev/null \
     || fail "release versions or changelog are inconsistent"
 
 gh auth status >/dev/null 2>&1 \
@@ -131,7 +131,7 @@ elif [[ "$output" != /* ]]; then
 fi
 [[ ! -e "$output" ]] || fail "output already exists: $output"
 mkdir -p "$output"
-python3 others/release_notes.py > "$output/release-notes.md"
+python3 others/release/release_notes.py > "$output/release-notes.md"
 
 download=$(mktemp -d "${TMPDIR:-/tmp}/foamnordic-wheels.XXXXXX")
 cleanup() {

@@ -368,7 +368,7 @@ def main() -> int:
         for model in ("Smagorinsky", "kEqn")
     ]
     report = {
-        "schema": "foamnordic.analytical-les-parity/v1",
+        "schema": "foamnordic.analytical-les-parity",
         "source": str(arguments.source.expanduser().resolve()),
         "end_time": arguments.end_time,
         "rtol": arguments.rtol,

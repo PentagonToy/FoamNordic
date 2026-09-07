@@ -89,7 +89,7 @@ LoadedModel load_model(
     options.validate();
     auto artifact = read_manifest(manifest_path);
     std::unique_ptr<PackedModelKernel> packed;
-    if (artifact.runtime == "forest-v1") {
+    if (artifact.runtime == "forest") {
         std::vector<std::byte> data;
         if (is_bundle(manifest_path)) data = read_bundle_payload(manifest_path);
         else {

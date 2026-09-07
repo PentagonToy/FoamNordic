@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 import re
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def release_notes(root: Path, tag: str | None = None) -> str:

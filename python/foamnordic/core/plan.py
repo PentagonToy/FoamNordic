@@ -33,10 +33,6 @@ class CompiledPlan:
         digest = f"sha256:{hashlib.sha256(canonical).hexdigest()}"
         return cls(canonical.decode("utf-8"), digest)
 
-    @property
-    def schema_version(self) -> int:
-        return int(self.as_dict()["schema_version"])
-
     def as_dict(self) -> dict[str, Any]:
         return json.loads(self._canonical_json)
 

@@ -160,6 +160,26 @@ void test_partial_requests_make_progress() {
     require(rejected, "Oversized cumulative exchange waited on itself.");
 }
 
+void test_preannounced_requests_release_receive_ownership() {
+    foamnordic::inference::ReceiveCreditPool credits(128);
+    foamnordic::inference::ReceiveCreditPool::Reservation partial(credits);
+    partial.acquire(32);
+    partial.seal();
+
+    std::atomic<bool> peer_admitted{false};
+    std::thread peer([&] {
+        foamnordic::inference::ReceiveCreditPool::Reservation complete(credits);
+        complete.acquire(64);
+        complete.seal();
+        peer_admitted = true;
+    });
+    peer.join();
+    require(peer_admitted.load(),
+        "A preannounced partial request blocked an independently admissible peer.");
+    require(credits.snapshot().active_bytes == 32,
+        "Peer request did not release its request-level receive credit.");
+}
+
 void test_active_workspace_accounting() {
     foamnordic::inference::ExecutionContextPool pool({2, 1024 * 1024});
     auto active = pool.acquire(4096);
@@ -345,14 +365,14 @@ void test_native_combustion_exchange(bool shared_memory) {
         1,
         4096,
     }));
-    for (const auto& tensor : {
-             scalar_field("c_tilde", {0.1, 0.4, 0.7, 0.9}, 8, 0.25),
-             scalar_field("c_var", {0.0, 0.1, 0.01, 0.2}, 8, 0.25),
-             scalar_field("T_tilde", {300.0, 900.0, 1200.0, 1600.0}, 8, 0.25),
-         }) {
-        client.send(tensor.view());
-    }
-    client.complete(8, 3);
+    const std::vector request{
+        scalar_field("c_tilde", {0.1, 0.4, 0.7, 0.9}, 8, 0.25),
+        scalar_field("c_var", {0.0, 0.1, 0.01, 0.2}, 8, 0.25),
+        scalar_field("T_tilde", {300.0, 900.0, 1200.0, 1600.0}, 8, 0.25),
+    };
+    std::vector<foamnordic::fjord::TensorView> request_views;
+    for (const auto& tensor : request) request_views.push_back(tensor.view());
+    client.publish_request(8, request_views);
 
     auto output_message = client.receive_message();
     require(
@@ -388,7 +408,6 @@ void test_scaled_affine_exchange(bool shared_memory) {
         {1.0});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "artifact/reference-affine.onnx",
             {
@@ -540,7 +559,6 @@ void test_k_eqn_fjord_contract() {
         11, 3, std::move(weights), {0.0, 0.0, 0.0});
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "artifact/kEqnFjord.onnx",
             {
@@ -655,6 +673,7 @@ int main() {
     test_output_credit_survives_backpressure(false);
     test_output_credit_survives_backpressure(true);
     test_partial_requests_make_progress();
+    test_preannounced_requests_release_receive_ownership();
     test_active_workspace_accounting();
     test_shared_receive_credit_blocks_and_cancels();
     test_native_combustion_exchange(false);

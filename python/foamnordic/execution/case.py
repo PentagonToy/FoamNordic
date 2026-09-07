@@ -341,12 +341,17 @@ def _scheme_requirements(longship: Longship) -> tuple[tuple[str, str, str], ...]
     )
 
 
-def _scheme_commands(longship: Longship, case_dir: Path) -> list[str]:
-    """Add only schemes not already covered by an exact or usable default."""
+def _scheme_commands(
+    longship: Longship, case_dir: Path, work_dir: Path | None = None
+) -> list[str]:
+    """Validate or add required schemes and record every actual mutation."""
 
     schemes = case_dir / "system/fvSchemes"
     path = quote_command((schemes,))
     commands = []
+    changes = None if work_dir is None else quote_command(
+        (work_dir / "numerics-changes.tsv",)
+    )
     for section, expression, scheme in _scheme_requirements(longship):
         exact = quote_command((f"{section}/{expression}",))
         default = quote_command((f"{section}/default",))
@@ -354,15 +359,34 @@ def _scheme_commands(longship: Longship, case_dir: Path) -> list[str]:
         message = quote_command(
             (f"[FoamNordic] Added ML feature scheme: {expression} -> {scheme}",)
         )
-        commands.append(
+        missing = (
             f"if ! foamDictionary {path} -entry {exact} >/dev/null 2>&1; then "
             f"foamnordic_default=$(foamDictionary {path} -entry {default} "
             f"-value 2>/dev/null || true); "
             f"if [[ -z \"$foamnordic_default\" "
             f"|| \"$foamnordic_default\" == none ]]; then "
-            f"foamDictionary {path} -entry {exact} -set {selected}; "
-            f"printf '%s\\n' {message}; fi; fi"
         )
+        if longship.numerics == "strict":
+            error = quote_command((
+                f"FoamNordic strict numerics: missing {section}/{expression}",
+            ))
+            commands.append(missing + f"printf '%s\\n' {error} >&2; exit 2; fi; fi")
+        else:
+            record = ""
+            if changes is not None:
+                section_value = quote_command((section,))
+                expression_value = quote_command((expression,))
+                scheme_value = quote_command((scheme,))
+                record = (
+                    f"printf '%s\\t%s\\t%s\\n' {section_value} "
+                    f"{expression_value} {scheme_value} >> {changes}; "
+                )
+            commands.append(
+                missing
+                + f"foamDictionary {path} -entry {exact} -set {selected}; "
+                + record
+                + f"printf '%s\\n' {message}; fi; fi"
+            )
     return commands
 
 
@@ -728,7 +752,7 @@ def _package_function(
         )
         cloudpickle.dump(
             {
-                "schema": "foamnordic.function/v1",
+                "schema": "foamnordic.function",
                 "function": program.operator.source,
                 "inputs": tuple(program.inputs),
                 "input_widths": tuple(
@@ -952,7 +976,7 @@ def prepare_case(
             f"-entry {function_name} -set {dictionary}; else foamDictionary "
             f"{control_path} -entry {function_name} -add {dictionary}; fi"
         )
-    commands.extend(_scheme_commands(longship, case_dir))
+    commands.extend(_scheme_commands(longship, case_dir, work_dir))
     if longship.field_programs:
         if openfoam_library is None:
             raise RuntimeError(

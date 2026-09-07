@@ -1,301 +1,41 @@
 # Native runtime
+ModelHost executes every declared field program outside the OpenFOAM process. Python prepares the plan and artifacts but is not called during exchanges.
 
-FoamNordic treats every resident model as a field-program contract, not as a
-particular ML framework or physical role. Each exchange declares named input
-and output fields, element types, component counts, exchange index, solver time
-index, physical time, and local cell count.
-
-The native state machine is:
+## Request path
 
 ```text
-waiting
-  → collecting_inputs
-  → inputs_ready
-  → evaluating
-  → outputs_ready
-  → completed
+solver fields
+      |
+      v
+admitted request
+      |
+      v
+pack -> scale -> evaluate -> inverse scale -> validate
+      |
+      v
+atomic field commit
 ```
 
-Missing, duplicate, stale, out-of-order, incorrectly shaped, or incorrectly
-typed fields stop the exchange before inference. Exchange indices must increase
-monotonically. A returned tensor must match both the active exchange index and
-its physical time; a complete but stale response is rejected before any
-solver-owned output field is modified.
+A request is identified by exchange index, solver time index, physical time, rank, tensor contract, and payload size. Input bodies are accepted only after the complete request fits the receive budget.
 
-## Closure examples
+## Execution contexts
 
-Progress-variable combustion can use:
+Each context owns a reusable Smedja workspace. Immutable field layouts are compiled once; field addresses, shapes, and active cells are rebound for every request. Active estimates and retained capacity share one context budget. Oversized idle cache is released rather than blocking new work.
 
-```text
-inputs:  c, c_var, T
-output:  omega_c
-```
+Backends declare whether evaluation is concurrent. Non-concurrent backends use a narrow lock around evaluation only; packing and output handling remain request-local.
 
-An algebraic LES closure can use:
+## Outputs
 
-```text
-inputs:  grad_U (9 components), delta
-output:  nut
-```
+Predictions are matched to declared output names and widths. Scaling, numeric conversion, finite-value checks, and destination alias checks complete before any solver-owned field changes. Multi-output publication is atomic.
 
-A k-equation closure can add resolved strain, filter width, density, or the
-modelled energy field without changing the exchange engine.
+## Bypass and empty ranks
 
-## Native bypass
+A field program may evaluate a selected cell subset while deterministic bypass rules fill the remaining cells. Empty rank-local partitions are valid no-op batches and do not retain packing storage.
 
-Bypass is a first-class native policy with three responsibilities:
+## Failure behavior
 
-1. select the cell indices that require model evaluation;
-2. prefill outputs for bypassed cells;
-3. scatter model predictions from active-cell order back to mesh-cell order.
+Malformed input, model failure, invalid output, timeout, transport loss, or cancellation invalidates the exchange. Admission waiters wake, memory credits return, and the coupled supervisor tears down peers within the configured grace period.
 
-For combustion, a policy may bypass cells outside the progress-variable range,
-with negligible variance, below an ignition temperature, or covered by an
-analytic or beta-FDF rule. For LES, a policy may apply a laminar, near-wall,
-realisability, or clipping rule. These physics policies are separate C++ or
-Fortran kernels; the state machine only validates their indices and complete
-outputs.
+## Profiling
 
-The model therefore receives only active cells. Python never builds the mask,
-copies the full mesh into a filtered temporary array, or scatters the result in
-a timestep loop.
-
-## Native runner
-
-`InferenceRunner` owns the complete hot path for one or more exchanges:
-
-```text
-Harbor input tensors
-  → validate one ordered exchange batch
-  → seal required program inputs
-  → run the native bypass policy
-  → evaluate active cells through a ModelKernel
-  → merge predictions into full mesh fields
-  → Harbor output tensors + completion marker
-```
-
-The runner treats the Rune `complete` message as the batch boundary. Every
-input tensor in that batch must share its exchange index, solver time index,
-physical time, and
-cell count. A `shutdown` message is accepted only between exchanges; shutdown
-during a partial batch is an error rather than an implicit incomplete result.
-
-`ModelKernel` is deliberately smaller than a framework API. It receives the
-validated input map, the sorted active-cell indices, exchange index, and
-physical time, and returns named prediction tensors. Native ONNX, a compiled
-model, or a managed Python worker may implement that boundary without changing
-OpenFOAM coupling, bypass rules, or Rune/Fjord transport.
-
-An input and output may intentionally share a field name, such as `U -> U`.
-This represents atomic replacement of an OpenFOAM field after native inference;
-names remain unique within the input list and within the output list.
-
-## Smedja execution boundary
-
-Smedja (Swedish for a smithy) is ModelHost's preparation boundary between a
-completed field request and backend invocation. It compiles immutable contract
-metadata—field order, component widths, feature offsets, and element types—once.
-Tensor addresses, shapes, active-cell selections, and local cell counts are
-rebound and validated for every invocation. It never retains an OpenFOAM-owned
-pointer or treats a previous mesh layout as current state.
-
-ModelHost owns a bounded pool of execution contexts rather than attaching a
-large workspace to every solver rank. Each context owns one Smedja input
-workspace and admits a conservative working-set estimate covering packed input,
-backend prediction, and named output preparation. A request larger than the
-host limit fails with its required and permitted byte counts; otherwise it
-waits without occupying another execution context.
-
-Similar request sizes reuse byte capacity, but logical shape, metadata, and
-contents are reset on every call. A request smaller than one quarter of retained
-capacity releases the oversized allocation so a temporary topology does not pin
-memory for the rest of a run. A zero-cell rank partition releases its retained
-packing allocation completely; later non-empty partitions reacquire and grow
-storage from their current contracts rather than stale mesh state. Retained
-workspace is therefore bounded by execution resources rather than MPI rank
-count.
-
-The negotiated payload limit applies to the complete prepared input exchange,
-not independently to every field. Before allocating each incoming tensor body,
-the Rune reader checks the remaining exchange allowance. A malformed client
-therefore cannot multiply the negotiated limit by sending many individually
-valid fields. If one rank fails while another is waiting for an execution
-context, ModelHost cancels and wakes the waiter before interrupting the rank
-channels; fail-together shutdown cannot remain blocked behind admission.
-
-Contiguous active-cell ranges use a dedicated packing path. A single input is
-copied as one block, while multi-input packing avoids repeated active-index
-loads in the cell loop. Sparse bypass selections retain the validated gather
-path. This choice is made from the current request and is not cached as mesh
-state.
-
-When solver scalar precision differs from the model contract, Smedja casts
-while packing instead of materialising another complete converted field set.
-The common three-scalar float64-to-float32 closure path uses one specialised
-contiguous loop. Sparse selections retain the same checked conversion rules.
-
-Smedja produces staged outputs; it does not mutate solver fields. The adapter
-validates every declared output before atomic commit. A compatible single
-output transfers ownership of its backend buffer without copying. Multiple
-outputs are deinterleaved into independently validated tensors before publish;
-the widest output compacts into and takes ownership of the backend staging
-allocation, avoiding one additional full-field allocation. The remaining
-outputs receive independent storage, so publication never exposes strided or
-aliased solver data.
-Request-local packing, scaling, validation, and staging remain outside the
-backend lock; only the backend evaluation is serialised for backends that
-require it. Arbitrary stateful kernels retain conservative worker-wide
-serialisation. This synchronisation ownership is preserved when kernels are
-wrapped by the public artefact loader, so loading an FNOM artefact cannot
-silently widen the critical section.
-
-Packed backends declare whether evaluation is concurrent, row-independent, and
-owner of an internal compute-thread pool. Unknown and managed Python backends
-remain serial by default. Reentrant native kernels may evaluate in parallel up
-to the bounded context count; ONNX remains one `Run()` at a time because its
-session owns the configured CPU thread budget. Request concurrency therefore
-cannot silently multiply ONNX's intra-operator threads.
-
-For the normal packed ONNX contract, the output feature width is static while
-the cell dimension may change. ModelHost allocates the final FoamNordic tensor
-for the current cell count and binds it as the ONNX output, so Runtime writes
-predictions directly into their published storage. This removes the former
-Runtime-output allocation and full-tensor copy. Models with a genuinely dynamic
-output feature width retain the allocating fallback because their destination
-size is unknowable before evaluation.
-
-At shutdown, ModelHost reports peak active contexts, peak admitted working
-bytes, and retained Smedja workspace bytes. These bounded counters describe
-native execution storage without reading a clock for every stage, tracing
-cells, or placing observation traffic on the solver path.
-
-Stage timing is opt-in and sampled. A disabled sampler performs only a branch;
-an enabled interval records packing, backend inference, and output preparation
-for selected calls, then reports aggregate means at shutdown. This keeps the
-diagnostic useful for small closures without turning every production exchange
-into a profiling event.
-
-## Resident worker
-
-`ModelWorker` owns one native listener and one complete model session.
-It validates the model manifest before accepting a solver, negotiates UDS or
-TCP, upgrades a same-node UDS session to SHM when both peers support it, and
-then gives the established Harbor to `InferenceRunner`. Shutdown is a Rune
-lifecycle message processed between atomic exchanges. The worker therefore
-contains no timestep polling and leaves no Unix socket after its lifetime.
-If validation or inference fails during an active exchange, the worker sends a
-Rune error boundary before terminating. The solver rejects that exchange
-immediately and leaves every registered output field unchanged; it does not
-wait for a missing completion marker or apply a partial prediction.
-This error boundary is exercised over both the socket-backed channel and the
-native SHM ring used after a same-node upgrade.
-
-All rank runners within a ModelHost share one pre-receive memory-credit pool.
-Only one incomplete input exchange may acquire incremental credit at a time.
-After its inputs are sealed, reception of the next rank may overlap inference.
-This prevents partial requests from exhausting credit while waiting on one
-another. An exchange exceeding the budget fails before allocating its next
-body. This conservative policy does not require a new wire envelope or infer
-the size of other fields from the first tensor. Requests entering the receive
-gate and execution-context gate are admitted in arrival order. This ordering
-does not wait for idle ranks and does not impose a global response order.
-An incomplete sender can still hold the receive gate; owner/transport failure
-must terminate that session rather than allow another partial request to
-exhaust the same budget.
-The Harbor validates each tensor header first, then obtains credit before
-allocating or reading its body. Credit covers the complete lifetime of the
-rank's atomic input exchange and is returned on success or failure. A failed
-rank cancels the pool and wakes blocked peers as part of fail-together
-shutdown. This admission limit is distinct from the execution-context budget:
-the former bounds resident input payloads, while the latter bounds model
-packing, inference, and output workspace.
-
-Input payloads are destroyed on completion or failure before receive credit is
-returned. Workspace retention counters are published when a lease returns;
-active vector metadata is never inspected by another thread. During execution,
-retention figures describe the last published capacities, not live RSS or a
-hard bound on allocator and backend memory.
-
-Publication has a separate host-wide reservation, acquired before output
-preparation and retained until `Harbor.publish()` returns or fails. Its budget
-is the working-byte limit, independent of input credit and execution credit.
-The estimate is twice the full output contract size, covering sparse predictions
-and full-field bypass destinations that may coexist. A slow receiver cannot
-release this reservation merely by letting inference finish. Data already
-copied into a transport ring belong to the separately allocated ring, not the
-released output vector. These budgets are not a combined process-RSS ceiling:
-weights, backend scratch, allocator overhead and transport rings remain separate.
-
-Backend serialisation uses a cancellable FIFO gate. Cancellation wakes pending
-receive, context, backend and publication-credit waiters; transport interruption
-also wakes blocked publication. It does not forcibly interrupt an active call
-inside an external ML library. Mutable backend sessions remain serial unless
-their capability contract explicitly permits concurrency.
-
-## Native estimator execution
-
-Compiled FNOM payloads are compiled or retrieved from cache once during worker
-startup. A native `CompiledKernel` loads their C ABI and performs subsequent
-evaluation without a Python callback or ctypes call per exchange. Python may
-still bootstrap the process; this is not a claim that Python is absent from
-startup. Legacy serial-only compiled entry points remain supported.
-
-Newly exported compiled estimators reuse a persistent executor. The caller is
-one compute worker; at most the requested count minus one background workers
-are created lazily and retained. Submissions are serialised, worker exceptions
-reach the caller, and destruction joins the workers. Existing FNOM files retain
-their embedded implementation; re-export is necessary to obtain the new pool.
-The large forest path uses reusable tiles of at most 8 MiB of double scratch
-per embedded forest, rather than `threads × all cells` temporary storage. A
-voting model can contain several such forests; their scratch is backend memory,
-not part of the transport-credit counter.
-
-The explicit `forest` export backend stores supported forest parameters rather
-than generated source. Its native evaluator performs checked tree traversal,
-retains one model and executor, and requires no model-specific compilation.
-It preserves float32 feature narrowing, float64 thresholds and accumulation,
-and stored missing-value routing. This is an additional option, not a silent
-replacement for Joblib, Equinox, ONNX or compiled voting models.
-
-The current end-to-end native test sends `c`, `c_var`, and `T`
-through a real Fjord socket channel. It evaluates only cells selected by
-`c_var`, reconstructs the full `omega_c` field, and verifies the matching
-completion marker.
-
-Solver-integrated closures always use per-call sequencing. The transport
-handshake establishes one persistent blocking session, while every invocation
-of `correctNut()`, a modelled-equation closure update, or a combustion source
-evaluation receives a fresh monotonic exchange index. Multiple calls at the
-same OpenFOAM time index and physical time are intentional and must each wait
-for their committed response. Timestep deduplication belongs only to the
-general function-object field path.
-
-`FieldProgramPort` is the solver-facing boundary for this rule. A solver begins
-an invocation with its OpenFOAM time index and physical time, provides any number
-of read-only field views, registers mutable output views, and commits once.
-Commit performs the complete blocking atomic exchange; it returns only after
-every declared output has been validated and copied into the solver-owned
-memory. The port assigns its own monotonic exchange index, so neither PIMPLE
-outer-corrector calls nor repeated combustion-source evaluations are collapsed
-merely because their OpenFOAM time metadata is identical.
-
-The port depends only on named tensor views and an `ExchangeContract`. It has
-no knowledge of `nut`, modelled kinetic energy, progress variables, reaction
-rates, turbulence classes, or combustion classes. OpenFOAM integrations should
-therefore remain thin view adapters; adding a new closure changes its contract
-and physics kernel rather than the transport state machine.
-
-## Language boundary
-
-C++ owns field views, exchange state, memory, and communication. Managed
-Python workers receive validated dense arrays only at the model boundary;
-they do not own OpenFOAM fields or lifecycle state.
-
-Native diagnostic lines use this form:
-
-```text
-[FoamNordic] Info: Model exchange ready.
-```
-
-The tag is yellow only when stderr is attached to a terminal. Batch logs and
-redirected files contain no ANSI escape sequences.
+Longship.launch(profile_every=N) samples admission, packing, backend waiting, inference, and output time. Zero disables sampling and adds no clock reads to the production path.

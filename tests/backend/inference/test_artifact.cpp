@@ -187,9 +187,8 @@ void test_three_artifact_formats() {
     for (const auto format : {
              foamnordic::inference::ModelFormat::joblib,
              foamnordic::inference::ModelFormat::onnx,
-         }) {
+        }) {
         foamnordic::inference::ModelArtifact artifact{
-            1,
             format,
             "artifact/model.bin",
             contract(),
@@ -203,7 +202,6 @@ void test_three_artifact_formats() {
     }
 
     foamnordic::inference::ModelArtifact equinox{
-        1,
         foamnordic::inference::ModelFormat::equinox,
         "artifact/weights.eqx",
         contract(),
@@ -219,7 +217,6 @@ void test_three_artifact_formats() {
 
 void test_scaler_feature_mismatch_is_rejected() {
     foamnordic::inference::ModelArtifact artifact{
-        1,
         foamnordic::inference::ModelFormat::onnx,
         "artifact/model.onnx",
         contract(),
@@ -286,7 +283,6 @@ public:
 void test_artifact_kernel_packs_scales_and_unpacks() {
     InspectingPackedKernel packed_kernel;
     foamnordic::inference::ModelArtifact artifact{
-        1,
         foamnordic::inference::ModelFormat::onnx,
         "artifact/model.onnx",
         contract(),
@@ -592,7 +588,6 @@ void test_artifact_kernel_owns_a_narrow_backend_lock() {
     ConcurrentProbeKernel packed_kernel;
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "artifact/model.onnx",
             contract(),
@@ -626,14 +621,13 @@ void test_reentrant_backend_uses_bounded_execution_contexts() {
     ConcurrentProbeKernel packed_kernel(true);
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            2,
             foamnordic::inference::ModelFormat::compiled,
             "artifact/model.cpp",
             contract(),
             {},
             std::nullopt,
             std::nullopt,
-            "cpp-v1",
+            "compiled",
         },
         packed_kernel,
         {2, 4096});
@@ -657,7 +651,6 @@ void test_artifact_kernel_rejects_an_oversized_working_set() {
     ConcurrentProbeKernel packed_kernel(true);
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             "artifact/model.onnx",
             contract(),
@@ -685,14 +678,13 @@ void test_artifact_kernel_samples_stage_costs_on_request() {
     ConcurrentProbeKernel packed_kernel(true);
     foamnordic::inference::ArtifactModelKernel kernel(
         {
-            2,
             foamnordic::inference::ModelFormat::compiled,
             "artifact/model.cpp",
             contract(),
             {},
             std::nullopt,
             std::nullopt,
-            "cpp-v1",
+            "compiled",
         },
         packed_kernel,
         {1, 4096, 2});
@@ -750,21 +742,24 @@ void test_loaded_artifact_preserves_backend_synchronization_ownership() {
     const auto path = std::filesystem::temp_directory_path()
                       / ("foamnordic-loaded-kernel-"
                          + std::to_string(std::random_device{}()) + ".fnom");
-    foamnordic::inference::write_manifest(
+    const auto payload = path.string() + ".payload";
+    { std::ofstream stream(payload, std::ios::binary); stream << "compiled"; }
+    foamnordic::inference::write_bundle(
         path,
         {
-            2,
             foamnordic::inference::ModelFormat::compiled,
-            "unused.cpp",
+            std::filesystem::path(payload).filename().string(),
             contract(),
             {},
             std::nullopt,
             std::nullopt,
-            "cpp-v1",
-        });
+            "compiled",
+        },
+        payload);
     auto loaded = foamnordic::inference::load_model(path);
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
+    std::filesystem::remove(payload, ignored);
     require(
         loaded.kernel->owns_backend_synchronization(),
         "The real artifact loader hid the kernel synchronization boundary.");
@@ -809,7 +804,6 @@ void test_dense_affine_kernel_float32() {
 
 void test_manifest_round_trip_and_corruption_rejection() {
     foamnordic::inference::ModelArtifact original{
-        1,
         foamnordic::inference::ModelFormat::equinox,
         "weights/combustion.eqx",
         contract(),
@@ -828,19 +822,20 @@ void test_manifest_round_trip_and_corruption_rejection() {
     };
     const auto encoded = foamnordic::inference::encode_manifest(original);
     const auto decoded = foamnordic::inference::decode_manifest(encoded);
-    const auto manifest_path = std::filesystem::temp_directory_path()
-                               / ("foamnordic-manifest-"
-                                  + std::to_string(std::random_device{}()) + ".fnom");
-    foamnordic::inference::write_manifest(manifest_path, original);
-    const auto loaded = foamnordic::inference::read_manifest(manifest_path);
-    std::error_code remove_error;
-    std::filesystem::remove(manifest_path, remove_error);
-    require(!remove_error, "Temporary manifest cleanup failed.");
-    require(
-        loaded.contract.name == original.contract.name
-            && loaded.artifact_path == original.artifact_path,
-        "Manifest file loader did not round-trip model identity.");
-    require(decoded.schema_version == 1, "Manifest schema did not round-trip.");
+    const auto standalone_path = std::filesystem::temp_directory_path()
+                                 / ("foamnordic-standalone-"
+                                    + std::to_string(std::random_device{}()) + ".fnom");
+    {
+        std::ofstream stream(standalone_path, std::ios::binary);
+        stream.write(
+            reinterpret_cast<const char*>(encoded.data()),
+            static_cast<std::streamsize>(encoded.size()));
+    }
+    require_throws(
+        [&] { static_cast<void>(foamnordic::inference::read_manifest(standalone_path)); },
+        "FNOM accepted metadata without its self-contained bundle.");
+    std::error_code ignored;
+    std::filesystem::remove(standalone_path, ignored);
     require(
         decoded.format == foamnordic::inference::ModelFormat::equinox
             && decoded.artifact_path == original.artifact_path,
@@ -867,7 +862,6 @@ void test_manifest_round_trip_and_corruption_rejection() {
         "Manifest output clipping did not round-trip.");
 
     foamnordic::inference::ModelArtifact accelerated{
-        2,
         foamnordic::inference::ModelFormat::joblib,
         "models/closure.joblib",
         contract(),
@@ -879,26 +873,24 @@ void test_manifest_round_trip_and_corruption_rejection() {
     const auto accelerated_round_trip = foamnordic::inference::decode_manifest(
         foamnordic::inference::encode_manifest(accelerated));
     require(
-        accelerated_round_trip.schema_version == 2
-            && accelerated_round_trip.runtime == "sklearnex",
+        accelerated_round_trip.runtime == "sklearnex",
         "Manifest did not round-trip the Joblib execution runtime.");
 
     foamnordic::inference::ModelArtifact compiled{
-        2,
         foamnordic::inference::ModelFormat::compiled,
         "models/closure.cpp",
         contract(),
         {},
         std::nullopt,
         std::nullopt,
-        "cpp-v1",
+        "compiled",
     };
     const auto compiled_round_trip = foamnordic::inference::decode_manifest(
         foamnordic::inference::encode_manifest(compiled));
     require(
         compiled_round_trip.format
                 == foamnordic::inference::ModelFormat::compiled
-            && compiled_round_trip.runtime == "cpp-v1",
+            && compiled_round_trip.runtime == "compiled",
         "Manifest did not round-trip the compiled execution runtime.");
 
     auto corrupted = encoded;
@@ -937,7 +929,6 @@ void test_self_contained_bundle_round_trip() {
             reinterpret_cast<const char*>(expected.data()), expected.size());
     }
     foamnordic::inference::ModelArtifact artifact{
-        2,
         foamnordic::inference::ModelFormat::joblib,
         payload_path.filename().string(),
         contract(),
@@ -1027,28 +1018,11 @@ void test_self_contained_bundle_round_trip() {
         },
         "FNOM extraction accepted trailing bytes.");
 
-    const auto legacy_path = root / ("foamnordic-legacy-" + nonce + ".fnom");
-    const auto encoded_manifest = foamnordic::inference::encode_manifest(artifact);
-    std::vector<std::byte> legacy(24);
-    constexpr char legacy_magic[] = "FNOBND1";
-    for (std::size_t index = 0; index < 7; ++index) {
-        legacy[index] = static_cast<std::byte>(legacy_magic[index]);
-    }
-    write_u64(legacy, 8, encoded_manifest.size());
-    write_u64(legacy, 16, expected.size());
-    legacy.insert(legacy.end(), encoded_manifest.begin(), encoded_manifest.end());
-    legacy.insert(legacy.end(), expected.begin(), expected.end());
-    write_bytes(legacy_path, legacy);
-    require(
-        foamnordic::inference::read_bundle_payload(legacy_path) == expected,
-        "Legacy FNOBND1 payload compatibility failed.");
-
     std::error_code ignored;
     std::filesystem::remove(payload_path, ignored);
     std::filesystem::remove(bundle_path, ignored);
     std::filesystem::remove(malformed_path, ignored);
     std::filesystem::remove(extracted_path, ignored);
-    std::filesystem::remove(legacy_path, ignored);
 }
 
 }  // namespace
