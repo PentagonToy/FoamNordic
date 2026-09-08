@@ -2,6 +2,8 @@
 
 This directory is a copyable scaffold for a new equation-level OpenFOAM ML closure. It is intentionally not part of the OpenFOAM build and cannot be compiled as shipped. The files contain unresolved `@UPPER_SNAKE_CASE@` tokens and `#error` guards so that a placeholder can never become an accidental physical model.
 
+After installing FoamNordic, locate this directory without a source checkout using `foamnordic dir --templates`. Generic field `Transform` programs do not need a solver adapter; this scaffold is only for a solver-owned equation or correction point.
+
 Use the scaffold only after identifying the native equation entry point:
 
 1. Name the solver-owned input and output fields and their dimensions.

@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import re
 
 from .validation import require_nonempty
 
 
 _ARITIES = {
+    "add": frozenset({2}),
+    "subtract": frozenset({2}),
+    "multiply": frozenset({2}),
+    "divide": frozenset({2}),
+    "sqrt": frozenset({1}),
     "grad": frozenset({1}),
     "div": frozenset({1, 2}),
     "laplacian": frozenset({1, 2}),
@@ -47,6 +53,33 @@ class FieldExpression:
     arguments: tuple["FieldExpression", ...] = ()
     patch_name: str | None = None
 
+    def _binary(self, operation_name: str, other: object) -> "FieldExpression":
+        return operation(operation_name, self, other)
+
+    def __add__(self, other: object) -> "FieldExpression":
+        return self._binary("add", other)
+
+    def __radd__(self, other: object) -> "FieldExpression":
+        return operation("add", other, self)
+
+    def __sub__(self, other: object) -> "FieldExpression":
+        return self._binary("subtract", other)
+
+    def __rsub__(self, other: object) -> "FieldExpression":
+        return operation("subtract", other, self)
+
+    def __mul__(self, other: object) -> "FieldExpression":
+        return self._binary("multiply", other)
+
+    def __rmul__(self, other: object) -> "FieldExpression":
+        return operation("multiply", other, self)
+
+    def __truediv__(self, other: object) -> "FieldExpression":
+        return self._binary("divide", other)
+
+    def __rtruediv__(self, other: object) -> "FieldExpression":
+        return operation("divide", other, self)
+
     def __post_init__(self) -> None:
         operation = require_nonempty(self.operation, "operation")
         object.__setattr__(self, "operation", operation)
@@ -66,6 +99,18 @@ class FieldExpression:
                     "patch_name",
                     _field_name(self.patch_name),
                 )
+            return
+
+        if operation == "constant":
+            if self.field_name is None or self.arguments:
+                raise ValueError("constant requires one finite scalar value")
+            try:
+                value = float(self.field_name)
+            except ValueError:
+                raise ValueError("constant requires one finite scalar value") from None
+            if not math.isfinite(value):
+                raise ValueError("constant requires one finite scalar value")
+            object.__setattr__(self, "field_name", format(value, ".17g"))
             return
 
         if self.patch_name is not None:
@@ -111,6 +156,9 @@ class FieldExpression:
         if self.operation == "field":
             assert self.field_name is not None
             return self.field_name
+        if self.operation == "constant":
+            assert self.field_name is not None
+            return self.field_name
         if self.operation == "filter_width":
             return "delta"
         if self.field_name is not None:
@@ -123,7 +171,7 @@ class FieldExpression:
 
     @property
     def derived(self) -> bool:
-        return self.operation not in {"field", "filter_width"}
+        return self.operation not in {"field", "constant", "filter_width"}
 
     def to_plan(self) -> dict[str, object]:
         value: dict[str, object] = {"operation": self.operation}
@@ -183,18 +231,20 @@ def fields(pattern: str) -> FieldSelection:
     return FieldSelection(pattern)
 
 
-def _argument(value: str | FieldExpression) -> FieldExpression:
+def _argument(value: str | float | int | FieldExpression) -> FieldExpression:
     if isinstance(value, FieldExpression):
         return value
     if isinstance(value, str):
         return field(value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return FieldExpression("constant", format(float(value), ".17g"))
     raise TypeError(
         "OpenFOAM operation arguments must be field names or expressions"
     )
 
 
 def operation(
-    name: str, *arguments: str | FieldExpression
+    name: str, *arguments: str | float | int | FieldExpression
 ) -> FieldExpression:
     """Build one validated OpenFOAM operation expression."""
 

@@ -1,14 +1,15 @@
-// clang-format off
-/*
- *  ___ __   __  __ __   __  _  __  ___ __  _  ___
- * | __/__\ /  \|  V  | |  \| |/__\| _ \ _\| |/ _/
- * | _| \/ | /\ | \_/ | | | ' | \/ | v / v | | \__
- * |_| \__/|_||_|_| |_| |_|\__|\__/|_|_\__/|_|\__/
- *
- * FoamNordic
- */
-// clang-format on
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Provider: ESI-OpenCFD (www.openfoam.com)        |
+|   \\  /    A nd           | Extension: FoamNordic                           |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
 
+/*
+ * This file is part of FoamNordic.
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
 #ifndef Foam_foamNordic_fieldProgramSession_H
 #define Foam_foamNordic_fieldProgramSession_H
 

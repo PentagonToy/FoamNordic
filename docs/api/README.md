@@ -12,3 +12,7 @@ Python describes experiments before launch and inspects compact results during o
 | [Postprocessing](postprocess-api.md) | stored fields, statistics, and case comparisons |
 
 Public declarations are compiled before the solver starts. Explicit transport requests never silently fall back, observations cannot gate solver progress, and bulk field-program tensors do not pass through the notebook. Low-level contracts are documented under [architecture](../architecture/README.md); measured behaviour is kept under [benchmarks](../benchmarks/README.md). Wheel publication is a maintainer workflow documented in [others](../../others/release/publishing.md).
+
+## Command-line tools
+
+`foamnordic build` installs the native runtime for the active OpenFOAM ABI, while `foamnordic doctor` checks the selected Python, compiler, MPI, OpenFOAM, runtime, and adapter. `foamnordic dir` reports installation paths; `--runtime`, `--include`, `--openfoam-library`, and `--templates` provide one scriptable path. FNOM artefacts use `inspect`, `validate`, `diff`, and `compile`. `clobber --dry-run` previews marker-owned build or run assets before removal. Every command provides independent `--help` output.

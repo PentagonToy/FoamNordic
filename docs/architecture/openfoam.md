@@ -5,15 +5,53 @@ FoamNordic integrates through a small ABI-specific library built against the act
 
 A Transform reads and writes registered fields at a declared solver stage. A Closure enters an equation-level adapter owned by the solver. Both use the same transport, FNOM, resource, and failure contracts.
 
-Supported stored-field layouts include scalar, vector, symmetric tensor, tensor, and explicitly registered surface fields. Derived expressions such as grad, div, curl, laplacian, magnitude, trace, and invariant are evaluated by OpenFOAM from the current mesh and field registry.
+Supported stored-field layouts include scalar, vector, symmetric tensor, tensor, and explicitly registered surface fields. Derived expressions such as grad, div, curl, laplacian, magnitude, symmetric and deviatoric parts, contractions, and checked scalar algebra are evaluated by OpenFOAM from the current mesh and field registry.
 
-## Binding rules
+### Binding rules
 
 - Logical model port names are separate from OpenFOAM field names.
 - Shapes and dimensions are validated before launch and again at exchange.
 - Field storage is resolved for every invocation; mesh-owned pointers are not retained across topology or storage changes.
 - Patch selection is explicit and does not imply whole-field correction.
 - Multiple writers may not target the same field at the same solver stage.
+
+## Closures
+
+Closure adapters fix the solver-owned outputs and equation semantics. Their model inputs remain explicit and may use any compatible stored or derived field expression.
+
+### nutFjord
+
+`nutFjord` is the algebraic eddy-viscosity adapter. It publishes one solver-owned field,
+
+$$
+\nu_t = \mathcal{M}(\mathbf{x}),
+$$
+
+where the model inputs $\mathbf{x}$ are declared by the user. The default binding is `grad(U), delta`, but an explicit FNOM contract may instead use any supported stored or derived field expression. `nutFjord` fixes only the `nut` output and its scalar layout. OpenFOAM retains ownership of field storage, boundary correction, and momentum-equation coupling.
+
+### kEqnFjord
+
+`kEqnFjord` retains the OpenFOAM transport equation for subgrid kinetic energy and delegates three closure terms:
+
+$$
+(\nu_t, P_k, C_\varepsilon) = \mathcal{M}(\mathbf{x}).
+$$
+
+These outputs are fixed as `nut`, `kProduction`, and `kDissipationCoeff`. The declared inputs remain selectable, although a model representing a conventional one-equation closure normally includes the current `k` field. `k` is read from solver-owned storage at every closure invocation, including repeated correctors at the same physical time; it is not a detached value from the preceding time step.
+
+The resulting source and sink terms enter the solver-owned equation as
+
+$$
+\frac{\partial (\alpha \rho k)}{\partial t}
++ \nabla \cdot (\alpha \rho \mathbf{u} k)
+- \nabla \cdot (\alpha \rho D_k \nabla k)
+= \alpha \rho P_k
+- \alpha \rho C_\varepsilon k
+- \frac{2}{3}\alpha\rho(\nabla\cdot\mathbf{u})k
++ S_k.
+$$
+
+The adapter solves and bounds `k`, then invokes the closure again with the updated field. Model inputs may therefore change without changing the equation adapter, while the output names, layouts, dimensions, and equation semantics remain fixed.
 
 ## Numerics
 

@@ -66,6 +66,8 @@ class Math:
 
     @staticmethod
     def sqrt(value):
+        if isinstance(value, FieldExpression):
+            return operation("sqrt", value)
         return _unary("sqrt", value)
 
     @staticmethod

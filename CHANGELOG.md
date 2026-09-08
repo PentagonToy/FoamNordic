@@ -25,8 +25,11 @@ The following changes are planned for FoamNordic 1.0.6 and have not been release
 - Native runtime builds are content-addressed and selected per OpenFOAM ABI.
 - Local and Slurm runs share the same lifecycle, readiness, shutdown, logging, observation, and result contracts.
 - Generic transforms and equation-level closures use the same field-program transport and model execution path.
+- Derived OpenFOAM inputs support validated scalar algebra and square roots, allowing features such as strain-rate magnitude to be evaluated at the closure call site.
+- Built-in LES adapters retain fixed solver-owned outputs while explicit FNOM inputs may bind to any compatible stored or derived field expression.
+- `foamnordic dir --templates` exposes the packaged adapter scaffold without requiring a source checkout or an active OpenFOAM environment.
 
-## 1.0.5
+## [1.0.5]
 
 FoamNordic 1.0.5 is the distribution baseline for CPython 3.11 and 3.12 on Linux x86_64, Linux aarch64, and Apple Silicon. Wheels contain the Python API, native control extension, and build kit. OpenFOAM and its matching compiler and MPI environment remain system dependencies.
 

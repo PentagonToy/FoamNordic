@@ -151,6 +151,15 @@ def _installed_openfoam_library(runtime: Path) -> Path:
 def _directories(args: argparse.Namespace, stream: TextIO) -> int:
     package = Path(__file__).resolve().parent
     source = _source_root(None)
+    packaged_templates = package / "templates"
+    source_templates = source / "tools/template" if source is not None else None
+    templates = (
+        packaged_templates
+        if packaged_templates.is_dir()
+        else source_templates
+        if source_templates is not None and source_templates.is_dir()
+        else None
+    )
     try:
         from . import _native
 
@@ -159,6 +168,12 @@ def _directories(args: argparse.Namespace, stream: TextIO) -> int:
         native_file = None
 
     selected = profile(required=False)
+    if args.templates:
+        if templates is None:
+            raise RuntimeError("the installed FoamNordic templates were not found")
+        print(templates.resolve(), file=stream)
+        return 0
+
     if args.runtime or args.include or args.openfoam_library:
         if selected is None:
             raise RuntimeError(
@@ -179,6 +194,7 @@ def _directories(args: argparse.Namespace, stream: TextIO) -> int:
         ("Python package", package),
         ("Native module", native_file or "not installed"),
         ("Build source", source or "not detected"),
+        ("Templates", templates or "not installed"),
         (
             "OpenFOAM ABI",
             selected.openfoam if selected is not None else "not loaded",
@@ -1019,6 +1035,11 @@ def _parser() -> argparse.ArgumentParser:
         "--openfoam-library",
         action="store_true",
         help="print only the exact ABI-matched OpenFOAM integration library",
+    )
+    directory_paths.add_argument(
+        "--templates",
+        action="store_true",
+        help="print only the installed template directory",
     )
     subcommands.add_parser(
         "doctor",

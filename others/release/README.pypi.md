@@ -4,7 +4,7 @@ FoamNordic is a native C++ and Python framework for ordinary OpenFOAM and machin
 
 > **Note:** The FoamNordic GitHub repository is temporarily private while the software is used in ongoing research and a related publication. The repository will be made public after the research is presented. PyPI distributions remain available in the meantime.
 
-FoamNordic is active research software. Version `1.0.5` establishes the documented distribution baseline. Release notes and upgrade guidance are maintained in the [changelog](https://github.com/PentagonToy/FoamNordic/blob/main/CHANGELOG.md).
+FoamNordic is active research software. Release notes and upgrade guidance are maintained in the [changelog](https://github.com/PentagonToy/FoamNordic/blob/main/CHANGELOG.md).
 
 ## Install
 
