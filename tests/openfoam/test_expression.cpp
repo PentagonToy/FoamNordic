@@ -60,6 +60,13 @@ int main() {
             && coefficient.canonical() == "laplacian(nu,U)",
         "Binary OpenFOAM expression is wrong.");
 
+    const auto algebra = Expression::parse(
+        "sqrt(multiply(2,ddot(symm(grad(U)),symm(grad(U)))))");
+    require(
+        algebra.canonical()
+            == "sqrt(multiply(2,ddot(symm(grad(U)),symm(grad(U)))))",
+        "Scalar algebra expression is wrong.");
+
     require_invalid("");
     require_invalid("grad()");
     require_invalid("grad(U");

@@ -8,9 +8,8 @@
 
 /*
  * This file is part of FoamNordic.
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-only
  */
-
 #include "turbulentTransportModels.H"
 
 #include "ExternalNutFjord.H"

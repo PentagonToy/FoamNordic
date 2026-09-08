@@ -46,7 +46,10 @@ class ReleaseNotesTests(unittest.TestCase):
                     module.release_notes(self.root)
 
     def test_repository(self):
-        self.assertIn("1.0.6", module.release_notes(SCRIPT.parents[2]))
+        notes = module.release_notes(SCRIPT.parents[2])
+        self.assertIn("1.0.6", notes)
+        self.assertNotIn("## [1.0.5]", notes)
+        self.assertNotIn("distribution baseline", notes)
 
 
 if __name__ == "__main__":

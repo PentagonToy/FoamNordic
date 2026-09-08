@@ -66,6 +66,24 @@ inputs = {
 }
 ```
 
+Derived scalar features may also use checked arithmetic nodes. For example,
+the conventional strain-rate magnitude is evaluated by OpenFOAM at the exact
+closure call site rather than materialised in Python:
+
+```python
+velocity_gradient = fno.Field.grad("U")
+strain = fno.Math.symm(velocity_gradient)
+strain_rate = fno.Math.sqrt(2.0 * fno.Math.ddot(strain, strain))
+```
+
+Field expressions support matching-field addition and subtraction, and
+multiplication or division by a finite dimensionless scalar. `sqrt` requires a
+scalar field. These operations form a validated expression tree; FoamNordic
+does not evaluate arbitrary Python or user-provided expression strings inside
+OpenFOAM. Built-in solver adapters fix their output fields, while explicitly
+declared FNOM inputs may use any expression whose packed layout matches the
+model contract.
+
 The finite-volume operators use the copied case's `system/fvSchemes`. During case preparation FoamNordic preserves every exact scheme supplied by the user. If an exact entry is absent, a usable section `default` is preserved. Only when both are unavailable or the default is `none` does FoamNordic add an exact fallback from `derivedSchemes.json` inside the isolated run case. The source case is never changed. Current fallbacks are `Gauss linear` for gradient, curl, and divergence expressions and `Gauss linear corrected` for Laplacians.
 
 This matters particularly for conservative expressions such as `div(phi, U)`: an existing solver scheme wins over the fallback. Unary `div(U)` is also supported, but requires either `div(U)` or a non-`none` `divSchemes/default`; FoamNordic supplies the exact fallback when necessary.

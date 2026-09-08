@@ -134,15 +134,9 @@ def _validate_model_contract(longship: Longship, program: Closure | Transform) -
     adapter = adapter_contract(program.name)
     if adapter is None:
         return
-    input_fields = tuple(value.canonical for value in program.inputs.values())
     output_fields = tuple(
         str(value.field_name) for value in program.outputs.values()
     )
-    if set(input_fields) != set(adapter.inputs):
-        raise ValueError(
-            f"{program.name} requires OpenFOAM inputs {tuple(adapter.inputs)!r}; "
-            f"got {input_fields!r}"
-        )
     if set(output_fields) != set(adapter.outputs):
         raise ValueError(
             f"{program.name} requires OpenFOAM outputs {tuple(adapter.outputs)!r}; "
@@ -623,6 +617,8 @@ def _expression_layout(
         return _field_layout(longship, expression)
     if expression.operation == "filter_width":
         return field_layout("scalar")
+    if expression.operation == "constant":
+        return field_layout("scalar")
 
     if expression.field_name is not None:
         arguments = (FieldExpression("field", expression.field_name),)
@@ -654,6 +650,31 @@ def _expression_layout(
         return field_layout("vector")
     if operation in {"mag", "ddot"}:
         return field_layout("scalar")
+    if operation == "sqrt":
+        if kinds != ("scalar",):
+            raise ValueError("sqrt() function input requires a scalar field")
+        return field_layout("scalar")
+    if operation in {"add", "subtract"}:
+        if any(value.operation == "constant" for value in arguments):
+            raise ValueError(
+                f"{operation}() does not accept dimensionless scalar constants"
+            )
+        if kinds[0] != kinds[1]:
+            raise ValueError(
+                f"{operation}() function inputs require matching field shapes"
+            )
+        return layouts[0]
+    if operation in {"multiply", "divide"}:
+        constant = tuple(value.operation == "constant" for value in arguments)
+        if operation == "divide" and constant[0]:
+            raise ValueError("divide() does not support a constant numerator")
+        if constant == (True, False):
+            return layouts[1]
+        if constant == (False, True):
+            return layouts[0]
+        raise ValueError(
+            f"{operation}() currently requires exactly one scalar constant"
+        )
     if operation == "symm":
         if kinds != ("tensor",):
             raise ValueError("symm() function input requires a tensor field")

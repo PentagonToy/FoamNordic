@@ -32,6 +32,21 @@ class MathTests(unittest.TestCase):
             {"operation": "grad", "field": "U"},
         )
 
+    def test_openfoam_scalar_algebra_builds_a_safe_expression_tree(self) -> None:
+        strain = fno.Math.symm(fno.Field.grad("U"))
+        strain_rate = fno.Math.sqrt(2.0 * fno.Math.ddot(strain, strain))
+
+        self.assertEqual(
+            strain_rate.canonical,
+            "sqrt(multiply(2,ddot(symm(grad(U)),symm(grad(U)))))",
+        )
+        self.assertEqual(
+            strain_rate.to_plan()["arguments"][0]["arguments"][0],
+            {"operation": "constant", "field": "2"},
+        )
+        with self.assertRaisesRegex(ValueError, "finite scalar"):
+            _ = strain_rate * float("inf")
+
     def test_openfoam_flux_and_coefficient_operations_are_unambiguous(self) -> None:
         self.assertEqual(fno.Field.div("U").canonical, "div(U)")
         self.assertEqual(fno.Field.div("phi", "U").canonical, "div(phi,U)")

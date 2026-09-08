@@ -3,6 +3,7 @@
 </p>
 
 # FoamNordic
+**FOAM Native Orchestration Runtime for Distributed Inference Coupling**
 
 FoamNordic couples OpenFOAM fields to mathematical and machine-learning operators without making Python part of the solver loop. The same `Longship` interface runs an unchanged OpenFOAM case, a field transform, or an equation-level closure supplied by any compatible solver adapter.
 

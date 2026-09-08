@@ -224,6 +224,14 @@ class CliTests(unittest.TestCase):
         self.assertIn("Python environment", report)
         self.assertIn("Python package", report)
         self.assertIn("Native module", report)
+        self.assertIn("Templates", report)
+
+    def test_dir_prints_packaged_templates_without_openfoam(self) -> None:
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(main(["dir", "--templates"]), 0)
+        templates = Path(output.getvalue().strip())
+        self.assertTrue((templates / "openfoam/model-adapter").is_dir())
 
     def test_dir_prints_scriptable_sdk_paths(self) -> None:
         selected = SimpleNamespace(runtime_dir=Path("/opt/foamnordic/runtime"))

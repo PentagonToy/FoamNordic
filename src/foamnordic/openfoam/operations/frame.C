@@ -1,14 +1,15 @@
-// clang-format off
-/*
- *  ___ __   __  __ __   __  _  __  ___ __  _  ___
- * | __/__\ /  \|  V  | |  \| |/__\| _ \ _\| |/ _/
- * | _| \/ | /\ | \_/ | | | ' | \/ | v / v | | \__
- * |_| \__/|_||_|_| |_| |_|\__|\__/|_|_\__/|_|\__/
- *
- * FoamNordic
- */
-// clang-format on
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Provider: ESI-OpenCFD (www.openfoam.com)        |
+|   \\  /    A nd           | Extension: FoamNordic                           |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
 
+/*
+ * This file is part of FoamNordic.
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
 #include "frame.H"
 
 #include "fvcCurl.H"
@@ -20,6 +21,10 @@
 #include "surfaceFields.H"
 
 #include <span>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -53,6 +58,20 @@ decltype(auto) field(const Stored& stored) {
     } else {
         return stored();
     }
+}
+
+std::optional<scalar> scalarConstant(const Expression& expression) {
+    if (!expression.primitive()) {
+        return std::nullopt;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const auto value = std::strtod(expression.name.c_str(), &end);
+    if (errno != 0 || end == expression.name.c_str() || *end != '\0'
+        || !std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return static_cast<scalar>(value);
 }
 
 foamnordic::fjord::Element scalarElement() {
@@ -197,6 +216,10 @@ FieldValue OperationFrame::evaluateUnary(const Expression& expression) {
                     || std::is_same_v<FieldType, volSymmTensorField>) {
                     return Foam::dev(value);
                 }
+            } else if (expression.name == "sqrt") {
+                if constexpr (scalarField<FieldType>) {
+                    return Foam::sqrt(value);
+                }
             } else {
                 throw std::invalid_argument(
                     "Unsupported OpenFOAM operation: " + expression.name);
@@ -206,6 +229,57 @@ FieldValue OperationFrame::evaluateUnary(const Expression& expression) {
                 + " does not accept the resolved field type.");
         },
         argument);
+}
+
+FieldValue OperationFrame::evaluateAlgebra(const Expression& expression) {
+    const auto leftConstant = scalarConstant(expression.arguments[0]);
+    const auto rightConstant = scalarConstant(expression.arguments[1]);
+    if (expression.name == "multiply" && leftConstant != rightConstant) {
+        const auto coefficient = leftConstant ? *leftConstant : *rightConstant;
+        const auto& argument = evaluate(
+            expression.arguments[leftConstant ? 1 : 0]);
+        return std::visit(
+            [&](const auto& stored) -> FieldValue {
+                return coefficient * field(stored);
+            },
+            argument);
+    }
+    if (expression.name == "divide" && rightConstant && !leftConstant) {
+        const auto& argument = evaluate(expression.arguments[0]);
+        return std::visit(
+            [&](const auto& stored) -> FieldValue {
+                return field(stored) / *rightConstant;
+            },
+            argument);
+    }
+    if ((expression.name == "add" || expression.name == "subtract")
+        && !leftConstant && !rightConstant) {
+        const auto& leftArgument = evaluate(expression.arguments[0]);
+        const auto& rightArgument = evaluate(expression.arguments[1]);
+        return std::visit(
+            [&](const auto& storedLeft) -> FieldValue {
+                const auto& left = field(storedLeft);
+                using Left = std::decay_t<decltype(left)>;
+                return std::visit(
+                    [&](const auto& storedRight) -> FieldValue {
+                        const auto& right = field(storedRight);
+                        using Right = std::decay_t<decltype(right)>;
+                        if constexpr (std::is_same_v<Left, Right>) {
+                            if (expression.name == "add") {
+                                return left + right;
+                            }
+                            return left - right;
+                        }
+                        throw std::invalid_argument(
+                            "OpenFOAM algebra requires matching field types.");
+                    },
+                    rightArgument);
+            },
+            leftArgument);
+    }
+    throw std::invalid_argument(
+        "OpenFOAM " + expression.name
+        + " requires compatible fields or one finite scalar constant.");
 }
 
 FieldValue OperationFrame::evaluateContraction(
@@ -337,6 +411,10 @@ FieldValue OperationFrame::evaluateBinary(const Expression& expression) {
     }
     if (expression.name == "div" || expression.name == "laplacian") {
         return evaluateCoefficient(expression);
+    }
+    if (expression.name == "add" || expression.name == "subtract"
+        || expression.name == "multiply" || expression.name == "divide") {
+        return evaluateAlgebra(expression);
     }
     throw std::invalid_argument(
         "Unsupported binary OpenFOAM operation: " + expression.name);
