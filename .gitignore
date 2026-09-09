@@ -9,6 +9,7 @@ wheelhouse-*/
 *.egg-info/
 /release-notes.md
 /SHA256SUMS
+/docs/benchmarks-legacy/
 # Local installation checks and Python caches.
 .venv/
 venv/

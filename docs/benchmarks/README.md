@@ -8,8 +8,6 @@ These records use the post-refactor runtime beginning at commit `89cf240`.
 | [Runtime](runtime.md) | Field preparation, model execution, memory and artefacts |
 | [OpenFOAM](openfoam.md) | Solver, MPI and end-to-end coupled comparisons |
 
-Pre-refactor records are preserved in [`benchmarks-legacy`](../benchmarks-legacy/README.md).
-
 ## Systems
 
 | System | Processor | Memory | Software |
