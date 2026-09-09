@@ -68,11 +68,13 @@ The end-to-end wall ratio was `1.668`; the OpenFOAM execution-time ratio was `1.
 
 The columns correspond to physical times `1e-5`, `1e-4`, `1e-3` and `4e-3`. All values were finite and the direct float64 functions remained nonnegative. The runnable scripts are `tools/hpc/benchmarkSmagorinskyInteractive.sh`, `tools/hpc/benchmarkWaleInteractive.sh` and `tools/hpc/validateNutClosure.sh`.
 
-## NACA4412 kEqn closure
+## NACA4412 kEqnFjord closure
+
+### k Equation
 
 Roihu interactive allocation `1095041` ran the 89,728-cell incompressible NACA4412 LES to physical time `1` with OpenFOAM v2512, 16 MPI ranks, `deltaT=0.0025` and 400 time steps. OpenFOAM via FoamNordic, abbreviated OF/FNO, used Longship to run the standard OpenFOAM `kEqn` model without an external closure. FNO-coupled used `kEqnFjord` with the same `Ck=0.094` and `Ce=1.048` equations evaluated as a resident float64 function over node-local SHM. Both paths received one warm-up followed by seven measured runs in alternating order on `rc5183` at commit `89cf240`. The unqualified name OpenFOAM is reserved for a direct OpenFOAM execution that does not pass through FoamNordic; the documentation index defines the abbreviations used here.
 
-### Performance
+#### Performance
 
 | Path | End-to-end wall | OpenFOAM execution | OpenFOAM clock |
 |---|---:|---:|---:|
@@ -81,7 +83,7 @@ Roihu interactive allocation `1095041` ran the 89,728-cell incompressible NACA44
 
 The end-to-end wall ratio was `1.670`; the OpenFOAM execution-time ratio was `1.434`. End-to-end wall includes Longship startup, readiness, solver execution and shutdown.
 
-### Final-field agreement
+#### Final-field agreement
 
 | Field | Relative L2 error | Peak-relative error |
 |---|---:|---:|
@@ -92,7 +94,7 @@ The end-to-end wall ratio was `1.670`; the OpenFOAM execution-time ratio was `1.
 
 Every measured pair produced the same final-field metrics. A deterministic float64 algebra check over 4,096 rows matched `nut` and `kDissipationCoeff` exactly; `kProduction` had relative L2 error `1.172e-16`.
 
-### Trajectory separation
+#### Trajectory separation
 
 The companion validation repeated OF/FNO and FNO-coupled runs from identical initial conditions at four independently restarted checkpoints. The values below are not successive samples from one run: each row represents a complete run from time zero to the stated step.
 

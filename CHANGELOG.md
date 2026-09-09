@@ -2,9 +2,9 @@
 
 This file records user-visible changes. Internal refactors and historical protocol revisions are intentionally omitted; the documentation describes the current FoamNordic contract only.
 
-## [1.0.6] - Unreleased
+## [1.0.6] - 2026-09-09
 
-The following changes are planned for FoamNordic 1.0.6 and have not been released.
+FoamNordic 1.0.6 consolidates the native runtime, lifecycle, artifact, and OpenFOAM integration work completed after the 1.0.5 baseline.
 
 ### Execution and memory
 
