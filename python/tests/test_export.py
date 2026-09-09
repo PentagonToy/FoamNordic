@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 from io import BytesIO
 from pathlib import Path
 import inspect
@@ -24,6 +25,57 @@ class _LinearPrediction:
 
 
 class ExportTests(unittest.TestCase):
+    def test_joblib_file_limit_falls_back_to_buffered_loading(self) -> None:
+        from foamnordic.execution.resident import _load_joblib
+
+        model = object()
+        joblib = Mock()
+        joblib.load.side_effect = [OSError(errno.EMFILE, "too many open files"), model]
+
+        loaded, storage, mode = _load_joblib(Path("model.joblib"), joblib)
+
+        self.assertIs(loaded, model)
+        self.assertIsNone(storage)
+        self.assertEqual(mode, "buffered")
+        self.assertEqual(joblib.load.call_count, 2)
+        self.assertEqual(joblib.load.call_args_list[0].kwargs, {"mmap_mode": "r"})
+        self.assertEqual(joblib.load.call_args_list[1].kwargs, {})
+
+    def test_joblib_non_file_limit_oserror_is_not_hidden(self) -> None:
+        from foamnordic.execution.resident import _load_joblib
+
+        joblib = Mock()
+        joblib.load.side_effect = OSError(errno.EIO, "input/output error")
+
+        with self.assertRaises(OSError) as raised:
+            _load_joblib(Path("model.joblib"), joblib)
+
+        self.assertEqual(raised.exception.errno, errno.EIO)
+        self.assertEqual(joblib.load.call_count, 1)
+
+    def test_staged_joblib_releases_storage_after_buffered_fallback(self) -> None:
+        from foamnordic.execution.resident import (
+            _EmbeddedPayload,
+            _staged_joblib,
+        )
+
+        model = object()
+        embedded = _EmbeddedPayload(Path("model.fnom"), 64, 128)
+        native = Mock()
+        with (
+            patch("foamnordic.execution.resident._native", native),
+            patch(
+                "foamnordic.execution.resident._load_joblib_file",
+                return_value=(model, False),
+            ),
+        ):
+            loaded, storage, mode = _staged_joblib(embedded, Mock())
+
+        self.assertIs(loaded, model)
+        self.assertIsNone(storage)
+        self.assertEqual(mode, "buffered")
+        native.extract_model_payload.assert_called_once()
+
     def test_export_namespace_exposes_three_exporters(self) -> None:
         self.assertEqual(
             dir(fno.Export), ["Tensor", "equinox", "onnx", "sklearn"]

@@ -2,6 +2,12 @@
 
 This file records user-visible changes. Internal refactors and historical protocol revisions are intentionally omitted; the documentation describes the current FoamNordic contract only.
 
+## [1.0.7] - Unreleased
+
+### Model loading
+
+- Joblib models containing enough small arrays to exhaust a platform's memory-mapping or file-table limit fall back to buffered loading. Ordinary models retain memory-mapped loading, while unrelated I/O failures remain visible.
+
 ## [1.0.6] - 2026-09-09
 
 FoamNordic 1.0.6 consolidates the native runtime, lifecycle, artifact, and OpenFOAM integration work completed after the 1.0.5 baseline.

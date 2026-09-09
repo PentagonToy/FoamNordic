@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 import ctypes
 from dataclasses import dataclass
+import errno
+import gc
 from io import BytesIO
 import inspect
 import json
@@ -202,22 +204,35 @@ def _staged_joblib(path: _EmbeddedPayload, joblib):
     storage = tempfile.TemporaryDirectory(prefix="foamnordic-joblib-")
     load_path = Path(storage.name) / "model.joblib"
     _native.extract_model_payload(str(path.path), str(load_path))
+    model, mapped = _load_joblib_file(load_path, joblib)
+    if mapped:
+        return model, storage, "staged"
+    storage.cleanup()
+    return model, None, "buffered"
+
+
+def _load_joblib_file(path: Path, joblib):
     try:
-        model = joblib.load(load_path, mmap_mode="r")
+        return joblib.load(path, mmap_mode="r"), True
     except ValueError:
         # Dynamically packaged callables are ordinary cloudpickle streams and
         # do not provide a memory-mappable array payload.
-        model = joblib.load(load_path)
-    return model, storage, "staged"
+        pass
+    except OSError as error:
+        # Models with many small arrays can exhaust a platform's mapping or
+        # file-table limit even when their total payload is modest. Preserve
+        # mmap for ordinary models and buffer only this recoverable case.
+        if error.errno not in {errno.EMFILE, errno.ENFILE}:
+            raise
+    gc.collect()
+    return joblib.load(path), False
 
 
 def _load_joblib(path, joblib):
     if not isinstance(path, _EmbeddedPayload):
         if isinstance(path, Path):
-            try:
-                return joblib.load(path, mmap_mode="r"), None, "file"
-            except ValueError:
-                return joblib.load(path), None, "file"
+            model, mapped = _load_joblib_file(path, joblib)
+            return model, None, "file" if mapped else "buffered"
         return joblib.load(path), None, "buffered"
 
     # FNOM places the standalone Joblib stream at a 64-byte boundary.  The
@@ -227,6 +242,7 @@ def _load_joblib(path, joblib):
         model = _direct_embedded_joblib(path, joblib)
         if model is not None:
             return model, None, "direct"
+        gc.collect()
     return _staged_joblib(path, joblib)
 
 
