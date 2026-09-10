@@ -1,5 +1,5 @@
 # FNOM model artifacts
-FNOM is the deployment artifact for mathematical and learned operators. It binds a payload to named tensor inputs and outputs, numeric precision, optional scalers, backend requirements, and runtime metadata.
+FNOM is the deployment artifact for mathematical and learned operators. BindNordic owns its container, tensor contract, scalers, backend metadata, payload validation, and model execution. FoamNordic exposes the export and operator API and connects the resulting model tensors to solver fields.
 
 ```text
 trained model ---> fno.Export.* ---> model.fnom
@@ -41,4 +41,4 @@ diff compares the effective execution manifest and streams payload bytes through
 
 ## Runtime behavior
 
-The artifact is validated before worker startup. Inputs are packed by declared name and width, scalers execute inside ModelHost, and outputs are checked before atomic publication. Compiled payloads are cached by content and target. Internal encoding fields reject corrupt data; they are not public artifact generations.
+The artifact is validated before worker startup. FoamNordic packs inputs by declared name and width; BindNordic scales and evaluates model tensors; FoamNordic validates the returned field layout before atomic publication. Compiled payloads are cached by content and target. Internal encoding fields reject corrupt data; they are not public artifact generations.

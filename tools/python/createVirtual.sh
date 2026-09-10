@@ -105,7 +105,7 @@ env -u PYTHONHOME -u PYTHONPATH "$ENVIRONMENT/bin/python" -m pip install \
     "onsaemiro>=1.0.5"
 env -u PYTHONHOME -u PYTHONPATH "$ENVIRONMENT/bin/python" -m pip install \
     --no-build-isolation \
-    "$REPOSITORY/python"
+    "$REPOSITORY/packages/foamnordic"
 
 env -u PYTHONHOME -u PYTHONPATH "$ENVIRONMENT/bin/python" - "$ENVIRONMENT" <<'PY'
 import json

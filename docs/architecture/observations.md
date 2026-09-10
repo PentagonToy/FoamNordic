@@ -1,14 +1,14 @@
 # Observations and retention
 
-## Preserve the monitoring experience, not the field-program loop
+## Monitoring and field execution
 
-Earlier notebooks used one `for step` loop for three different jobs:
+FoamNordic separates three jobs that may appear together in an interactive workflow:
 
 1. receive field-program inputs and return required outputs;
 2. compute monitoring statistics;
 3. retain a field for plotting.
 
-Only the last two belong near an interactive notebook. Model progress and field replacement move entirely into the node-local native execution plan. The notebook becomes a read-only observer and never calls `step.send()`.
+Model progress and field replacement belong to the node-local native execution plan. A notebook may compute summaries and retain selected output, but it remains a read-only observer and never advances the solver.
 
 The interface remains iterative without owning solver progress:
 

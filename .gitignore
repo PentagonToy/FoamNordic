@@ -1,7 +1,8 @@
 .DS_Store
-# Generated distribution artifacts (keep python/foamnordic/build/ tracked).
+# Generated distribution artifacts (keep packages/foamnordic/foamnordic/build/ tracked).
 /dist/
-/python/dist/
+/packages/*/dist/
+/packages/*/build/
 /wheelhouse/
 /build/
 wheelhouse-*/

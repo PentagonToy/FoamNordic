@@ -15,10 +15,10 @@ class ReleaseNotesTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         for filename, text in {
-            "python/pyproject.toml": 'version = "1.0.5"\n',
-            "python/foamnordic/__init__.py": '__version__ = "1.0.5"\n',
+            "packages/foamnordic/pyproject.toml": 'version = "1.0.5"\n',
+            "packages/foamnordic/foamnordic/__init__.py": '__version__ = "1.0.5"\n',
             "CMakeLists.txt": 'project(FoamNordic VERSION 1.0.5 LANGUAGES CXX)\n',
-            "python/buildkit/CMakeLists.txt": 'project(FoamNordicBuildKit VERSION 1.0.5 LANGUAGES CXX)\n',
+            "packages/foamnordic/buildkit/CMakeLists.txt": 'project(FoamNordicBuildKit VERSION 1.0.5 LANGUAGES CXX)\n',
             "CHANGELOG.md": '# Changelog\n\n## [Unreleased]\nFuture\n\n## [1.0.5]\n\nExact body.\n\n### Notes\nKeep formatting.\n\n## [1.0.4]\nOld body.\n',
         }.items():
             path = self.root / filename
@@ -34,7 +34,7 @@ class ReleaseNotesTests(unittest.TestCase):
             module.release_notes(self.root, "v1.0.4")
 
     def test_version_mismatch(self):
-        (self.root / "python/pyproject.toml").write_text('version = "1.0.4"\n')
+        (self.root / "packages/foamnordic/pyproject.toml").write_text('version = "1.0.4"\n')
         with self.assertRaises(ValueError):
             module.release_notes(self.root)
 
@@ -47,9 +47,10 @@ class ReleaseNotesTests(unittest.TestCase):
 
     def test_repository(self):
         notes = module.release_notes(SCRIPT.parents[2])
-        self.assertIn("1.0.6", notes)
-        self.assertNotIn("## [1.0.5]", notes)
-        self.assertNotIn("distribution baseline", notes)
+        self.assertIn("foamnordic[ml]", notes)
+        self.assertIn("foamnordic[ml-cuda12]", notes)
+        self.assertNotIn("## [1.0.6]", notes)
+        self.assertNotIn("consolidates the native runtime", notes)
 
 
 if __name__ == "__main__":

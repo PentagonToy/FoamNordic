@@ -13,6 +13,7 @@ EXE_INC = \
     -I$(LIB_SRC)/thermophysicalModels/specie/lnInclude \
     -Imodels/nutFjord \
     -Imodels/kEqnFjord \
+    -I$(BINDNORDIC_SOURCE_DIR)/include \
     -I$(FOAMNORDIC_SOURCE)/src \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
 

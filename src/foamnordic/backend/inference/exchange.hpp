@@ -16,25 +16,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "bindnordic/contract.hpp"
 #include "foamnordic/fjord/tensor.hpp"
 
 namespace foamnordic::inference {
 
-struct FieldContract {
-    std::string name;
-    fjord::Element element{fjord::Element::float64};
-    std::uint64_t components{1};
-
-    void validate() const;
-};
-
-struct ProgramContract {
-    std::string name;
-    std::vector<FieldContract> inputs;
-    std::vector<FieldContract> outputs;
-
-    void validate() const;
-};
+using bindnordic::FieldContract;
+using bindnordic::ProgramContract;
 
 using TensorMap = std::unordered_map<std::string, fjord::Tensor>;
 

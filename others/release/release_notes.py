@@ -10,10 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def release_notes(root: Path, tag: str | None = None) -> str:
     sources = (
-        ("python/pyproject.toml", r'^version = "([^"]+)"$'),
-        ("python/foamnordic/__init__.py", r'^__version__ = "([^"]+)"$'),
+        ("packages/foamnordic/pyproject.toml", r'^version = "([^"]+)"$'),
+        ("packages/foamnordic/foamnordic/__init__.py", r'^__version__ = "([^"]+)"$'),
         ("CMakeLists.txt", r'^project\(FoamNordic VERSION (\S+) LANGUAGES CXX\)$'),
-        ("python/buildkit/CMakeLists.txt", r'^project\(FoamNordicBuildKit VERSION (\S+) LANGUAGES CXX\)$'),
+        ("packages/foamnordic/buildkit/CMakeLists.txt", r'^project\(FoamNordicBuildKit VERSION (\S+) LANGUAGES CXX\)$'),
     )
     versions = []
     for filename, pattern in sources:

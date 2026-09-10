@@ -2,11 +2,22 @@
 
 This file records user-visible changes. Internal refactors and historical protocol revisions are intentionally omitted; the documentation describes the current FoamNordic contract only.
 
-## [1.0.7] - Unreleased
+## [1.0.7] - 2026-09-10
 
 ### Model loading
 
 - Joblib models containing enough small arrays to exhaust a platform's memory-mapping or file-table limit fall back to buffered loading. Ordinary models retain memory-mapped loading, while unrelated I/O failures remain visible.
+- BindNordic now owns generic Joblib, compiled and Equinox loading and evaluation. FoamNordic's resident process retains worker orchestration, function-field adaptation and deterministic invocation context without duplicating backend runtime code.
+- Model tensor views are independent of solver time and exchange metadata. FoamNordic keeps that context on Fjord tensors and supplies only model arrays across the BindNordic kernel boundary.
+
+### Packaging and file I/O
+
+- Model compilation, FNOM container handling, fitted-scaler normalization, backend payload serialization, and focused OpenFOAM field decoding are provided by BindNordic behind the existing FoamNordic API.
+- FoamNordic no longer depends on foamlib for field discovery or postprocessing. OpenFOAM directive expansion remains tied to the case toolchain and is still handled by FoamNordic.
+- Source-tree templates now live under `tools/templates`; packaged template discovery and the public tutorial API are unchanged.
+- Native FNOM contracts, manifests, affine scaling, compiled and forest execution, and optional ONNX execution now live in BindNordic. FoamNordic keeps compatibility headers and owns transport, field packing, worker lifecycle and atomic publication.
+- The default installation retains OpenFOAM execution and direct mathematical function support. `foamnordic[ml]` adds the optional model stack with CPU JAX, while `foamnordic[ml-cuda12]` selects CUDA 12 JAX explicitly on Linux.
+- BindNordic is shipped inside the FoamNordic wheel rather than released as a separate distribution. The `ml` and `ml-cuda12` extras remain the only user-facing model-stack choices and avoid architecture-based GPU assumptions.
 
 ## [1.0.6] - 2026-09-09
 

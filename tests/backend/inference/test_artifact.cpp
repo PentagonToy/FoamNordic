@@ -275,8 +275,8 @@ foamnordic::fjord::Tensor float_tensor(
 
 class InspectingPackedKernel final : public foamnordic::inference::PackedModelKernel {
 public:
-    foamnordic::fjord::Tensor evaluate(
-        foamnordic::fjord::TensorView features,
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
         std::uint64_t exchange_index,
         double physical_time,
         std::uint32_t /*rank*/) override {
@@ -284,9 +284,14 @@ public:
         std::vector<double> values(features.bytes.size() / sizeof(double));
         std::memcpy(values.data(), features.bytes.data(), features.bytes.size());
         require_close(values, {0.5, 2.0, 2.0}, "Native input packing or scaling failed.");
-        auto output = scalar_tensor("foamnordic.predictions", {3.0});
-        output.shape = {1, 1};
-        return output;
+        std::vector<std::byte> bytes(sizeof(double));
+        const double prediction = 3.0;
+        std::memcpy(bytes.data(), &prediction, sizeof(double));
+        return {
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {1, 1},
+            std::move(bytes)};
     }
 };
 
@@ -351,7 +356,7 @@ void test_smedja_rebinds_dynamic_input_storage() {
 
 void test_smedja_moves_a_single_output_staging_buffer() {
     foamnordic::inference::Smedja smedja(contract());
-    auto packed = scalar_tensor("foamnordic.predictions", {1.0, 2.0});
+    auto packed = scalar_tensor("bindnordic.predictions", {1.0, 2.0});
     packed.shape = {2, 1};
     const auto* storage = packed.bytes.data();
 
@@ -374,7 +379,7 @@ void test_smedja_reuses_multi_output_staging_for_widest_field() {
     };
     foamnordic::inference::Smedja smedja(multi_output_contract);
     auto packed = scalar_tensor(
-        "foamnordic.predictions",
+        "bindnordic.predictions",
         {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
     packed.shape = {2, 3};
     const auto* storage = packed.bytes.data();
@@ -566,8 +571,8 @@ public:
         };
     }
 
-    foamnordic::fjord::Tensor evaluate(
-        foamnordic::fjord::TensorView features,
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
         std::uint64_t exchange_index,
         double physical_time,
         std::uint32_t /*rank*/) override {
@@ -577,12 +582,16 @@ public:
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         active_.fetch_sub(1);
-        auto output = scalar_tensor(
-            "foamnordic.predictions",
-            std::vector<double>(features.shape.front(), 1.0));
-        output.shape = {features.shape.front(), 1};
-        output.time_index = exchange_index;
-        output.physical_time = physical_time;
+        std::vector<double> values(features.shape.front(), 1.0);
+        std::vector<std::byte> bytes(values.size() * sizeof(double));
+        std::memcpy(bytes.data(), values.data(), bytes.size());
+        auto output = bindnordic::Tensor{
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {features.shape.front(), 1},
+            std::move(bytes)};
+        static_cast<void>(exchange_index);
+        static_cast<void>(physical_time);
         return output;
     }
 
@@ -713,17 +722,21 @@ void test_artifact_kernel_samples_stage_costs_on_request() {
 
 class LoadedProbeKernel final : public foamnordic::inference::PackedModelKernel {
 public:
-    foamnordic::fjord::Tensor evaluate(
-        foamnordic::fjord::TensorView features,
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
         std::uint64_t exchange_index,
         double physical_time,
         std::uint32_t /*rank*/) override {
-        auto output = scalar_tensor(
-            "foamnordic.predictions",
-            std::vector<double>(features.shape.front(), 1.0));
-        output.shape = {features.shape.front(), 1};
-        output.time_index = exchange_index;
-        output.physical_time = physical_time;
+        std::vector<double> values(features.shape.front(), 1.0);
+        std::vector<std::byte> bytes(values.size() * sizeof(double));
+        std::memcpy(bytes.data(), values.data(), bytes.size());
+        auto output = bindnordic::Tensor{
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {features.shape.front(), 1},
+            std::move(bytes)};
+        static_cast<void>(exchange_index);
+        static_cast<void>(physical_time);
         return output;
     }
 };

@@ -1,6 +1,6 @@
 # OpenFOAM model adapters
 
-This directory contains equation-level OpenFOAM model adapters. An adapter belongs here only when FoamNordic must enter a model's native correction or source-evaluation method. It should select solver-owned fields and invoke the shared `ClosureHook`; transport, inference, scaling, observation, and lifecycle code remain in the common FoamNordic runtime.
+This directory contains equation-level OpenFOAM model adapters. An adapter belongs here only when FoamNordic must enter a model's native correction or source-evaluation method. It should select solver-owned fields and invoke the shared `ClosureHook`; FoamNordic retains transport, packing, observation, and lifecycle, while BindNordic retains model loading, scaling, and execution.
 
 The current adapters include LES closures:
 
@@ -21,4 +21,4 @@ Choose an integration family by the equation entry point, not by the label in `s
 
 Introduce category subdirectories only when their native contracts are real and distinct. A new RAS, momentum-source, or combustion adapter must enter its actual equation boundary; update the registration source and `Make/files` in the same change.
 
-Every adapter must remain thin and must have a solver-integrated acceptance case. A successful generic `Transform` smoke test is evidence for the shared field bridge, not evidence that a new equation-level model adapter is needed. The non-compilable starting scaffold is in `tools/template/openfoam/model-adapter/`.
+Every adapter must remain thin and must have a solver-integrated acceptance case. A successful generic `Transform` smoke test is evidence for the shared field bridge, not evidence that a new equation-level model adapter is needed. The non-compilable starting scaffold is in `tools/templates/openfoam/model-adapter/`.

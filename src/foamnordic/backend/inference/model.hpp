@@ -14,6 +14,7 @@
 #include <atomic>
 #include <mutex>
 
+#include "bindnordic/kernel.hpp"
 #include "foamnordic/backend/inference/artifact.hpp"
 #include "foamnordic/backend/inference/execution.hpp"
 #include "foamnordic/backend/inference/smedja.hpp"
@@ -21,26 +22,8 @@
 
 namespace foamnordic::inference {
 
-struct BackendCapabilities {
-    bool concurrent_evaluation{false};
-    bool row_independent{false};
-    bool owns_compute_threads{false};
-};
-
-class PackedModelKernel {
-public:
-    virtual ~PackedModelKernel() = default;
-
-    [[nodiscard]] virtual BackendCapabilities capabilities() const noexcept {
-        return {};
-    }
-
-    [[nodiscard]] virtual fjord::Tensor evaluate(
-        fjord::TensorView features,
-        std::uint64_t exchange_index,
-        double physical_time,
-        std::uint32_t rank = 0) = 0;
-};
+using bindnordic::BackendCapabilities;
+using bindnordic::PackedModelKernel;
 
 class ArtifactModelKernel final : public ModelKernel {
 public:

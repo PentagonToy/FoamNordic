@@ -48,7 +48,7 @@ artifact = fno.Export.sklearn(
 )
 ```
 
-The first load compiles portable C++ into FoamNordic's target-specific cache; later loads reuse it. Version 1 supports scalar-output linear and forest models, KNN, scikit-learn gradient boosting, XGBoost, LightGBM, and voting graphs composed from supported estimators. XGBoost and LightGBM are needed only while exporting their fitted models; the resulting FNOM has no dependency on either runtime. Selection can be fixed for reproducibility with `backend="compiled"` or `backend="joblib"`; the default is `backend="auto"`. The `runtime` argument applies only to Joblib selection.
+The first load asks BindNordic to compile portable C++ into the target-specific cache; later loads reuse it. Version 1 supports scalar-output linear and forest models, KNN, scikit-learn gradient boosting, XGBoost, LightGBM, and voting graphs composed from supported estimators. XGBoost and LightGBM are needed only while exporting their fitted models; the resulting FNOM has no dependency on either runtime. Selection can be fixed for reproducibility with `backend="compiled"` or `backend="joblib"`; the default is `backend="auto"`. The `runtime` argument applies only to Joblib selection.
 
 Warm the cache before entering an HPC allocation when the login and compute nodes share the same target ABI:
 

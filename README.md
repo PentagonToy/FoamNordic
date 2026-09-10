@@ -7,30 +7,19 @@
 
 FoamNordic couples OpenFOAM fields to mathematical and machine-learning operators without making Python part of the solver loop. The same `Longship` interface runs an unchanged OpenFOAM case, a field transform, or an equation-level closure supplied by any compatible solver adapter.
 
-FNOM is FoamNordic's self-contained model artefact. It stores the executable payload together with tensor contracts, scaling, runtime requirements, and compatibility metadata. Fjord moves fields over shared memory, Unix sockets, UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
+FNOM is the self-contained model artefact used by **FoamNordic** and implemented by **BindNordic**. It stores the executable payload together with tensor contracts, scaling, runtime requirements, and compatibility metadata. Fjord moves fields over shared memory, Unix sockets, UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
 
 Python 3.11 and 3.12 are supported. See [CHANGELOG.md](CHANGELOG.md) for release notes and upgrade guidance.
 
-```text
-                 Python declaration
-                         |
-                         v
-                     Longship
-                         |
-              +----------+----------+
-              |                     |
-              v                     v
-       +------------+         +------------+
-       |  OpenFOAM  |<------->| ModelHost  |
-       +------------+         +------------+
-              |                     |
-           fields                  FNOM
-              |                     |
-              +----------+----------+
-                         |
-                         v
-                       Result
-```
+<figure align="center">
+  <img src="others/figures/diagram_init.svg" alt="Init Diagram" width="50%" style="background-color: #1e1e1e; padding: 12px; border-radius: 8px;">
+  <figcaption style="font-size: 0.9em; color: #888; margin-top: 8px;">Figure 1: Declarative workload setup, placement, and coordinated solver–ModelHost launch.</figcaption>
+</figure>
+
+<figure align="center">
+  <img src="others/figures/diagram_runtime.svg" alt="Runtime Diagram" width="50%" style="background-color: #1e1e1e; padding: 12px; border-radius: 8px;">
+  <figcaption style="font-size: 0.9em; color: #888; margin-top: 8px;">Figure 2: Rank-local field exchange and node-local inference during the OpenFOAM solver loop.</figcaption>
+</figure>
 
 ## Install
 
@@ -38,8 +27,10 @@ Python 3.11 and 3.12 are supported. See [CHANGELOG.md](CHANGELOG.md) for release
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install foamnordic
+python -m pip install "foamnordic[ml]"
 ```
+
+The `ml` extra installs scikit-learn, ONNX, Equinox, and CPU JAX on Linux or macOS. On a Linux CUDA 12 system, including Roihu GPU nodes, install `foamnordic[ml-cuda12]` instead. The explicit CUDA choice avoids treating CPU architecture as evidence that a GPU is available. Use plain `foamnordic` for ordinary OpenFOAM runs, mathematical functions, or existing model artifacts that do not require those authoring libraries.
 
 Wheels include the Python API and native control runtime. Build the small OpenFOAM integration for each compiler/ABI used on the machine:
 
@@ -66,7 +57,7 @@ To use the current source directly:
 ```console
 git clone https://github.com/PentagonToy/FoamNordic.git
 cd FoamNordic
-python -m pip install -e ./python
+python -m pip install -e "./packages/foamnordic[ml]"  # use ml-cuda12 on a Linux CUDA 12 host
 module load openfoam/2512
 foamnordic build
 ```
@@ -83,7 +74,7 @@ case = fno.OpenFOAM.Case(
     name="lidDrivenCavity",
     case_dir=Path("cases/lidDrivenCavity"),
     run_dir=Path("output"),
-    of_cmd="openfoam/2512",
+    of_cmd="module load openfoam/2512",
     shell="bash", # HPC: bash | macOS: zsh
     application="pimpleFoam",
 )
@@ -154,13 +145,14 @@ Same-node bulk exchange uses shared memory; multi-node runs place a resident wor
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFOAMNORDIC_TESTS=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-python -m unittest discover -s python/tests -v
+python -m unittest discover -s packages/foamnordic/tests -v
 ```
 
 Supported build targets are Linux `x86_64`, Linux `aarch64`, and Apple Silicon. Linux/OpenFOAM v2512 is the primary HPC target; OpenFOAM.app provides the native macOS environment.
 
 ## Documentation
 
+- [Package boundary](packages/README.md)
 - [Python API](docs/api/README.md)
 - [Architecture](docs/architecture/README.md)
 - [Benchmarks and validation](docs/benchmarks/README.md)
