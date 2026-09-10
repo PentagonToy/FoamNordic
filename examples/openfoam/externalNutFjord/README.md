@@ -68,4 +68,4 @@ externalNutFjordCoeffs
 
 The external project declares the corresponding FNOM contract. Production projects let Longship start the compatible ModelHost and render the integration library, address, and other lifecycle-owned dictionary values.
 
-The example duplicates only the thin equation call site so it can demonstrate the extension boundary. Transport, packing, model loading, scaling, failure handling, and lifecycle remain in the installed FoamNordic library.
+The example duplicates only the thin equation call site so it can demonstrate the extension boundary. The installed FoamNordic library retains transport, packing, failure handling, and lifecycle, and invokes BindNordic for model loading, scaling, and execution.

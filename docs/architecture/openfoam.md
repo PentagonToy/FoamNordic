@@ -53,6 +53,18 @@ $$
 
 The adapter solves and bounds `k`, then invokes the closure again with the updated field. Model inputs may therefore change without changing the equation adapter, while the output names, layouts, dimensions, and equation semantics remain fixed.
 
+### progressRateFjord
+
+`progressRateFjord` exposes an equation hook for solvers that already own a transported progress variable and its reaction-rate field. Its input contract is deliberately open:
+
+$$
+\omega_c = \mathcal{M}(\mathbf{x}).
+$$
+
+The consumer may bind `progress`, `variance`, `temperature`, arbitrary stored fields, or compatible derived expressions as $\mathbf{x}$. The hook fixes one scalar logical output, `omega_c`, and rejects any other output contract. It does not transport progress, add a source to an equation, define heat release, or update thermochemical state. Those operations remain the responsibility of the consuming solver library, which also registers the hook in its own model hierarchy.
+
+Model input names remain logical contract keys. A model exported with `c`, `c_var`, and `T`, for example, can map those keys to the hook's `progress`, `variance`, and `temperature` bindings through `inputExpressions`; no input vocabulary is imposed by `progressRateFjord`.
+
 ## Numerics
 
 Derived operations require entries in fvSchemes. The default convenient policy keeps an exact user entry or a usable default and inserts only a missing requirement. Every insertion is recorded in numerics-changes.tsv. Strict numerics rejects the missing requirement instead.

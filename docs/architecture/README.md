@@ -27,7 +27,8 @@ Longship records logs, observations, and results without placing Python callback
 | Longship | placement, startup, readiness, shutdown, logs |
 | OpenFOAM adapter | field access, equation hooks, atomic commit |
 | Fjord | bounded numeric tensor transport |
-| ModelHost | packing, scaling, inference, output validation |
+| ModelHost | process residency, packing, BindNordic invocation, output validation |
+| BindNordic | FNOM, scalers, model tensors, and backend execution |
 | Solver adapter | equations, correction order, physical meaning |
 
 No notebook callback, model object, or scheduler command appears in the solver exchange loop. A solver remains responsible for equations and boundary conditions; FoamNordic evaluates only the declared operator.
@@ -40,6 +41,7 @@ FNOM is the deployed model boundary. It contains tensor contracts, scaling, back
 
 ## Further reading
 
+- [Package boundary](../../packages/README.md): the invariant separating model responsibility from simulation semantics
 - [Runtime](runtime.md): request ownership, inference, and failure behavior
 - [Transport](transport.md): Rune frames, channels, and admission
 - [FNOM](fnom.md): artifact contents, inspection, and trust

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(FoamNordic VERSION 1.0.6 LANGUAGES CXX)
+project(FoamNordic VERSION 1.0.7 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -16,6 +16,9 @@ option(FOAMNORDIC_PYTHON "Build the FoamNordic Python extension" OFF)
 set(FOAMNORDIC_ONNX_RUNTIME_ROOT "" CACHE PATH "ONNX Runtime 1.28.0 installation root")
 set(FOAMNORDIC_UCX_ROOT "" CACHE PATH "UCX installation root")
 
+include(cmake/BindNordic.cmake)
+foamnordic_add_bindnordic()
+
 add_subdirectory(src/foamnordic/runtime)
 add_subdirectory(src/foamnordic/backend/communication)
 add_subdirectory(src/foamnordic/backend/adapter)
@@ -24,6 +27,7 @@ add_subdirectory(tools/longship)
 
 if(FOAMNORDIC_TESTS)
     enable_testing()
+    add_subdirectory(packages/bindnordic/tests/native)
     add_subdirectory(tests/runtime)
     add_subdirectory(tests/backend/communication)
     add_subdirectory(tests/backend/adapter)
@@ -52,7 +56,7 @@ if(FOAMNORDIC_RESIDENT_TOOLS)
 endif()
 
 if(FOAMNORDIC_PYTHON)
-    add_subdirectory(python)
+    add_subdirectory(packages/foamnordic)
 endif()
 
 # The runtime value types are the first stable C++ facade used by bindings and
@@ -76,6 +80,11 @@ install(
     COMPONENT Development
     FILES_MATCHING PATTERN "*.hpp")
 install(
+    DIRECTORY packages/bindnordic/src/bindnordic/native/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT Development
+    FILES_MATCHING PATTERN "*.hpp")
+install(
     DIRECTORY src/foamnordic/backend/adapter/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/backend/adapter
     COMPONENT Development
@@ -92,6 +101,11 @@ install(
 install(
     DIRECTORY src/foamnordic/openfoam/operations/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/openfoam/operations
+    COMPONENT Development
+    FILES_MATCHING PATTERN "*.H")
+install(
+    DIRECTORY src/foamnordic/openfoam/models/progressRateFjord/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/openfoam/models/progressRateFjord
     COMPONENT Development
     FILES_MATCHING PATTERN "*.H")
 install(

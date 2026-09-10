@@ -98,14 +98,14 @@ TensorMap ArtifactModelKernel::evaluate(
             packed.physical_time,
             packed.solver_time_index,
         };
-        artifact_.input_scaler->transform(mutable_view);
+        artifact_.input_scaler->transform(mutable_view.model_view());
     }
     const auto inference_started = sampled
                                        ? std::chrono::steady_clock::now()
                                        : packing_started;
     if (active_cells.empty()) {
         auto outputs = smedja_.unpack({
-            "foamnordic.predictions",
+            "bindnordic.predictions",
             smedja_.output_element(),
             {0, smedja_.output_width()},
             {},
@@ -130,24 +130,32 @@ TensorMap ArtifactModelKernel::evaluate(
         }
         return outputs;
     }
-    fjord::Tensor predictions;
+    bindnordic::Tensor model_predictions;
     auto backend_started = inference_started;
     if (capabilities_.concurrent_evaluation) {
-        predictions = kernel_.evaluate(
-            packed.view(), exchange_index, physical_time, rank);
+        model_predictions = kernel_.evaluate(
+            packed.view().model_view(), exchange_index, physical_time, rank);
     } else {
         auto backend_lease = backend_gate_.acquire(0);
         if (sampled) {
             backend_started = std::chrono::steady_clock::now();
         }
-        predictions = kernel_.evaluate(
-            packed.view(), exchange_index, physical_time, rank);
+        model_predictions = kernel_.evaluate(
+            packed.view().model_view(), exchange_index, physical_time, rank);
     }
-    if (predictions.time_index != exchange_index
-        || std::abs(predictions.physical_time - physical_time) > 1.0e-12
-        || predictions.shape.empty() || predictions.shape.front() != active_cells.size()) {
-        throw std::invalid_argument("Packed model output does not match its exchange.");
+    if (model_predictions.shape.empty()
+        || model_predictions.shape.front() != active_cells.size()) {
+        throw std::invalid_argument("Packed model output does not match its contract.");
     }
+    auto predictions = fjord::Tensor{
+        std::move(model_predictions.name),
+        model_predictions.element,
+        std::move(model_predictions.shape),
+        std::move(model_predictions.bytes),
+        exchange_index,
+        physical_time,
+        packed.solver_time_index,
+    };
     const auto output_started = sampled
                                     ? std::chrono::steady_clock::now()
                                     : inference_started;
@@ -161,7 +169,7 @@ TensorMap ArtifactModelKernel::evaluate(
             predictions.physical_time,
             predictions.solver_time_index,
         };
-        artifact_.output_scaler->inverse_transform(mutable_view);
+        artifact_.output_scaler->inverse_transform(mutable_view.model_view());
     }
     auto outputs = smedja_.unpack(std::move(predictions));
     if (sampled) {

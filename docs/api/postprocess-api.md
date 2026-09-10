@@ -23,7 +23,7 @@ at_one = post.field("U", physical_time=1.0)
 
 `time_idx` addresses the numerically sorted stored times and accepts negative indices. `physical_time` selects the matching OpenFOAM physical time. They are mutually exclusive; passing both is an error. `post.times` returns every available physical time.
 
-Reconstructed and `processor*` cases are supported. Uniform fields are expanded to the mesh cell count, while scalar, vector, symmetric-tensor, and tensor component shapes are retained. `foamlib` handles OpenFOAM decoding and an ASCII internal-field fallback covers simple stored fields.
+Reconstructed and `processor*` cases are supported. Uniform fields are expanded to the mesh cell count, while scalar, vector, symmetric-tensor, and tensor component shapes are retained. BindNordic decodes stored OpenFOAM fields after FoamNordic expands native dictionary directives with the selected OpenFOAM toolchain.
 
 ## Statistics
 

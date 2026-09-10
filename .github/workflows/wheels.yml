@@ -56,9 +56,9 @@ jobs:
       - name: Build and test Python 3.11 and 3.12 wheels
         uses: pypa/cibuildwheel@v4.2.0
         with:
-          package-dir: python
+          package-dir: packages/foamnordic
           output-dir: wheelhouse
-          config-file: python/pyproject.toml
+          config-file: packages/foamnordic/pyproject.toml
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v6

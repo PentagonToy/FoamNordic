@@ -17,6 +17,7 @@
 #include <utility>
 #include <fstream>
 #include "foamnordic/backend/inference/forest.hpp"
+#include "bindnordic/table.hpp"
 
 #include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
@@ -89,7 +90,18 @@ LoadedModel load_model(
     options.validate();
     auto artifact = read_manifest(manifest_path);
     std::unique_ptr<PackedModelKernel> packed;
-    if (artifact.runtime == "forest") {
+    if (artifact.format == ModelFormat::table) {
+        if (!is_bundle(manifest_path)) {
+            throw std::invalid_argument("Table models require a self-contained FNOM bundle.");
+        }
+        std::uint64_t inputs = 0;
+        std::uint64_t outputs = 0;
+        for (const auto& field : artifact.contract.inputs) inputs += field.components;
+        for (const auto& field : artifact.contract.outputs) outputs += field.components;
+        packed = std::make_unique<bindnordic::TableKernel>(
+            read_bundle_payload(manifest_path), inputs, outputs,
+            artifact.contract.inputs.front().element);
+    } else if (artifact.runtime == "forest") {
         std::vector<std::byte> data;
         if (is_bundle(manifest_path)) data = read_bundle_payload(manifest_path);
         else {

@@ -5,7 +5,7 @@ These files define FoamNordic's wheel preparation and publication workflow. They
 | Path | Purpose |
 | --- | --- |
 | `README.pypi.md` | PyPI project description |
-| `wheel-maker` | GitHub Actions wheel preparation frontend |
+| `wheel-maker` | GitHub Actions wheel preparation and upload-helper frontend |
 | `publishing.md` | Clean-install validation and PyPI release gate |
 | `release_notes.py` | Version checks and exact changelog release-body extraction |
 | `check_wheel_buildkit.py` | Installed-wheel build-kit and Longship smoke test |

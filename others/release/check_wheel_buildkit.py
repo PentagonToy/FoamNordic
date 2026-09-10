@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 
 import foamnordic
+import bindnordic
 
 
 def main():
@@ -16,6 +17,8 @@ def main():
             "cmake", "-S", str(kit), "-B", str(root / "build"),
             "-DCMAKE_BUILD_TYPE=Release", "-DFOAMNORDIC_TESTS=OFF",
             "-DFOAMNORDIC_ONNX_RUNTIME=OFF", "-DFOAMNORDIC_RESIDENT_TOOLS=OFF",
+            "-DBINDNORDIC_SOURCE_DIR="
+            + str(Path(bindnordic.__file__).resolve().parent / "native"),
             f"-DCMAKE_INSTALL_PREFIX={root / 'runtime'}",
         ], check=True)
         subprocess.run([

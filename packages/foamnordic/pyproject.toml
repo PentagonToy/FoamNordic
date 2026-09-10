@@ -1,0 +1,91 @@
+[build-system]
+requires = [
+    "nanobind>=2.4",
+    "scikit-build-core>=0.10",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "foamnordic"
+version = "1.0.7"
+description = "Declarative orchestration for native OpenFOAM closure workloads"
+readme = { file = "../../others/release/README.pypi.md", content-type = "text/markdown" }
+requires-python = ">=3.11,<3.13"
+license = "GPL-3.0-only"
+authors = [{ name = "Hanseul Kang", email = "hanseul.kang@aalto.fi" }]
+keywords = ["OpenFOAM", "CFD", "HPC", "machine learning", "scientific computing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "cmake>=3.20",
+    "cloudpickle>=3,<4",
+    "joblib>=1.4,<2",
+    "numpy>=1.26,<3",
+    "onsaemiro>=1.0.5",
+    "pyyaml>=6,<7",
+]
+
+[project.optional-dependencies]
+ml = [
+    "equinox>=0.13.1,<0.14",
+    "jax>=0.7,<1",
+    "onnx>=1.17,<2",
+    "scikit-learn>=1.4,<2",
+    "scikit-learn-intelex>=2025.8,<2027; platform_system == 'Linux' and platform_machine == 'x86_64'",
+]
+ml-cuda12 = [
+    "equinox>=0.13.1,<0.14",
+    "jax[cuda12]>=0.7,<1; platform_system == 'Linux'",
+    "jax>=0.7,<1; platform_system != 'Linux'",
+    "onnx>=1.17,<2",
+    "scikit-learn>=1.4,<2",
+    "scikit-learn-intelex>=2025.8,<2027; platform_system == 'Linux' and platform_machine == 'x86_64'",
+]
+
+[project.urls]
+Homepage = "https://github.com/PentagonToy/FoamNordic"
+Documentation = "https://github.com/PentagonToy/FoamNordic#readme"
+Issues = "https://github.com/PentagonToy/FoamNordic/issues"
+Source = "https://github.com/PentagonToy/FoamNordic"
+Changelog = "https://github.com/PentagonToy/FoamNordic/blob/main/CHANGELOG.md"
+
+[project.scripts]
+foamnordic = "foamnordic._cli:main"
+
+[tool.scikit-build]
+cmake.source-dir = "../.."
+wheel.packages = { foamnordic = "foamnordic", bindnordic = "../bindnordic/src/bindnordic" }
+wheel.license-files = ["../../LICENSE"]
+install.components = ["Python"]
+
+[tool.scikit-build.cmake.define]
+FOAMNORDIC_PYTHON = "ON"
+FOAMNORDIC_TESTS = "OFF"
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^darwin"
+cmake.define.CMAKE_OSX_DEPLOYMENT_TARGET = "12.0"
+cmake.define.FOAMNORDIC_PYTHON = "ON"
+cmake.define.FOAMNORDIC_TESTS = "OFF"
+
+[tool.cibuildwheel]
+build = "cp311-* cp312-*"
+skip = "*-musllinux_*"
+test-extras = ["ml"]
+test-command = "python -c 'import bindnordic, foamnordic._native as native; print(\"BindNordic:\", bindnordic.__file__); print(\"FoamNordic native:\", native.__file__)' && python -m unittest discover -s {project}/packages/bindnordic/tests -v && python -m unittest discover -s {project}/packages/foamnordic/tests -v && python {project}/others/release/check_wheel_buildkit.py"
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

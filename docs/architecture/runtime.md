@@ -10,7 +10,7 @@ solver fields
 admitted request
       |
       v
-pack -> scale -> evaluate -> inverse scale -> validate
+pack -> BindNordic scale/evaluate/inverse scale -> validate
       |
       v
 atomic field commit

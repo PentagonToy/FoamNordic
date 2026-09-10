@@ -2,11 +2,36 @@
 
 This file records user-visible changes. Internal refactors and historical protocol revisions are intentionally omitted; the documentation describes the current FoamNordic contract only.
 
-## [1.0.7] - Unreleased
+## [1.0.8] - Unreleased
+
+### Tables and closure composition
+
+- `fno.Export.table()` writes self-contained, data-only FNOM artefacts containing ordered regular-grid axes and dense output values. BindNordic evaluates them with native multilinear interpolation and explicit clamp or error bounds policies.
+- `fno.Operator.table()` distinguishes lookup tables from executable model artefacts and verifies that distinction against the FNOM manifest before launch.
+- Immutable `Closure.update()` declarations attach solver-mediated field updates to one physical closure without adding another top-level workflow abstraction. Each stage receives an independent resident worker and transport endpoint, while the solver integration retains ownership of the call sites and any equations advanced between them.
+
+### OpenFOAM integration
+
+- `progressRateFjord` provides a thin native reaction-rate hook whose inputs remain explicitly configurable and whose solver-owned output is `omega_c`.
+- Custom OpenFOAM integration templates can place closure update bodies explicitly, allowing a modelled reaction rate and a tabulated thermochemical-state update to share one `Longship` lifecycle without implying direct model composition.
+- Runtime template discovery now follows one validated rule across OpenFOAM dictionaries, Slurm scripts and banners: packaged resources take precedence, with `tools/templates` used as the source-checkout fallback.
+
+## [1.0.7] - 2026-09-10
 
 ### Model loading
 
 - Joblib models containing enough small arrays to exhaust a platform's memory-mapping or file-table limit fall back to buffered loading. Ordinary models retain memory-mapped loading, while unrelated I/O failures remain visible.
+- BindNordic now owns generic Joblib, compiled and Equinox loading and evaluation. FoamNordic's resident process retains worker orchestration, function-field adaptation and deterministic invocation context without duplicating backend runtime code.
+- Model tensor views are independent of solver time and exchange metadata. FoamNordic keeps that context on Fjord tensors and supplies only model arrays across the BindNordic kernel boundary.
+
+### Packaging and file I/O
+
+- Model compilation, FNOM container handling, fitted-scaler normalization, backend payload serialization, and focused OpenFOAM field decoding are provided by BindNordic behind the existing FoamNordic API.
+- FoamNordic no longer depends on foamlib for field discovery or postprocessing. OpenFOAM directive expansion remains tied to the case toolchain and is still handled by FoamNordic.
+- Source-tree templates now live under `tools/templates`; packaged template discovery and the public tutorial API are unchanged.
+- Native FNOM contracts, manifests, affine scaling, compiled and forest execution, and optional ONNX execution now live in BindNordic. FoamNordic keeps compatibility headers and owns transport, field packing, worker lifecycle and atomic publication.
+- The default installation retains OpenFOAM execution and direct mathematical function support. `foamnordic[ml]` adds the optional model stack with CPU JAX, while `foamnordic[ml-cuda12]` selects CUDA 12 JAX explicitly on Linux.
+- BindNordic is shipped inside the FoamNordic wheel rather than released as a separate distribution. The `ml` and `ml-cuda12` extras remain the only user-facing model-stack choices and avoid architecture-based GPU assumptions.
 
 ## [1.0.6] - 2026-09-09
 

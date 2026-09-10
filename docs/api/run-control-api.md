@@ -41,7 +41,39 @@ closure = fno.Closure(
 )
 ```
 
-`Transform` is a generic stored-field operation. `Closure` requires a solver-side equation adapter. FNOM selects ONNX, compiled, Joblib, or Equinox without changing this interface.
+`Transform` is a generic stored-field operation. `Closure` requires a solver-side equation adapter. FNOM selects ONNX, compiled, Joblib, Equinox, or a native table without changing this interface.
+
+One physical closure may contain a later solver-mediated field update without introducing another top-level workflow object. `update()` is immutable: it returns a new declaration and leaves the original closure unchanged. Each stage receives its own resident worker, while the custom OpenFOAM integration template fixes the actual solver call sites and places `@FOAMNORDIC_UPDATE_0_BODY@` where the first update is invoked.
+
+```python
+closure = fno.Closure(
+    name="progressRateFjord",
+    operator=fno.Operator.model("reaction-rate.fnom"),
+    inputs={
+        "c": fno.Field("c"),
+        "c_var": fno.Field("cVar"),
+        "T": fno.Field("T"),
+    },
+    outputs={"omega_c": fno.Field("omega_c")},
+)
+
+closure = closure.update(
+    name="thermochemicalState",
+    operator=fno.Operator.table("manifold.fnom"),
+    inputs={
+        "c": fno.Field("c"),
+        "c_var": fno.Field("cVar"),
+    },
+    outputs={
+        "H2": fno.Field("H2"),
+        "O2": fno.Field("O2"),
+        "H2O": fno.Field("H2O"),
+        "N2": fno.Field("N2"),
+    },
+)
+```
+
+`Operator.table()` deliberately states that an FNOM artefact is a lookup table. FoamNordic checks this declaration against the manifest before launch. The ordered update list describes ownership and worker lifetime, not numerical composition: the solver adapter remains responsible for advancing equations between stages.
 
 Pure mathematical functions can use `Operator.function`; logical inputs become keyword arguments and returned mapping keys are logical outputs.
 

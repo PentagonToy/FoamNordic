@@ -9,6 +9,7 @@
  */
 // clang-format on
 #include <atomic>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -83,6 +84,12 @@ void write_u64(std::vector<std::byte>& bytes, std::size_t offset, std::uint64_t 
     for (unsigned shift = 0; shift < 64; shift += 8) {
         bytes[offset++] = static_cast<std::byte>((value >> shift) & 0xffU);
     }
+}
+
+template<class Value>
+void append_value(std::vector<std::byte>& bytes, Value value) {
+    const auto source = std::as_bytes(std::span(&value, 1));
+    bytes.insert(bytes.end(), source.begin(), source.end());
 }
 
 template <class Value>
@@ -275,8 +282,8 @@ foamnordic::fjord::Tensor float_tensor(
 
 class InspectingPackedKernel final : public foamnordic::inference::PackedModelKernel {
 public:
-    foamnordic::fjord::Tensor evaluate(
-        foamnordic::fjord::TensorView features,
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
         std::uint64_t exchange_index,
         double physical_time,
         std::uint32_t /*rank*/) override {
@@ -284,9 +291,14 @@ public:
         std::vector<double> values(features.bytes.size() / sizeof(double));
         std::memcpy(values.data(), features.bytes.data(), features.bytes.size());
         require_close(values, {0.5, 2.0, 2.0}, "Native input packing or scaling failed.");
-        auto output = scalar_tensor("foamnordic.predictions", {3.0});
-        output.shape = {1, 1};
-        return output;
+        std::vector<std::byte> bytes(sizeof(double));
+        const double prediction = 3.0;
+        std::memcpy(bytes.data(), &prediction, sizeof(double));
+        return {
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {1, 1},
+            std::move(bytes)};
     }
 };
 
@@ -351,7 +363,7 @@ void test_smedja_rebinds_dynamic_input_storage() {
 
 void test_smedja_moves_a_single_output_staging_buffer() {
     foamnordic::inference::Smedja smedja(contract());
-    auto packed = scalar_tensor("foamnordic.predictions", {1.0, 2.0});
+    auto packed = scalar_tensor("bindnordic.predictions", {1.0, 2.0});
     packed.shape = {2, 1};
     const auto* storage = packed.bytes.data();
 
@@ -374,7 +386,7 @@ void test_smedja_reuses_multi_output_staging_for_widest_field() {
     };
     foamnordic::inference::Smedja smedja(multi_output_contract);
     auto packed = scalar_tensor(
-        "foamnordic.predictions",
+        "bindnordic.predictions",
         {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
     packed.shape = {2, 3};
     const auto* storage = packed.bytes.data();
@@ -566,8 +578,8 @@ public:
         };
     }
 
-    foamnordic::fjord::Tensor evaluate(
-        foamnordic::fjord::TensorView features,
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
         std::uint64_t exchange_index,
         double physical_time,
         std::uint32_t /*rank*/) override {
@@ -577,12 +589,16 @@ public:
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         active_.fetch_sub(1);
-        auto output = scalar_tensor(
-            "foamnordic.predictions",
-            std::vector<double>(features.shape.front(), 1.0));
-        output.shape = {features.shape.front(), 1};
-        output.time_index = exchange_index;
-        output.physical_time = physical_time;
+        std::vector<double> values(features.shape.front(), 1.0);
+        std::vector<std::byte> bytes(values.size() * sizeof(double));
+        std::memcpy(bytes.data(), values.data(), bytes.size());
+        auto output = bindnordic::Tensor{
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {features.shape.front(), 1},
+            std::move(bytes)};
+        static_cast<void>(exchange_index);
+        static_cast<void>(physical_time);
         return output;
     }
 
@@ -713,17 +729,21 @@ void test_artifact_kernel_samples_stage_costs_on_request() {
 
 class LoadedProbeKernel final : public foamnordic::inference::PackedModelKernel {
 public:
-    foamnordic::fjord::Tensor evaluate(
-        foamnordic::fjord::TensorView features,
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
         std::uint64_t exchange_index,
         double physical_time,
         std::uint32_t /*rank*/) override {
-        auto output = scalar_tensor(
-            "foamnordic.predictions",
-            std::vector<double>(features.shape.front(), 1.0));
-        output.shape = {features.shape.front(), 1};
-        output.time_index = exchange_index;
-        output.physical_time = physical_time;
+        std::vector<double> values(features.shape.front(), 1.0);
+        std::vector<std::byte> bytes(values.size() * sizeof(double));
+        std::memcpy(bytes.data(), values.data(), bytes.size());
+        auto output = bindnordic::Tensor{
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {features.shape.front(), 1},
+            std::move(bytes)};
+        static_cast<void>(exchange_index);
+        static_cast<void>(physical_time);
         return output;
     }
 };
@@ -773,6 +793,70 @@ void test_loaded_artifact_preserves_backend_synchronization_ownership() {
     require(
         loaded.kernel->owns_backend_synchronization(),
         "The real artifact loader hid the kernel synchronization boundary.");
+}
+
+void test_table_bundle_loads_through_the_model_boundary() {
+    std::vector<std::byte> table;
+    for (const char character : std::string("FNOTAB1\0", 8)) {
+        append_value(table, character);
+    }
+    append_value(table, std::uint8_t{2});
+    append_value(table, std::uint8_t{2});
+    append_value(table, std::uint16_t{0});
+    append_value(table, std::uint64_t{2});
+    for (const auto& axis : std::array<std::vector<double>, 2>{
+             std::vector<double>{0.0, 1.0},
+             std::vector<double>{0.0, 2.0}}) {
+        append_value(table, std::uint8_t{0});
+        append_value(table, std::uint64_t{axis.size()});
+        for (const auto point : axis) append_value(table, point);
+    }
+    for (const auto point : std::vector<double>{
+             0.0, 10.0,
+             4.0, 14.0,
+             2.0, 12.0,
+             6.0, 16.0}) {
+        append_value(table, point);
+    }
+
+    const auto root = std::filesystem::temp_directory_path();
+    const auto nonce = std::to_string(std::random_device{}());
+    const auto payload = root / ("foamnordic-table-" + nonce + ".table");
+    const auto bundle = root / ("foamnordic-table-" + nonce + ".fnom");
+    write_bytes(payload, table);
+    foamnordic::inference::write_bundle(
+        bundle,
+        {
+            foamnordic::inference::ModelFormat::table,
+            payload.filename().string(),
+            {
+                "table",
+                {
+                    {"x", foamnordic::fjord::Element::float64, 1},
+                    {"z", foamnordic::fjord::Element::float64, 1},
+                },
+                {{"state", foamnordic::fjord::Element::float64, 2}},
+            },
+            {},
+            std::nullopt,
+            std::nullopt,
+            "table",
+        },
+        payload);
+
+    auto loaded = foamnordic::inference::load_model(bundle);
+    foamnordic::inference::TensorMap inputs;
+    inputs.emplace("x", scalar_tensor("x", {0.25, 2.0}));
+    inputs.emplace("z", scalar_tensor("z", {0.5, -1.0}));
+    const auto outputs = loaded.kernel->evaluate(inputs, {0, 1}, 0, 0.0);
+    const auto& output = outputs.at("state");
+    std::vector<double> actual(output.bytes.size() / sizeof(double));
+    std::memcpy(actual.data(), output.bytes.data(), output.bytes.size());
+    require_close(actual, {1.5, 11.5, 2.0, 12.0}, "Loaded table interpolation failed.");
+
+    std::error_code ignored;
+    std::filesystem::remove(payload, ignored);
+    std::filesystem::remove(bundle, ignored);
 }
 
 void test_dense_affine_kernel_float64() {
@@ -1058,6 +1142,7 @@ int main() {
     test_artifact_kernel_rejects_an_oversized_working_set();
     test_artifact_kernel_samples_stage_costs_on_request();
     test_loaded_artifact_preserves_backend_synchronization_ownership();
+    test_table_bundle_loads_through_the_model_boundary();
     test_dense_affine_kernel_float64();
     test_dense_affine_kernel_float32();
     test_manifest_round_trip_and_corruption_rejection();

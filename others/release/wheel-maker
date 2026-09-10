@@ -77,7 +77,7 @@ cd "$repo"
 
 [[ -f ".github/workflows/$workflow" ]] \
     || fail "workflow does not exist: .github/workflows/$workflow"
-[[ -f python/pyproject.toml ]] || fail "python/pyproject.toml is missing"
+[[ -f packages/foamnordic/pyproject.toml ]] || fail "packages/foamnordic/pyproject.toml is missing"
 
 python_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 python_major=${python_version%%.*}
@@ -86,7 +86,7 @@ if ((python_major < 3 || (python_major == 3 && python_minor < 9))); then
     fail "Python 3.9 or newer is required for Twine; found $python_version"
 fi
 
-version=$(sed -nE 's/^version = "([^"]+)"/\1/p' python/pyproject.toml | head -1)
+version=$(sed -nE 's/^version = "([^"]+)"/\1/p' packages/foamnordic/pyproject.toml | head -1)
 [[ -n "$version" ]] || fail "could not read the FoamNordic version"
 python3 others/release/release_notes.py >/dev/null \
     || fail "release versions or changelog are inconsistent"
@@ -207,6 +207,9 @@ fi
 "$python_command" -m twine upload --repository-url https://upload.pypi.org/legacy/ "$wheelhouse"/*.whl
 EOF
 chmod 0755 "$upload_helper"
+test_upload_helper="$output/upload-test-pypi"
+sed 's|https://upload.pypi.org/legacy/|https://test.pypi.org/legacy/|' "$upload_helper" > "$test_upload_helper"
+chmod 0755 "$test_upload_helper"
 
 if [[ "$keep_downloads" == true ]]; then
     cp -R "$download/artifacts" "$output/github-artifacts"
@@ -217,5 +220,7 @@ printf '\n%s\n' "[FoamNordic] Wheelhouse ready: $output"
 printf '%s\n' "[FoamNordic] Version: $version"
 printf '%s\n' "[FoamNordic] Commit: $local_sha"
 printf '%s\n' "[FoamNordic] Run: $run_url"
+printf '%s\n' "[FoamNordic] TestPyPI upload command (run after local wheel validation):"
+printf '%q\n\n' "$test_upload_helper"
 printf '%s\n\n' "[FoamNordic] PyPI upload command (run only after clean-install validation; prompts for the token):"
 printf '%q\n' "$upload_helper"

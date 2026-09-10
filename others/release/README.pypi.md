@@ -1,6 +1,6 @@
 # FoamNordic
 
-FoamNordic is a native C++ and Python framework for ordinary OpenFOAM and machine-learning field programs, including equation-level closures. It keeps atomic field exchange, packing, scaling, and lifecycle in the native runtime while exposing a compact declarative API for cases, placement, launch, observations, and results.
+FoamNordic is a native C++ and Python framework for ordinary OpenFOAM and machine-learning field programs, including equation-level closures. It keeps atomic field exchange, packing, and lifecycle in the native runtime, delegates model formats and execution to BindNordic, and exposes a compact declarative API for cases, placement, launch, observations, and results.
 
 > **Note:** The FoamNordic GitHub repository is temporarily private while the software is used in ongoing research and a related publication. The repository will be made public after the research is presented. PyPI distributions remain available in the meantime.
 
@@ -12,7 +12,7 @@ FoamNordic is active research software. Release notes and upgrade guidance are m
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install foamnordic
+python -m pip install "foamnordic[ml]"
 
 # Load or enter the desired OpenFOAM environment once, then:
 foamnordic build
@@ -23,7 +23,7 @@ foamnordic dir
 foamnordic doctor
 ```
 
-The same installation includes ONNX packaging, compiled and Joblib/scikit-learn models, and JAX/Equinox resident models. No backend-specific extra is required.
+The `ml` extra includes scikit-learn, ONNX, Equinox, and CPU JAX on Linux or macOS. Install `foamnordic[ml-cuda12]` for CUDA 12 JAX on Linux. CUDA selection is explicit rather than inferred from CPU architecture. Install plain `foamnordic` for ordinary OpenFOAM runs, mathematical functions, or existing artifacts that do not require those authoring libraries.
 
 Binary wheels carry the native Python control runtime and compact OpenFOAM source build kit. `foamnordic build` compiles it for the currently loaded ABI; each case later selects that runtime from its declared `of_cmd` and `shell`. The build also prepares the native ONNX ModelHost and verified ONNX Runtime 1.28.0. Offline systems can point `FOAMNORDIC_ONNX_RUNTIME_ROOT` at an unpacked 1.28.0 distribution.
 

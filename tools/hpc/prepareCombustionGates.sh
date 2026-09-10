@@ -14,7 +14,7 @@ python -m pip install \
     --no-cache-dir \
     --force-reinstall \
     --no-deps \
-    "$FOAMNORDIC_REPO/python"
+    "$FOAMNORDIC_REPO/packages/foamnordic"
 
 python - <<'PY'
 import foamnordic as fno

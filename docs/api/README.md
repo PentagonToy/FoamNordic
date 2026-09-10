@@ -7,7 +7,7 @@ Python describes experiments before launch and inspects compact results during o
 | Guide | Contents |
 | --- | --- |
 | [Run control](run-control-api.md) | cases, closures, transforms, observations, Slurm, and lifecycle |
-| [Models and FNOM](model-artifact-api.md) | ONNX, sklearn, Equinox, preprocessing, inspection, and validation |
+| [Models and FNOM](model-artifact-api.md) | ONNX, sklearn, Equinox, tables, preprocessing, inspection, and validation |
 | [Numerics](numerics.md) | `fno.Math`, OpenFOAM expressions, and reproducible random keys |
 | [Postprocessing](postprocess-api.md) | stored fields, statistics, and case comparisons |
 

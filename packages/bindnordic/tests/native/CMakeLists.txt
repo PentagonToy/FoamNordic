@@ -1,0 +1,3 @@
+add_executable(bindnordic_native_models_test test_models.cpp)
+target_link_libraries(bindnordic_native_models_test PRIVATE BindNordic::models)
+add_test(NAME native.models COMMAND bindnordic_native_models_test)

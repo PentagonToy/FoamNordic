@@ -1,6 +1,7 @@
 operations/expression.C
 operations/frame.C
 closureHook.C
+models/progressRateFjord/progressRateFjord.C
 fieldProgramObservation.C
 fieldProgramSession.C
 fieldBridge.C
