@@ -15,6 +15,6 @@ Use `@UPPER_SNAKE_CASE@` for substitutions. Every token must be resolved before 
 
 Repository examples and generated templates use placeholders such as `<allocation-account>`, `<user>`, `<jobid>`, and `<compute-node>`. Do not commit personal names, email addresses, project numbers, home or scratch paths, node names, or fabric addresses. Package-author metadata is the deliberate exception and belongs only in `packages/foamnordic/pyproject.toml`.
 
-Templates may describe pure OpenFOAM or model-coupled runs. A template must not silently enable a closure, change physical boundary conditions, or mutate the source case.
+Templates may describe direct OpenFOAM or FNO-coupled runs. A template must not silently enable a closure, change physical boundary conditions, or mutate the source case.
 
 Observation paths must contain `{rank}` whenever a case may run with multiple MPI ranks. They are generated below the marked run directory so `foamnordic clobber --workspace ...` can remove the whole owned run without guessing which files belong to FoamNordic.

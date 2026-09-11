@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare stock OpenFOAM LES closures with exact FoamNordic equivalents."""
+"""Compare OF/FNO LES closures with exact FNO-coupled equivalents."""
 
 from __future__ import annotations
 
@@ -286,8 +286,8 @@ def _validate_model(
     rtol: float,
     atol: float,
 ) -> dict[str, object]:
-    stock, stock_wall = _launch(
-        fno.Longship(case=_case(f"{model}-stock", source, output)), timeout
+    of_fno, of_fno_wall = _launch(
+        fno.Longship(case=_case(f"{model}-of-fno", source, output)), timeout
     )
     coupled, coupled_wall = _launch(
         fno.Longship(
@@ -298,7 +298,7 @@ def _validate_model(
     )
     fields = ("U", "p", "nut") if model == "Smagorinsky" else ("U", "p", "nut", "k")
     comparison = fno.Postprocess.compare(
-        stock,
+        of_fno,
         coupled,
         fields=fields,
         time_idx=-1,
@@ -307,7 +307,7 @@ def _validate_model(
     )
     passed = True
     for field, metrics in comparison.items():
-        scale = _reference_scale(stock, field)
+        scale = _reference_scale(of_fno, field)
         metrics["reference_max_abs"] = scale
         metrics["relative_linf"] = metrics["max_abs"] / max(scale, np.finfo(float).tiny)
         field_passed = (
@@ -316,20 +316,20 @@ def _validate_model(
         )
         metrics["passed"] = field_passed
         passed = passed and field_passed
-    stock_execution, stock_clock = _solver_timing(stock.solver_log)
+    of_fno_execution, of_fno_clock = _solver_timing(of_fno.solver_log)
     coupled_execution, coupled_clock = _solver_timing(coupled.solver_log)
     return {
         "model": model,
-        "physical_time": stock.postprocess.times[-1],
-        "stock_total_seconds": stock_wall,
+        "physical_time": of_fno.postprocess.times[-1],
+        "of_fno_total_seconds": of_fno_wall,
         "foamnordic_total_seconds": coupled_wall,
-        "stock_openfoam_execution_seconds": stock_execution,
+        "of_fno_openfoam_execution_seconds": of_fno_execution,
         "foamnordic_openfoam_execution_seconds": coupled_execution,
-        "stock_openfoam_clock_seconds": stock_clock,
+        "of_fno_openfoam_clock_seconds": of_fno_clock,
         "foamnordic_openfoam_clock_seconds": coupled_clock,
         "fields": comparison,
         "passed": passed,
-        "stock_run": str(stock.work_dir),
+        "of_fno_run": str(of_fno.work_dir),
         "foamnordic_run": str(coupled.work_dir),
     }
 

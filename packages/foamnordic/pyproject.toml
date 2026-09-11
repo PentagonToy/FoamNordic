@@ -82,10 +82,8 @@ cmake.define.FOAMNORDIC_TESTS = "OFF"
 build = "cp311-* cp312-*"
 skip = "*-musllinux_*"
 test-extras = ["ml"]
-test-command = "python -c 'import bindnordic, foamnordic._native as native; print(\"BindNordic:\", bindnordic.__file__); print(\"FoamNordic native:\", native.__file__)' && python -m unittest discover -s {project}/packages/bindnordic/tests -v && python -m unittest discover -s {project}/packages/foamnordic/tests -v && python {project}/others/release/check_wheel_buildkit.py"
+test-requires = ["pytest>=8,<10", "pytest-mock>=3.14,<4"]
+test-command = "python -c 'import bindnordic, foamnordic._native as native; print(\"BindNordic:\", bindnordic.__file__); print(\"FoamNordic native:\", native.__file__)' && python -m pytest -c {project}/pytest.ini && python {project}/others/release/check_wheel_buildkit.py"
 
 [tool.cibuildwheel.macos]
 environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]

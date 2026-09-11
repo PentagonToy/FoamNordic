@@ -17,7 +17,7 @@ python "$FOAMNORDIC_REPO/tools/hpc/testMultiNodeLongship.py"
 
 The script requests two nodes and two OpenFOAM tasks, places one ModelHost on each node, and prints `Two-node Longship gate: PASS` only after final `U` and `p` parity succeeds. This gate passed on Roihu's full-node `medium` partition with exact field parity. Use `test` when two nodes are available; `small` accepts only one node. macOS exercises MPI and node-wrapper unit paths but cannot reproduce separate node-local shared-memory namespaces.
 
-The pure OpenFOAM baseline helpers remain useful for site diagnostics and do not load FoamNordic's model runtime.
+The direct OpenFOAM baseline helpers remain useful for site diagnostics and do not load FoamNordic's model runtime.
 
 ## WALE performance benchmark
 

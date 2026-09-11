@@ -8,13 +8,28 @@ This file records user-visible changes. Internal refactors and historical protoc
 
 - `fno.Export.table()` writes self-contained, data-only FNOM artefacts containing ordered regular-grid axes and dense output values. BindNordic evaluates them with native multilinear interpolation and explicit clamp or error bounds policies.
 - `fno.Operator.table()` distinguishes lookup tables from executable model artefacts and verifies that distinction against the FNOM manifest before launch.
-- Immutable `Closure.update()` declarations attach solver-mediated field updates to one physical closure without adding another top-level workflow abstraction. Each stage receives an independent resident worker and transport endpoint, while the solver integration retains ownership of the call sites and any equations advanced between them.
+- Immutable `Closure.update()` declarations attach solver-mediated field updates to one physical closure without adding another top-level workflow abstraction. Each stage retains an independent artifact, kernel and transport endpoint, while the solver integration owns the call sites and any equations advanced between them.
 
 ### OpenFOAM integration
 
+- Case validation no longer assumes conventional `U` and `p` initial fields. Solver-only cases validate their common directory and dictionary structure, while transforms, closures and observations validate the fields they actually declare; cases using fields such as `p_rgh` are therefore accepted without aliases.
+- Case paths are canonicalised consistently before validation, including macOS paths that cross the `/tmp` to `/private/tmp` alias.
 - `progressRateFjord` provides a thin native reaction-rate hook whose inputs remain explicitly configurable and whose solver-owned output is `omega_c`.
 - Custom OpenFOAM integration templates can place closure update bodies explicitly, allowing a modelled reaction rate and a tabulated thermochemical-state update to share one `Longship` lifecycle without implying direct model composition.
 - Runtime template discovery now follows one validated rule across OpenFOAM dictionaries, Slurm scripts and banners: packaged resources take precedence, with `tools/templates` used as the source-checkout fallback.
+
+### Profiling
+
+- Opt-in telemetry reports ModelHost workload, memory and stage timings together with per-rank solver request-to-response, request publication, response wait and atomic field-commit timings. `profile_every=0` leaves both execution paths uninstrumented.
+- Packing exchange-validated active-cell indices no longer repeats a full validation scan; focused million-cell benchmarks are about 2.4–2.6 times faster and within 2% of the equivalent unchecked gather, without implying the same end-to-end solver speed-up.
+
+### Resources
+
+- Native runtime builds use the CMake-owned `foamnordic_runtime_bundle` target so every enabled runtime component, including the optional ONNX connector, is built before installation.
+- FNOM execution metadata distinguishes backends that own compute threads from backends that support concurrent independent evaluations.
+- Field programs assigned to the same node now run inside one ModelHost process and borrow the full available execution capacity from one shared pool instead of receiving static CPU partitions, while retaining separate artifacts, endpoints, kernels and backend state.
+- `foamnordic build` installs ONNX support as a versioned runtime connector. A consolidated ModelHost loads it on demand, allowing ONNX and Python or table programs to share one process without linking the wheel extension to the host OpenFOAM toolchain.
+- Native tables use the managed resident path and remain available after `foamnordic build --without-onnx`; the ONNX connector now derives its scheduling capabilities from the same declaration as the underlying BindNordic kernel.
 
 ## [1.0.7] - 2026-09-10
 

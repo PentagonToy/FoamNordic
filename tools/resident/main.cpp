@@ -37,6 +37,7 @@ void usage() {
         << "  --threads N      Model CPUs reserved for this host\n"
         << "  --receive-bytes N Shared input receive-memory limit\n"
         << "  --profile-every N Sample one model call every N calls (0 disables)\n"
+        << "  --program NAME   Field-program name used in telemetry\n"
         << "  --ready-file PATH Create PATH after the worker is ready\n"
         << "  --ucx-host HOST   Require UCX and advertise HOST to solvers\n"
         << "  --no-shm          Keep a Unix session on UDS\n";
@@ -166,6 +167,8 @@ int main(int argc, char** argv) {
                 options.maximum_receive_bytes = positive_bytes(argv[++index]);
             } else if (argument == "--profile-every" && index + 1 < argc) {
                 options.profile_every = nonnegative_count(argv[++index]);
+            } else if (argument == "--program" && index + 1 < argc) {
+                options.program = argv[++index];
             } else if (argument == "--ready-file" && index + 1 < argc) {
                 ready_file = expand_rank(argv[++index]);
             } else if (argument == "--ucx-host" && index + 1 < argc) {

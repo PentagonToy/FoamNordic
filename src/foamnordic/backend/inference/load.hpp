@@ -25,6 +25,8 @@ struct ModelLoadOptions {
     std::uint32_t execution_contexts{1};
     std::uint64_t maximum_working_bytes{16ULL * 1024ULL * 1024ULL * 1024ULL};
     std::uint64_t profile_every{0};
+    std::shared_ptr<ExecutionCapacityPool> capacity;
+    std::uint32_t capacity_units{1};
 
     void validate() const;
 };

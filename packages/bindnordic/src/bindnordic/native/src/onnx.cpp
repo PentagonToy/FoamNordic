@@ -294,7 +294,7 @@ OnnxPackedKernel::~OnnxPackedKernel() = default;
 OnnxPackedKernel::OnnxPackedKernel(OnnxPackedKernel&&) noexcept = default;
 OnnxPackedKernel& OnnxPackedKernel::operator=(OnnxPackedKernel&&) noexcept = default;
 
-BackendCapabilities OnnxPackedKernel::capabilities() const noexcept {
+BackendCapabilities onnx_backend_capabilities() noexcept {
     // One session owns its configured ORT thread pool. Keeping Run() serial
     // prevents request concurrency from multiplying that CPU budget.
     return {
@@ -302,6 +302,10 @@ BackendCapabilities OnnxPackedKernel::capabilities() const noexcept {
         .row_independent = false,
         .owns_compute_threads = true,
     };
+}
+
+BackendCapabilities OnnxPackedKernel::capabilities() const noexcept {
+    return onnx_backend_capabilities();
 }
 
 Tensor OnnxPackedKernel::evaluate(

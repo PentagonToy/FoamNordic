@@ -151,7 +151,7 @@ Same-node bulk exchange uses shared memory; multi-node runs place a resident wor
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFOAMNORDIC_TESTS=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-python -m unittest discover -s packages/foamnordic/tests -v
+python -m pytest
 ```
 
 Supported build targets are Linux `x86_64`, Linux `aarch64`, and Apple Silicon. Linux/OpenFOAM v2512 is the primary HPC target; OpenFOAM.app provides the native macOS environment.

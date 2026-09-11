@@ -8,7 +8,7 @@ fail()
     exit 1
 }
 
-for command in cmake c++ ctest find foamDictionary shasum wclean wmake; do
+for command in blockMesh cmake c++ ctest find foamDictionary ps shasum wclean wmake; do
     command -v "$command" >/dev/null \
         || fail "required command is unavailable: $command"
 done
@@ -48,7 +48,6 @@ closure_shared_memory=true
 closure_ucx=false
 worker_pid=
 probe_pid=
-watchdog_pid=
 worker_pids=()
 split_lock_fd=
 
@@ -61,10 +60,6 @@ cleanup()
     if [[ -n "$probe_pid" ]]; then
         kill "$probe_pid" 2>/dev/null || true
         wait "$probe_pid" 2>/dev/null || true
-    fi
-    if [[ -n "$watchdog_pid" ]]; then
-        kill "$watchdog_pid" 2>/dev/null || true
-        wait "$watchdog_pid" 2>/dev/null || true
     fi
     for pid in "${worker_pids[@]}"; do
         kill "$pid" 2>/dev/null || true
@@ -157,24 +152,23 @@ wait_bounded()
     local label=$2
     local status
 
-    (
-        sleep "$test_timeout"
-        kill -TERM "$pid" 2>/dev/null || true
-    ) &
-    watchdog_pid=$!
+    local deadline=$((SECONDS + test_timeout))
+    local state
+    while kill -0 "$pid" 2>/dev/null; do
+        state=$(ps -o stat= -p "$pid" 2>/dev/null || true)
+        [[ "$state" == Z* ]] && break
+        if ((SECONDS >= deadline)); then
+            kill -TERM "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            fail "$label exceeded ${test_timeout}s"
+        fi
+        sleep 0.1
+    done
 
     set +e
     wait "$pid"
     status=$?
     set -e
-
-    kill "$watchdog_pid" 2>/dev/null || true
-    wait "$watchdog_pid" 2>/dev/null || true
-    watchdog_pid=
-
-    if [[ "$status" -eq 143 ]]; then
-        fail "$label exceeded ${test_timeout}s"
-    fi
     [[ "$status" -eq 0 ]] \
         || fail "$label exited with status $status"
 }
@@ -249,7 +243,7 @@ run_uds_onnx_probe()
     worker_pid=
     [[ ! -e "$work_dir/closure-uds.sock" ]] \
         || fail "pure UDS closure worker left a stale endpoint"
-    grep -Eq "Closure worker rank [0-9]+ data plane: UDS" \
+    grep -Eq "Model worker rank [0-9]+ data plane: UDS" \
         "$work_dir/worker-uds.log" \
         || fail "closure worker did not retain the UDS data plane"
 
@@ -371,10 +365,10 @@ run_longship_mpi_onnx_probe()
 
     [[ ! -e "$work_dir/closure-shared.sock" ]] \
         || fail "Longship left its shared ModelHost endpoint"
-    [[ $(grep -Ec "Closure worker rank [0-9]+ data plane: SHM" \
+    [[ $(grep -Ec "Model worker rank [0-9]+ data plane: SHM" \
             "$work_dir/longship-host.log") -eq "$mpi_ranks" ]] \
         || fail "shared ModelHost did not negotiate SHM with every rank"
-    [[ $(grep -c "Native closure runner stopped" \
+    [[ $(grep -c "Native model runner stopped" \
             "$work_dir/longship-host.log") -eq "$mpi_ranks" ]] \
         || fail "shared ModelHost did not reap every rank session"
     grep -q "OpenFOAM closure hook: PASS" "$work_dir/longship-solver.log" \
@@ -390,7 +384,9 @@ run_longship_mpi_onnx_probe()
 
 run_split_ucx_onnx_probe()
 {
-    [[ "${FOAMNORDIC_UCX_SPLIT:-false}" == true ]] || return
+    if [[ "${FOAMNORDIC_UCX_SPLIT:-false}" != true ]]; then
+        return 0
+    fi
     [[ -n "${SLURM_JOB_ID:-}" ]] \
         || fail "FOAMNORDIC_UCX_SPLIT requires an interactive server allocation"
     for command in awk flock grep ip sacct sbatch scancel squeue; do
@@ -515,10 +511,10 @@ run_split_ucx_onnx_probe()
     echo "[FoamNordic] Central UCX client job: $client_job"
     [[ ! -e "$ready" ]] \
         || fail "central UCX Longship left its readiness marker"
-    [[ $(grep -Ec "Closure worker rank [0-9]+ data plane: UCX" \
+    [[ $(grep -Ec "Model worker rank [0-9]+ data plane: UCX" \
             "$host_log") -eq "$central_ranks" ]] \
         || fail "central ModelHost did not negotiate UCX with every rank"
-    [[ $(grep -c "Native closure runner stopped" "$host_log") \
+    [[ $(grep -c "Native model runner stopped" "$host_log") \
             -eq "$central_ranks" ]] \
         || fail "central ModelHost did not reap every rank session"
     grep -q "OpenFOAM closure hook: PASS" "$client_log" \
@@ -537,6 +533,7 @@ run_split_ucx_onnx_probe()
 
 export FOAMNORDIC_SOURCE="$repository"
 export FOAMNORDIC_BUILD="$build_dir"
+export BINDNORDIC_SOURCE_DIR="$repository/packages/bindnordic/src/bindnordic/native"
 export FOAMNORDIC_OPENFOAM_LIB="$work_dir/lib"
 export FOAM_USER_LIBBIN="$work_dir/lib"
 export FOAM_USER_APPBIN="$work_dir/bin"
@@ -609,6 +606,10 @@ cp -R \
 )
 
 cp -R "$source_case" "$case_dir"
+if [[ ! -f "$case_dir/constant/polyMesh/points" ]]; then
+    blockMesh -case "$case_dir" >"$work_dir/blockMesh.log" 2>&1 \
+        || fail "blockMesh failed; see $work_dir/blockMesh.log"
+fi
 foamDictionary \
     "$case_dir/system/controlDict" \
     -entry startFrom \
@@ -649,7 +650,7 @@ worker_pid=
 [[ ! -e "$work_dir/closure.sock" ]] \
     || fail "native closure worker left a stale UDS endpoint"
 
-grep -Eq "Closure worker rank [0-9]+ data plane: SHM" "$work_dir/worker.log" \
+grep -Eq "Model worker rank [0-9]+ data plane: SHM" "$work_dir/worker.log" \
     || fail "closure worker did not negotiate SHM"
 
 sed -n '1,100p' "$work_dir/worker.log"

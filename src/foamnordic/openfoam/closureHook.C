@@ -123,7 +123,8 @@ ClosureHook::ClosureHook(const dictionary& dict)
     : inputs_(readInputs(dict)),
       outputs_(readOutputs(dict)),
       session_(dict, contract(inputs_, outputs_)),
-      observation_(FieldProgramObservation::create(dict)) {}
+      observation_(FieldProgramObservation::create(dict)),
+      program_(dict.getOrDefault<word>("profileProgram", "closure")) {}
 
 ClosureHook::~ClosureHook() noexcept {
     try {
@@ -145,7 +146,7 @@ std::uint64_t ClosureHook::invoke(
     if (bindInputs) {
         bindInputs(frame);
     }
-    auto invocation = session_.begin(time);
+    auto invocation = session_.begin(mesh, time);
     for (const auto& input : inputs_) {
         if (input.patch.empty()) {
             frame.provide(invocation, input.key, input.expression);
@@ -178,7 +179,8 @@ std::uint64_t ClosureHook::invoke(
         }
     }
     if (observation_) {
-        observation_->publish(mesh, time, exchangeIndex, closureWait);
+        observation_->publish(
+            mesh, time, exchangeIndex, session_.topologyGeneration(), closureWait);
     }
     return exchangeIndex;
 }
@@ -188,6 +190,7 @@ void ClosureHook::shutdown() {
         observation_->shutdown();
         observation_.reset();
     }
+    writeSolverTelemetry(program_, session_.profileSnapshot());
     session_.shutdown();
 }
 

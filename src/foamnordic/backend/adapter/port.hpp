@@ -22,7 +22,8 @@ public:
     FieldInvocation(
         BlockingFieldExchange& exchange,
         std::uint64_t time_index,
-        double physical_time);
+        double physical_time,
+        std::uint64_t topology_generation = 0);
 
     FieldInvocation(const FieldInvocation&) = delete;
     FieldInvocation& operator=(const FieldInvocation&) = delete;
@@ -37,6 +38,7 @@ private:
     BlockingFieldExchange& exchange_;
     std::uint64_t time_index_;
     double physical_time_;
+    std::uint64_t topology_generation_;
     InputFieldMap inputs_;
     OutputFieldMap outputs_;
     bool committed_{false};
@@ -44,11 +46,16 @@ private:
 
 class FieldProgramPort {
 public:
-    FieldProgramPort(fjord::Harbor& harbor, ExchangeContract contract);
+    FieldProgramPort(
+        fjord::Harbor& harbor,
+        ExchangeContract contract,
+        std::uint64_t profile_every = 0);
 
     [[nodiscard]] FieldInvocation begin(
         std::uint64_t time_index,
-        double physical_time);
+        double physical_time,
+        std::uint64_t topology_generation = 0);
+    [[nodiscard]] SolverExchangeSnapshot profile_snapshot() const noexcept;
 
 private:
     BlockingFieldExchange exchange_;

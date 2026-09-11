@@ -76,6 +76,7 @@ void Harbor::send(const TensorView& tensor) {
         .physical_time = tensor.physical_time,
         .session_id = session_.session_id,
         .solver_time_index = tensor.solver_time_index,
+        .topology_generation = tensor.topology_generation,
     };
     const auto header = encode_prefix(prefix);
     channel_->write_all(header);
@@ -99,13 +100,15 @@ void Harbor::publish(
                 "Every tensor in an atomic exchange must share its exchange index.");
         }
         if (tensor.solver_time_index != tensors.front().solver_time_index
+            || tensor.topology_generation != tensors.front().topology_generation
             || tensor.physical_time != tensors.front().physical_time) {
             throw std::invalid_argument(
                 "Every tensor in an atomic exchange must share solver-time metadata.");
         }
         send(tensor);
     }
-    complete(exchange_index, static_cast<std::uint32_t>(tensors.size()));
+    complete(exchange_index, static_cast<std::uint32_t>(tensors.size()),
+             tensors.front().topology_generation);
 }
 
 void Harbor::publish_request(
@@ -119,6 +122,12 @@ void Harbor::publish_request(
         tensor.validate();
         if (tensor.time_index != exchange_index) {
             throw std::invalid_argument("Every request tensor must share its exchange index.");
+        }
+        if (tensor.solver_time_index != tensors.front().solver_time_index
+            || tensor.topology_generation != tensors.front().topology_generation
+            || tensor.physical_time != tensors.front().physical_time) {
+            throw std::invalid_argument(
+                "Every request tensor must share solver-time and topology metadata.");
         }
         if (tensor.bytes.size() > std::numeric_limits<std::uint64_t>::max() - payload_bytes) {
             throw std::overflow_error("Request payload byte count overflowed.");
@@ -134,6 +143,7 @@ void Harbor::publish_request(
         .peers = session_.peers,
         .session_id = session_.session_id,
         .solver_time_index = tensors.front().solver_time_index,
+        .topology_generation = tensors.front().topology_generation,
     };
     channel_->write_all(encode_prefix(request));
     publish(exchange_index, tensors);
@@ -156,7 +166,7 @@ HarborMessage Harbor::receive_message(
             return receive_message(maximum_tensor_payload, admit_payload, false);
         }
         return {prefix.kind, std::nullopt, prefix.exchange_index, prefix.flags,
-                prefix.payload_bytes};
+                prefix.payload_bytes, prefix.topology_generation};
     }
 
     if (prefix.payload_bytes > session_.maximum_payload
@@ -181,9 +191,11 @@ HarborMessage Harbor::receive_message(
         std::move(payload),
         prefix.exchange_index,
         prefix.physical_time,
-        prefix.solver_time_index};
+        prefix.solver_time_index,
+        prefix.topology_generation};
     tensor.view().validate();
-    return {RuneKind::tensor, std::move(tensor), prefix.exchange_index, 0};
+    return {RuneKind::tensor, std::move(tensor), prefix.exchange_index, 0, 0,
+            prefix.topology_generation};
 }
 
 Tensor Harbor::receive() {
@@ -198,7 +210,8 @@ void Harbor::send_control(
     RuneKind kind,
     const SessionHello& session,
     std::uint64_t exchange_index,
-    std::uint32_t tensor_count) {
+    std::uint32_t tensor_count,
+    std::uint64_t topology_generation) {
     if (kind == RuneKind::hello || kind == RuneKind::hello_accept) {
         session.validate();
     }
@@ -212,6 +225,7 @@ void Harbor::send_control(
         .peers = session.peers,
         .session_id = session.session_id,
         .maximum_payload = session.maximum_payload,
+        .topology_generation = topology_generation,
     };
     channel_->write_all(encode_prefix(prefix));
 }
@@ -302,11 +316,15 @@ SessionHello Harbor::accept_session(const SessionHello& support) {
     return session_;
 }
 
-void Harbor::complete(std::uint64_t exchange_index, std::uint32_t tensor_count) {
+void Harbor::complete(
+    std::uint64_t exchange_index,
+    std::uint32_t tensor_count,
+    std::uint64_t topology_generation) {
     if (tensor_count == 0) {
         throw std::invalid_argument("An atomic exchange commit requires a tensor count.");
     }
-    send_control(RuneKind::complete, session_, exchange_index, tensor_count);
+    send_control(RuneKind::complete, session_, exchange_index, tensor_count,
+                 topology_generation);
 }
 
 void Harbor::fail_exchange(std::uint64_t exchange_index) {

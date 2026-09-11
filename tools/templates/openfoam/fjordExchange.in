@@ -10,6 +10,7 @@
     sessionId       @SESSION_ID@;
     sharedMemory    @SHARED_MEMORY@;
     ucx             @UCX@;
+    profileEvery    @PROFILE_EVERY@;
     exchangeControl timeStep;
     exchangeStage   @EXCHANGE_STAGE@;
 

@@ -128,6 +128,14 @@ class ModelArtifact:
         return get_model_format(self.format).is_executable(self.runtime)
 
     @property
+    def owns_compute_threads(self) -> bool:
+        return get_model_format(self.format).owns_compute_threads
+
+    @property
+    def concurrent_evaluation(self) -> bool:
+        return get_model_format(self.format).concurrent_evaluation
+
+    @property
     def trust_policy(self) -> str:
         return "explicit-trust-required" if self.executable_payload else "data-only"
 
@@ -150,6 +158,10 @@ class ModelArtifact:
             "output_scaler": None if self.output_scaler is None else self.output_scaler.as_dict(),
             "runtime": self.runtime,
             "bundled": True,
+            "capabilities": {
+                "owns_compute_threads": self.owns_compute_threads,
+                "concurrent_evaluation": self.concurrent_evaluation,
+            },
         }
 
 

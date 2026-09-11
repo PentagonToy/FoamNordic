@@ -121,6 +121,27 @@ fjord::Tensor& Smedja::pack_into(
     const std::vector<std::uint64_t>& active_cells,
     std::uint64_t exchange_index,
     double physical_time) const {
+    return pack_impl(
+        workspace, inputs, active_cells, exchange_index, physical_time, false);
+}
+
+fjord::Tensor& Smedja::pack_validated_into(
+    SmedjaWorkspace& workspace,
+    const TensorMap& inputs,
+    const std::vector<std::uint64_t>& active_cells,
+    std::uint64_t exchange_index,
+    double physical_time) const {
+    return pack_impl(
+        workspace, inputs, active_cells, exchange_index, physical_time, true);
+}
+
+fjord::Tensor& Smedja::pack_impl(
+    SmedjaWorkspace& workspace,
+    const TensorMap& inputs,
+    const std::vector<std::uint64_t>& active_cells,
+    std::uint64_t exchange_index,
+    double physical_time,
+    bool validated_cells) const {
     struct Binding {
         const FieldLayout* layout;
         const fjord::Tensor* tensor;
@@ -152,12 +173,18 @@ fjord::Tensor& Smedja::pack_into(
 
     bool contiguous_cells = true;
     if (!active_cells.empty()) {
-        std::uint64_t maximum = 0;
-        for (std::size_t row = 0; row < active_cells.size(); ++row) {
-            maximum = std::max(maximum, active_cells[row]);
-            contiguous_cells = contiguous_cells
-                && active_cells[row] >= active_cells.front()
-                && active_cells[row] - active_cells.front() == row;
+        auto maximum = active_cells.back();
+        if (validated_cells) {
+            contiguous_cells = maximum - active_cells.front() + 1
+                == active_cells.size();
+        } else {
+            maximum = 0;
+            for (std::size_t row = 0; row < active_cells.size(); ++row) {
+                maximum = std::max(maximum, active_cells[row]);
+                contiguous_cells = contiguous_cells
+                    && active_cells[row] >= active_cells.front()
+                    && active_cells[row] - active_cells.front() == row;
+            }
         }
         for (const auto& binding : bindings) {
             if (maximum >= binding.tensor->shape.front()) {
@@ -283,7 +310,9 @@ fjord::Tensor& Smedja::pack_into(
         static_cast<std::uint64_t>(active_cells.size()), inputs_.width};
     workspace.input_.time_index = exchange_index;
     workspace.input_.physical_time = physical_time;
-    workspace.input_.solver_time_index = 0;
+    workspace.input_.solver_time_index = bindings.front().tensor->solver_time_index;
+    workspace.input_.topology_generation =
+        bindings.front().tensor->topology_generation;
     return workspace.input_;
 }
 
@@ -337,6 +366,7 @@ TensorMap Smedja::unpack(fjord::Tensor packed) const {
                                         packed.time_index,
                                         packed.physical_time,
                                         packed.solver_time_index,
+                                        packed.topology_generation,
                                     });
     }
 

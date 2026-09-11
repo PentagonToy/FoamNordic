@@ -55,6 +55,20 @@ if(FOAMNORDIC_RESIDENT_TOOLS)
     add_subdirectory(tools/resident)
 endif()
 
+# Keep the definition of a complete runtime build inside CMake.  Callers build
+# this aggregate target instead of reproducing an option-dependent target list.
+add_custom_target(foamnordic_runtime_bundle
+    DEPENDS
+        foamnordic_adapter
+        foamnordic_inference
+        foamnordic-longship)
+if(FOAMNORDIC_RESIDENT_TOOLS)
+    add_dependencies(foamnordic_runtime_bundle foamnordic_model_worker)
+endif()
+if(FOAMNORDIC_ONNX_RUNTIME)
+    add_dependencies(foamnordic_runtime_bundle foamnordic_onnx_connector)
+endif()
+
 if(FOAMNORDIC_PYTHON)
     add_subdirectory(packages/foamnordic)
 endif()
@@ -89,6 +103,10 @@ install(
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/backend/adapter
     COMPONENT Development
     FILES_MATCHING PATTERN "*.hpp")
+install(
+    FILES src/foamnordic/backend/connectors/plugin.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/backend/connectors
+    COMPONENT Development)
 install(
     FILES
         src/foamnordic/openfoam/closureHook.H

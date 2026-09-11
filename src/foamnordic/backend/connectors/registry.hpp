@@ -10,8 +10,11 @@
 // clang-format on
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -22,8 +25,9 @@ namespace foamnordic::backend {
 void register_connector(std::unique_ptr<ModelConnector> connector);
 
 [[nodiscard]] std::unique_ptr<inference::PackedModelKernel> connect_model(
-    const std::filesystem::path& payload,
-    const inference::ModelArtifact& artifact);
+    std::span<const std::byte> payload,
+    const inference::ModelArtifact& artifact,
+    std::uint32_t threads);
 
 [[nodiscard]] std::vector<std::string> available_connectors();
 

@@ -116,6 +116,7 @@ std::array<std::byte, rune_prefix_size> encode_prefix(const RunePrefix& prefix) 
     append_little<std::uint64_t>(bytes, 56, prefix.session_id);
     append_little<std::uint64_t>(bytes, 64, prefix.maximum_payload);
     append_little<std::uint64_t>(bytes, 72, prefix.solver_time_index);
+    append_little<std::uint64_t>(bytes, 80, prefix.topology_generation);
     return bytes;
 }
 
@@ -140,6 +141,7 @@ RunePrefix decode_prefix(std::span<const std::byte, rune_prefix_size> bytes) {
     prefix.session_id = read_little<std::uint64_t>(bytes, 56);
     prefix.maximum_payload = read_little<std::uint64_t>(bytes, 64);
     prefix.solver_time_index = read_little<std::uint64_t>(bytes, 72);
+    prefix.topology_generation = read_little<std::uint64_t>(bytes, 80);
     validate_prefix(prefix);
     return prefix;
 }
@@ -181,6 +183,7 @@ std::vector<std::byte> encode_tensor(const TensorView& tensor) {
         .exchange_index = tensor.time_index,
         .physical_time = tensor.physical_time,
         .solver_time_index = tensor.solver_time_index,
+        .topology_generation = tensor.topology_generation,
     };
     const auto header = encode_prefix(prefix);
     std::vector<std::byte> frame;
@@ -222,7 +225,8 @@ Tensor decode_tensor(std::span<const std::byte> frame) {
         std::move(payload),
         prefix.exchange_index,
         prefix.physical_time,
-        prefix.solver_time_index};
+        prefix.solver_time_index,
+        prefix.topology_generation};
     tensor.view().validate();
     return tensor;
 }

@@ -110,6 +110,7 @@ void FieldProgramObservation::publish(
     const fvMesh& mesh,
     const Time& time,
     std::uint64_t exchangeIndex,
+    std::uint64_t topologyGeneration,
     double closureWait) noexcept {
     if (!enabled_) {
         return;
@@ -119,18 +120,22 @@ void FieldProgramObservation::publish(
         foamnordic::adapter::ReadOnlyFieldMap views;
         views.reserve(fields_.size());
         for (const auto& field : fields_) {
-            views.emplace(
-                field.c_str(),
+            auto view =
                 inputFieldView(
                     mesh,
                     field,
                     exchangeIndex,
-                    static_cast<double>(time.value())));
+                    static_cast<double>(time.value()));
+            view.topology_generation = topologyGeneration;
+            views.emplace(
+                field.c_str(),
+                std::move(view));
         }
         auto record = plan_.execute(
             exchangeIndex,
             static_cast<double>(time.value()),
-            views);
+            views,
+            topologyGeneration);
         if (record) {
             record->model_wait = closureWait;
             record->evaluate = std::chrono::duration<double>(

@@ -45,6 +45,7 @@ fjordExchange::~fjordExchange() {
         observation_.reset();
     }
     if (harbor_) {
+        foamNordic::writeSolverTelemetry(name(), exchange_->profile_snapshot());
         try {
             harbor_->shutdown();
         } catch (...) {
@@ -67,6 +68,12 @@ bool fjordExchange::read(const dictionary& dict) {
     ucx_ = dict.getOrDefault<bool>("ucx", false);
     sessionId_ = static_cast<std::uint64_t>(
         dict.getOrDefault<label>("sessionId", 1));
+    const auto profileEvery = dict.getOrDefault<label>("profileEvery", 0);
+    if (profileEvery < 0) {
+        FatalIOErrorInFunction(dict)
+            << "profileEvery must not be negative" << exit(FatalIOError);
+    }
+    profileEvery_ = static_cast<std::uint64_t>(profileEvery);
     const auto stage = dict.getOrDefault<word>(
         "exchangeStage", "timeStepStart");
     if (stage == "timeStepStart") {
@@ -117,7 +124,7 @@ void fjordExchange::connectPeer() {
         contract.outputs.emplace_back(key.c_str());
     }
     exchange_ = std::make_unique<foamnordic::adapter::AtomicFieldExchange>(
-        *harbor_, std::move(contract));
+        *harbor_, std::move(contract), profileEvery_);
 }
 
 bool fjordExchange::execute() {
@@ -136,6 +143,7 @@ bool fjordExchange::exchange() {
         }
         const auto exchangeIndex = *selected;
         const auto physicalTime = static_cast<double>(mesh_.time().value());
+        const auto topologyGeneration = topology_.observe(mesh_);
         const auto exchangeStarted = std::chrono::steady_clock::now();
         foamnordic::adapter::InputFieldMap inputs;
         foamnordic::adapter::OutputFieldMap outputs;
@@ -160,6 +168,7 @@ bool fjordExchange::exchange() {
                     exchangeIndex,
                     physicalTime);
             view.name = key.c_str();
+            view.topology_generation = topologyGeneration;
             inputs.emplace(key.c_str(), std::move(view));
         }
         forAll(outputs_, index) {
@@ -175,6 +184,7 @@ bool fjordExchange::exchange() {
                     exchangeIndex,
                     physicalTime);
             view.name = key.c_str();
+            view.topology_generation = topologyGeneration;
             outputs.emplace(key.c_str(), std::move(view));
         }
         exchange_->execute(exchangeIndex, physicalTime, inputs, outputs);
@@ -189,7 +199,8 @@ bool fjordExchange::exchange() {
             const auto exchangeWait = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - exchangeStarted).count();
             observation_->publish(
-                mesh_, mesh_.time(), exchangeIndex, exchangeWait);
+                mesh_, mesh_.time(), exchangeIndex, topologyGeneration,
+                exchangeWait);
         }
         return true;
     } catch (const std::exception& error) {
@@ -203,6 +214,11 @@ bool fjordExchange::write() {
         return true;
     }
     return exchange();
+}
+
+void fjordExchange::updateMesh(const mapPolyMesh& map) {
+    fvMeshFunctionObject::updateMesh(map);
+    topology_.markChanged();
 }
 
 }  // namespace Foam::functionObjects

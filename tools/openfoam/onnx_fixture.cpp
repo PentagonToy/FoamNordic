@@ -181,7 +181,6 @@ void write_fixture(const std::filesystem::path& directory) {
     foamnordic::inference::write_bundle(
         manifest_path,
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             model_path.filename().string(),
             {
@@ -201,7 +200,6 @@ void write_fixture(const std::filesystem::path& directory) {
     foamnordic::inference::write_bundle(
         nut_manifest_path,
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             nut_model_path.filename().string(),
             {
@@ -224,7 +222,6 @@ void write_fixture(const std::filesystem::path& directory) {
     foamnordic::inference::write_bundle(
         k_eqn_manifest_path,
         {
-            1,
             foamnordic::inference::ModelFormat::onnx,
             k_eqn_model_path.filename().string(),
             {

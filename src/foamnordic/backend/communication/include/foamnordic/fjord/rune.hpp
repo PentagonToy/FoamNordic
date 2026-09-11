@@ -23,8 +23,8 @@ namespace foamnordic::fjord {
 
 inline constexpr std::array<std::byte, 4> rune_mark{
     std::byte{'F'}, std::byte{'N'}, std::byte{'R'}, std::byte{'D'}};
-inline constexpr std::uint16_t rune_version = 3;
-inline constexpr std::size_t rune_prefix_size = 80;
+inline constexpr std::uint16_t rune_version = 4;
+inline constexpr std::size_t rune_prefix_size = 88;
 
 enum class RuneKind : std::uint8_t {
     hello = 1,
@@ -79,6 +79,7 @@ struct RunePrefix {
     std::uint64_t session_id{0};
     std::uint64_t maximum_payload{0};
     std::uint64_t solver_time_index{0};
+    std::uint64_t topology_generation{0};
 };
 
 [[nodiscard]] std::array<std::byte, rune_prefix_size> encode_prefix(

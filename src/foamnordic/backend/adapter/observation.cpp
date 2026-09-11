@@ -68,11 +68,13 @@ CompiledObservationPlan::CompiledObservationPlan(
 std::optional<ObservationRecord> CompiledObservationPlan::execute(
     std::uint64_t exchange_index,
     double physical_time,
-    const ReadOnlyFieldMap& fields) const {
+    const ReadOnlyFieldMap& fields,
+    std::uint64_t topology_generation) const {
     if (!std::isfinite(physical_time)) {
         throw std::invalid_argument("FoamNordic observation time is invalid.");
     }
     ObservationRecord record{exchange_index, physical_time, {}};
+    record.topology_generation = topology_generation;
     for (const auto& rule : rules_) {
         if (!rule.schedule.due(exchange_index)) {
             continue;
@@ -84,6 +86,7 @@ std::optional<ObservationRecord> CompiledObservationPlan::execute(
         }
         const auto& field = found->second;
         if (field.time_index != exchange_index
+            || field.topology_generation != topology_generation
             || std::abs(field.physical_time - physical_time) > 1.0e-12) {
             throw std::invalid_argument("FoamNordic observation metadata is out of sync.");
         }
@@ -246,6 +249,7 @@ void ObservationJsonlWriter::run() noexcept {
         stream << std::setprecision(17);
         while (auto record = buffer_.wait_pop_oldest()) {
             stream << "{\"exchange_index\":" << record->exchange_index
+                   << ",\"topology_generation\":" << record->topology_generation
                    << ",\"time\":" << record->physical_time
                    << ",\"summary\":{";
             bool first = true;

@@ -24,6 +24,10 @@ FoamNordic exposes cases, operators, field programs, placement, schedulers, runs
 
 The plan records field bindings, stages, resources, placement, random keys, and numerics policy. Strict numerics refuses implicit scheme insertion. Convenient numerics records every actual insertion in the run directory.
 
+## Performance objective
+
+For representative coupled workloads, the current engineering objective is an FNO-coupled to OF/FNO end-to-end wall-time ratio of `1.5× ~ 1.8×` under the same case, mesh, decomposition and allocation. This range is a design target rather than a runtime guarantee; benchmark records must state the model, transport, hardware and measurement method.
+
 ## Non-goals
 
 FoamNordic is not a solver, turbulence theory, training framework, experiment database, or general workflow engine. It does not infer physical meaning from a model port name or place Python callbacks inside the solver loop.

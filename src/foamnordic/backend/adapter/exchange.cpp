@@ -12,6 +12,7 @@
 #include "foamnordic/backend/adapter/exchange.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -119,20 +120,25 @@ void ExchangeContract::validate() const {
 
 AtomicFieldExchange::AtomicFieldExchange(
     fjord::Harbor& harbor,
-    ExchangeContract contract)
-    : harbor_(harbor), contract_(std::move(contract)) {
+    ExchangeContract contract,
+    std::uint64_t profile_every)
+    : harbor_(harbor),
+      contract_(std::move(contract)),
+      profile_every_(profile_every) {
     contract_.validate();
 }
 
 BlockingFieldExchange::BlockingFieldExchange(
     fjord::Harbor& harbor,
-    ExchangeContract contract)
-    : exchange_(harbor, std::move(contract)) {}
+    ExchangeContract contract,
+    std::uint64_t profile_every)
+    : exchange_(harbor, std::move(contract), profile_every) {}
 
 std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
     double physical_time,
-    const MutableFieldMap& fields) {
+    const MutableFieldMap& fields,
+    std::uint64_t topology_generation) {
     const auto exchange_index = sequence_.next(time_index);
     if (!exchange_index) {
         throw std::logic_error(
@@ -144,6 +150,7 @@ std::uint64_t BlockingFieldExchange::execute(
         field.time_index = *exchange_index;
         field.physical_time = physical_time;
         field.solver_time_index = time_index;
+        field.topology_generation = topology_generation;
     }
     exchange_.execute(*exchange_index, physical_time, rebound);
     return *exchange_index;
@@ -193,13 +200,23 @@ void AtomicFieldExchange::execute(
         if (input.time_index != exchange_index
             || input.solver_time_index
                    != input_fields.begin()->second.solver_time_index
+            || input.topology_generation
+                   != input_fields.begin()->second.topology_generation
             || std::abs(input.physical_time - physical_time) > 1.0e-12) {
             throw std::invalid_argument(
                 "FoamNordic input field metadata is out of sync: " + name);
         }
         inputs.push_back(std::move(input));
     }
+    const auto sampled = profile_every_ != 0
+        && profile_sequence_++ % profile_every_ == 0;
+    const auto round_trip_started = sampled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     harbor_.publish_request(exchange_index, inputs);
+    const auto request_published = sampled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
 
     std::unordered_map<std::string, fjord::Tensor> prepared;
     while (true) {
@@ -212,6 +229,8 @@ void AtomicFieldExchange::execute(
             if (!message.tensor || message.tensor->time_index != exchange_index
                 || message.tensor->solver_time_index
                        != input_fields.begin()->second.solver_time_index
+                || message.tensor->topology_generation
+                       != input_fields.begin()->second.topology_generation
                 || std::abs(
                        message.tensor->physical_time - physical_time)
                        > 1.0e-12
@@ -229,6 +248,8 @@ void AtomicFieldExchange::execute(
         }
         if (message.kind != fjord::RuneKind::complete
             || message.exchange_index != exchange_index
+            || message.topology_generation
+                   != input_fields.begin()->second.topology_generation
             || message.tensor_count != prepared.size()
             || prepared.size() != contract_.outputs.size()) {
             throw std::runtime_error(
@@ -236,6 +257,9 @@ void AtomicFieldExchange::execute(
         }
         break;
     }
+    const auto response_received = sampled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
 
     std::vector<PreparedCopy> copies;
     copies.reserve(contract_.outputs.size());
@@ -250,6 +274,8 @@ void AtomicFieldExchange::execute(
         if (destination.time_index != exchange_index
             || destination.solver_time_index
                    != input_fields.begin()->second.solver_time_index
+            || destination.topology_generation
+                   != input_fields.begin()->second.topology_generation
             || std::abs(destination.physical_time - physical_time) > 1.0e-12) {
             throw std::invalid_argument(
                 "FoamNordic output field metadata is out of sync: " + name);
@@ -279,16 +305,38 @@ void AtomicFieldExchange::execute(
     for (const auto& copy : copies) {
         copy_values(*copy.source, copy.destination, copy.kind);
     }
+    if (sampled) {
+        const auto field_committed = std::chrono::steady_clock::now();
+        const auto nanoseconds = [](auto duration) {
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(duration)
+                    .count());
+        };
+        ++profile_.samples;
+        profile_.round_trip_nanoseconds +=
+            nanoseconds(response_received - round_trip_started);
+        profile_.request_publish_nanoseconds +=
+            nanoseconds(request_published - round_trip_started);
+        profile_.response_wait_nanoseconds +=
+            nanoseconds(response_received - request_published);
+        profile_.field_commit_nanoseconds +=
+            nanoseconds(field_committed - response_received);
+    }
 
     previous_exchange_ = exchange_index;
     has_previous_exchange_ = true;
+}
+
+SolverExchangeSnapshot AtomicFieldExchange::profile_snapshot() const noexcept {
+    return profile_;
 }
 
 std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
     double physical_time,
     const InputFieldMap& inputs,
-    const OutputFieldMap& outputs) {
+    const OutputFieldMap& outputs,
+    std::uint64_t topology_generation) {
     const auto exchange_index = sequence_.next(time_index);
     if (!exchange_index) {
         throw std::logic_error(
@@ -300,6 +348,7 @@ std::uint64_t BlockingFieldExchange::execute(
         field.time_index = *exchange_index;
         field.physical_time = physical_time;
         field.solver_time_index = time_index;
+        field.topology_generation = topology_generation;
     }
     auto rebound_outputs = outputs;
     for (auto& [name, field] : rebound_outputs) {
@@ -307,6 +356,7 @@ std::uint64_t BlockingFieldExchange::execute(
         field.time_index = *exchange_index;
         field.physical_time = physical_time;
         field.solver_time_index = time_index;
+        field.topology_generation = topology_generation;
     }
     exchange_.execute(
         *exchange_index,
@@ -314,6 +364,10 @@ std::uint64_t BlockingFieldExchange::execute(
         rebound_inputs,
         rebound_outputs);
     return *exchange_index;
+}
+
+SolverExchangeSnapshot BlockingFieldExchange::profile_snapshot() const noexcept {
+    return exchange_.profile_snapshot();
 }
 
 }  // namespace foamnordic::adapter

@@ -30,6 +30,8 @@ LES
             sessionId        1;
             sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
             ucx              false;
+            profileEvery     @FOAMNORDIC_PROFILE_EVERY@;
+            profileProgram   @FOAMNORDIC_PROFILE_PROGRAM@;
 
             inputs
             (

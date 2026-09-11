@@ -37,7 +37,7 @@ statistics = post.statistics(
 
 The result contains `min`, `max`, `mean`, `std`, and `rms`. Vector and tensor fields use the Euclidean or Frobenius magnitude of each cell. The calculation is always returned as ordinary dictionaries. `verbose=True` additionally displays a compact Onsaemiro table; the default is quiet.
 
-## Compare pure OpenFOAM and ML results
+## Compare OpenFOAM and FNO-coupled results
 
 ```python
 metrics = fno.Postprocess.compare(

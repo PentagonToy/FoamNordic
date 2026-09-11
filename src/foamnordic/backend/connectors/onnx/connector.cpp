@@ -26,9 +26,12 @@ public:
     }
 
     std::unique_ptr<inference::PackedModelKernel> load(
-        const std::filesystem::path& payload,
-        const inference::ModelArtifact&) const override {
-        return std::make_unique<inference::OnnxPackedKernel>(payload);
+        std::span<const std::byte> payload,
+        const inference::ModelArtifact&,
+        std::uint32_t threads) const override {
+        return std::make_unique<inference::OnnxPackedKernel>(
+            std::vector<std::byte>(payload.begin(), payload.end()),
+            inference::OnnxOptions{static_cast<std::int32_t>(threads), 1});
     }
 };
 

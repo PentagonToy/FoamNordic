@@ -1,2 +1,0 @@
-"""Native build helper tests."""
-

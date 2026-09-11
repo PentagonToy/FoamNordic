@@ -12,10 +12,12 @@
 #include "foamnordic/backend/inference/worker.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -32,11 +34,43 @@
 namespace foamnordic::inference {
 namespace {
 
+std::atomic<std::uint64_t> shared_memory_sequence{0};
+
 fjord::FjordListener make_listener(const fjord::FjordAddress& address) {
     if (address.kind == fjord::FjordKind::unix_socket) {
         return fjord::FjordListener::local(address.location, 128);
     }
     return fjord::FjordListener::network(address.location, address.port, 128);
+}
+
+std::string json_string(std::string_view value) {
+    constexpr char hexadecimal[] = "0123456789abcdef";
+    std::string encoded;
+    encoded.reserve(value.size() + 2);
+    encoded.push_back('"');
+    for (const auto character : value) {
+        switch (character) {
+        case '"': encoded += "\\\""; break;
+        case '\\': encoded += "\\\\"; break;
+        case '\b': encoded += "\\b"; break;
+        case '\f': encoded += "\\f"; break;
+        case '\n': encoded += "\\n"; break;
+        case '\r': encoded += "\\r"; break;
+        case '\t': encoded += "\\t"; break;
+        default:
+            if (static_cast<unsigned char>(character) < 0x20) {
+                encoded += "\\u00";
+                encoded.push_back(hexadecimal[
+                    (static_cast<unsigned char>(character) >> 4) & 0x0f]);
+                encoded.push_back(hexadecimal[
+                    static_cast<unsigned char>(character) & 0x0f]);
+            } else {
+                encoded.push_back(character);
+            }
+        }
+    }
+    encoded.push_back('"');
+    return encoded;
 }
 
 class SynchronizedKernel final : public ModelKernel {
@@ -56,6 +90,19 @@ public:
 
     [[nodiscard]] ExecutionSnapshot execution_snapshot() const override {
         return kernel_.execution_snapshot();
+    }
+
+    [[nodiscard]] bool telemetry_enabled() const noexcept override {
+        return kernel_.telemetry_enabled();
+    }
+
+    void observe_exchange(
+        std::uint64_t rows,
+        std::uint64_t active_cells,
+        std::uint64_t input_payload_bytes,
+        std::uint64_t output_payload_bytes) noexcept override {
+        kernel_.observe_exchange(
+            rows, active_cells, input_payload_bytes, output_payload_bytes);
     }
 
     void cancel_pending() noexcept override { kernel_.cancel_pending(); }
@@ -127,6 +174,8 @@ ModelWorker::ModelWorker(
       options_(options) {
     requested_address_.validate();
     options_.validate();
+    auto capacity = std::make_shared<ExecutionCapacityPool>(
+        options_.model_threads);
     auto loaded = load_model(
         manifest_path,
         {
@@ -134,6 +183,8 @@ ModelWorker::ModelWorker(
             std::min(options_.connections, options_.model_threads),
             options_.maximum_working_bytes,
             options_.profile_every,
+            std::move(capacity),
+            options_.model_threads,
         });
     artifact_ = std::move(loaded.artifact);
     owned_kernel_ = std::move(loaded.kernel);
@@ -211,6 +262,8 @@ void ModelWorker::run() {
             const auto shared_memory_name =
                 std::string("/fnc-")
                 + std::to_string(static_cast<long long>(::getpid())) + '-'
+                + std::to_string(shared_memory_sequence.fetch_add(
+                    1, std::memory_order_relaxed)) + '-'
                 + std::to_string(session.session_id) + '-'
                 + std::to_string(session.rank);
             harbor->offer_shared_memory(shared_memory_name);
@@ -287,44 +340,64 @@ void ModelWorker::run() {
         runner.join();
     }
     listener_.close();
-    const auto receive = receive_credits.snapshot();
-    const auto output = output_credits.snapshot();
-    if (output.requests != 0) {
-        native::log(native::LogLevel::info, "Model publication peak: reserved_bytes="
-            + std::to_string(output.peak_active_bytes));
-    }
-    if (receive.requests != 0) {
-        native::log(
-            native::LogLevel::info,
-            "Model receive peak: bytes="
-                + std::to_string(receive.peak_active_bytes));
-    }
-    const auto resources = execution_kernel.execution_snapshot();
-    if (resources.peak_active_contexts != 0) {
-        native::log(
-            native::LogLevel::info,
-            "Model execution peak: contexts="
-                + std::to_string(resources.peak_active_contexts)
-                + ", working_bytes="
-                + std::to_string(resources.peak_admitted_bytes)
-                + ", retained_workspace_bytes="
-                + std::to_string(resources.retained_workspace_bytes));
-    }
-    if (resources.profile_samples != 0) {
+    if (execution_kernel.telemetry_enabled()) {
+        const auto receive = receive_credits.snapshot();
+        const auto output = output_credits.snapshot();
+        const auto resources = execution_kernel.execution_snapshot();
         const auto samples = resources.profile_samples;
+        const auto mean_microseconds = [samples](std::uint64_t nanoseconds) {
+            return samples == 0 ? 0 : nanoseconds / samples / 1000;
+        };
         native::log(
             native::LogLevel::info,
-            "Model sampled stages: samples=" + std::to_string(samples)
-                + ", admission_us="
-                + std::to_string(resources.admission_nanoseconds / samples / 1000)
-                + ", backend_wait_us="
-                + std::to_string(resources.backend_wait_nanoseconds / samples / 1000)
-                + ", pack_us="
-                + std::to_string(resources.packing_nanoseconds / samples / 1000)
-                + ", infer_us="
-                + std::to_string(resources.inference_nanoseconds / samples / 1000)
-                + ", output_us="
-                + std::to_string(resources.output_nanoseconds / samples / 1000));
+            "Model telemetry: {\"program\":"
+                + json_string(
+                    options_.program.empty() ? artifact_.contract.name : options_.program)
+                + ",\"connections\":" + std::to_string(options_.connections)
+                + ",\"model_threads\":" + std::to_string(options_.model_threads)
+                + ",\"requests\":" + std::to_string(resources.requests)
+                + ",\"completed_exchanges\":"
+                + std::to_string(resources.completed_exchanges)
+                + ",\"rows\":" + std::to_string(resources.rows)
+                + ",\"active_cells\":" + std::to_string(resources.active_cells)
+                + ",\"input_payload_bytes\":"
+                + std::to_string(resources.input_payload_bytes)
+                + ",\"output_payload_bytes\":"
+                + std::to_string(resources.output_payload_bytes)
+                + ",\"peak_rows\":" + std::to_string(resources.peak_rows)
+                + ",\"peak_active_cells\":"
+                + std::to_string(resources.peak_active_cells)
+                + ",\"peak_input_payload_bytes\":"
+                + std::to_string(resources.peak_input_payload_bytes)
+                + ",\"peak_output_payload_bytes\":"
+                + std::to_string(resources.peak_output_payload_bytes)
+                + ",\"peak_active_contexts\":"
+                + std::to_string(resources.peak_active_contexts)
+                + ",\"peak_waiting_contexts\":"
+                + std::to_string(resources.peak_waiting_contexts)
+                + ",\"peak_working_bytes\":"
+                + std::to_string(resources.peak_admitted_bytes)
+                + ",\"retained_workspace_bytes\":"
+                + std::to_string(resources.retained_workspace_bytes)
+                + ",\"receive_reservations\":" + std::to_string(receive.requests)
+                + ",\"peak_receive_bytes\":"
+                + std::to_string(receive.peak_active_bytes)
+                + ",\"publication_reservations\":"
+                + std::to_string(output.requests)
+                + ",\"peak_publication_bytes\":"
+                + std::to_string(output.peak_active_bytes)
+                + ",\"profile_samples\":" + std::to_string(samples)
+                + ",\"mean_admission_us\":"
+                + std::to_string(mean_microseconds(resources.admission_nanoseconds))
+                + ",\"mean_backend_wait_us\":"
+                + std::to_string(mean_microseconds(resources.backend_wait_nanoseconds))
+                + ",\"mean_pack_us\":"
+                + std::to_string(mean_microseconds(resources.packing_nanoseconds))
+                + ",\"mean_infer_us\":"
+                + std::to_string(mean_microseconds(resources.inference_nanoseconds))
+                + ",\"mean_output_us\":"
+                + std::to_string(mean_microseconds(resources.output_nanoseconds))
+                + "}");
     }
     if (failure) {
         std::rethrow_exception(failure);

@@ -48,6 +48,7 @@ class ClosureHook final {
     std::vector<ClosureOutput> outputs_;
     FieldProgramSession session_;
     std::unique_ptr<FieldProgramObservation> observation_;
+    word program_;
     [[nodiscard]] static std::vector<ClosureInput> readInputs(
         const dictionary& dict);
     [[nodiscard]] static std::vector<ClosureOutput> readOutputs(

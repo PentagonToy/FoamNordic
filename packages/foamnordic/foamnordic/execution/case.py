@@ -53,14 +53,16 @@ def validate_case(longship: Longship) -> None:
     if unsupported is not None:
         raise NotImplementedError(
             f"Transform at={unsupported.at!r} requires a "
-            "solver-native FoamNordic hook; stock applications expose only "
+            "solver-native FoamNordic hook; standard OpenFOAM applications expose only "
             "time_step_start and time_step_end"
         )
     source = longship.case.case_dir.resolve()
-    initial = longship.case.initial_directory
+    # Resolve both paths before reporting a relative location.  On macOS,
+    # /tmp and /private/tmp name the same directory but Path.relative_to()
+    # quite correctly treats their lexical forms as unrelated.
+    initial = longship.case.initial_directory.resolve()
     required = (
-        initial / "U",
-        initial / "p",
+        initial,
         source / "system/controlDict",
         source / "system/fvSchemes",
         source / "system/fvSolution",
@@ -390,10 +392,13 @@ def _closure_values(
     address: str,
     shared: bool,
     observation: str,
+    profile_every: int = 0,
 ) -> dict[str, str]:
     return {
         "FOAMNORDIC_ADDRESS": address,
         "FOAMNORDIC_SHARED_MEMORY": str(shared).lower(),
+        "FOAMNORDIC_PROFILE_EVERY": profile_every,
+        "FOAMNORDIC_PROFILE_PROGRAM": closure.name,
         "FOAMNORDIC_INPUT_KEYS": "\n                ".join(closure.inputs),
         "FOAMNORDIC_INPUT_EXPRESSIONS": "\n                ".join(
             _expression(value) for value in closure.inputs.values()
@@ -417,10 +422,13 @@ def _closure_body(
     address: str,
     shared: bool,
     observation: str = "",
+    profile_every: int = 0,
 ) -> str:
     return render_template(
         read_template("openfoam/closureBody.in", kind="OpenFOAM closure-body"),
-        _closure_values(closure, address, shared, observation),
+        _closure_values(
+            closure, address, shared, observation, profile_every
+        ),
         kind="OpenFOAM closure body",
     ).strip()
 
@@ -429,6 +437,7 @@ def _closure_update_variables(
     template: str,
     updates: tuple[tuple[Closure, str], ...],
     shared: bool,
+    profile_every: int = 0,
 ) -> dict[str, str]:
     """Render named solver-mediated stages without interpreting their physics."""
 
@@ -441,7 +450,9 @@ def _closure_update_variables(
                 f"custom integration template must place {marker} for "
                 f"closure update {update.name!r}"
             )
-        variables[body] = _closure_body(update, address, shared)
+        variables[body] = _closure_body(
+            update, address, shared, profile_every=profile_every
+        )
         variables[f"FOAMNORDIC_UPDATE_{index}_NAME"] = update.name
     return variables
 
@@ -453,6 +464,7 @@ def render_dictionary(
     shared: bool,
     observation_path: Path | None = None,
     updates: tuple[tuple[Closure, str], ...] = (),
+    profile_every: int = 0,
 ) -> tuple[Path, str]:
     integration = longship.case.integration
     if integration is None:
@@ -499,7 +511,9 @@ def render_dictionary(
             "an integration template with patch fields must place both "
             "@FOAMNORDIC_INPUT_PATCHES@ and @FOAMNORDIC_OUTPUT_PATCHES@"
         )
-    update_variables = _closure_update_variables(template, updates, shared)
+    update_variables = _closure_update_variables(
+        template, updates, shared, profile_every
+    )
     variables = {
         "FOAMNORDIC_MODEL": closure.name,
         "FOAMNORDIC_MODEL_CONFIGURATION": model_configuration,
@@ -510,6 +524,7 @@ def render_dictionary(
             ""
             if observation_path is None
             else _observation_block(longship, observation_path),
+            profile_every,
         ),
         **custom,
         **update_variables,
@@ -523,6 +538,7 @@ def render_transform_dictionary(
     address: str,
     shared: bool,
     observation_block: str = "",
+    profile_every: int = 0,
 ) -> str:
     """Render a generic field exchange at the supported solver boundary."""
 
@@ -531,6 +547,7 @@ def render_transform_dictionary(
         "SESSION_ID": 1,
         "SHARED_MEMORY": str(shared).lower(),
         "UCX": "false",
+        "PROFILE_EVERY": profile_every,
         "EXECUTE_INTERVAL": 1,
         "EXCHANGE_STAGE": {
             "time_step_start": "timeStepStart",
@@ -883,6 +900,7 @@ def prepare_case(
     openfoam_library: Path | None = None,
     *,
     verbose: bool = False,
+    profile_every: int = 0,
 ) -> tuple[Path, Path, tuple[PreparedProgram, ...]]:
     workspace = longship.case.run_dir.expanduser().resolve()
     runs = workspace / "runs"
@@ -939,6 +957,7 @@ def prepare_case(
             longship.placement.data_path != "uds",
             observations / "observations.{rank}.jsonl",
             update_runtimes,
+            profile_every,
         )
         output = case_dir / destination
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -974,6 +993,7 @@ def prepare_case(
                     f"unix://{runtime.socket}",
                     longship.placement.data_path != "uds",
                     observation_block,
+                    profile_every,
                 ),
             )
         )

@@ -18,6 +18,8 @@ class ModelFormatSpec:
     requires_tree: bool = False
     executable: bool = False
     data_runtimes: frozenset[str] = frozenset()
+    owns_compute_threads: bool = True
+    concurrent_evaluation: bool = False
 
     def validate(self, runtime: str | None, has_tree: bool) -> None:
         if (runtime or "") not in self.runtimes:
@@ -46,7 +48,13 @@ _FORMAT_SPECS = (
         executable=True,
         data_runtimes=frozenset({"forest"}),
     ),
-    ModelFormatSpec("table", 5, frozenset({"table"})),
+    ModelFormatSpec(
+        "table",
+        5,
+        frozenset({"table"}),
+        owns_compute_threads=False,
+        concurrent_evaluation=True,
+    ),
 )
 MODEL_FORMATS = {spec.name: spec for spec in _FORMAT_SPECS}
 MODEL_FORMAT_CODES = {spec.code: spec for spec in _FORMAT_SPECS}

@@ -323,7 +323,7 @@ void test_atomic_field_exchange_applies_only_committed_output() {
     foamnordic::fjord::Harbor solver(std::move(channels.first), options);
     foamnordic::fjord::Harbor closure(std::move(channels.second), options);
     foamnordic::adapter::AtomicFieldExchange exchange(
-        solver, {{"c_tilde", "c_var", "T_tilde"}, {"omega_c"}});
+        solver, {{"c_tilde", "c_var", "T_tilde"}, {"omega_c"}}, 1);
 
     std::thread worker([&closure] {
         std::vector<foamnordic::fjord::Tensor> inputs;
@@ -378,6 +378,18 @@ void test_atomic_field_exchange_applies_only_committed_output() {
     require(
         reaction_rate == std::array<double, 2>{4.0, 8.0},
         "Committed closure output was not applied atomically.");
+    const auto profile = exchange.profile_snapshot();
+    require(
+        profile.samples == 1 && profile.round_trip_nanoseconds > 0
+            && profile.request_publish_nanoseconds > 0
+            && profile.response_wait_nanoseconds > 0
+            && profile.field_commit_nanoseconds > 0,
+        "Solver exchange profiling did not record every measured segment.");
+    require(
+        profile.round_trip_nanoseconds
+            == profile.request_publish_nanoseconds
+                + profile.response_wait_nanoseconds,
+        "Solver round-trip timing does not equal its transport-facing segments.");
 }
 
 void test_atomic_field_exchange_converts_float_model_output() {
@@ -430,6 +442,9 @@ void test_atomic_field_exchange_converts_float_model_output() {
     };
     exchange.execute(9, 0.5, inputs, outputs);
     worker.join();
+    require(
+        exchange.profile_snapshot().samples == 0,
+        "profile_every=0 unexpectedly measured the solver exchange.");
     require(
         nut == std::array<double, 2>{0.125, 0.25},
         "Float model output was not converted into the OpenFOAM scalar type.");
@@ -655,7 +670,9 @@ void test_stale_output_never_modifies_field() {
             {2},
             foamnordic::fjord::as_bytes(std::span(stalePrediction)),
             3,
-            0.05,
+            0.1,
+            0,
+            3,
         };
         closure.publish(3, std::span(&staleOutput, 1));
     });
@@ -670,6 +687,8 @@ void test_stale_output_never_modifies_field() {
             foamnordic::fjord::as_writable_bytes(std::span(values)),
             3,
             0.1,
+            0,
+            4,
         };
     };
     bool rejected = false;
@@ -682,10 +701,10 @@ void test_stale_output_never_modifies_field() {
         rejected = true;
     }
     worker.join();
-    require(rejected, "A stale closure output was accepted.");
+    require(rejected, "A stale-topology closure output was accepted.");
     require(
         viscosity == std::array<double, 2>{-1.0, -1.0},
-        "A stale closure output modified the solver field.");
+        "A stale-topology closure output modified the solver field.");
 }
 
 void test_worker_error_never_modifies_field(bool sharedMemory) {

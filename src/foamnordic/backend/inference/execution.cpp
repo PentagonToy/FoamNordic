@@ -17,12 +17,125 @@
 
 namespace foamnordic::inference {
 
+ExecutionCapacityPool::Lease::Lease(
+    ExecutionCapacityPool& owner,
+    std::uint32_t units) noexcept
+    : owner_(&owner), units_(units) {}
+
+ExecutionCapacityPool::Lease::Lease(Lease&& other) noexcept
+    : owner_(other.owner_), units_(other.units_) {
+    other.owner_ = nullptr;
+}
+
+ExecutionCapacityPool::Lease& ExecutionCapacityPool::Lease::operator=(
+    Lease&& other) noexcept {
+    if (this != &other) {
+        release();
+        owner_ = other.owner_;
+        units_ = other.units_;
+        other.owner_ = nullptr;
+    }
+    return *this;
+}
+
+ExecutionCapacityPool::Lease::~Lease() { release(); }
+
+void ExecutionCapacityPool::Lease::release() noexcept {
+    if (owner_ != nullptr) {
+        owner_->release(units_);
+        owner_ = nullptr;
+    }
+}
+
+ExecutionCapacityPool::ExecutionCapacityPool(
+    std::uint32_t capacity,
+    std::uint32_t maximum_backfills)
+    : capacity_(capacity), maximum_backfills_(maximum_backfills) {
+    if (capacity_ == 0) {
+        throw std::invalid_argument("Execution capacity must be positive.");
+    }
+}
+
+ExecutionCapacityPool::Lease ExecutionCapacityPool::acquire(
+    std::uint32_t units) {
+    if (units == 0 || units > capacity_) {
+        throw std::invalid_argument(
+            "Execution request must fit the shared capacity.");
+    }
+    std::unique_lock lock(mutex_);
+    Waiter waiter{units};
+    waiters_.push_back(&waiter);
+    peak_waiting_ = std::max<std::uint64_t>(peak_waiting_, waiters_.size());
+    available_.wait(lock, [&] {
+        if (cancelled_) {
+            return true;
+        }
+        const auto free = capacity_ - active_;
+        if (waiter.units > free) {
+            return false;
+        }
+        for (const auto* earlier : waiters_) {
+            if (earlier == &waiter) {
+                return true;
+            }
+            if (earlier->units <= free
+                || earlier->bypasses >= maximum_backfills_) {
+                return false;
+            }
+        }
+        return false;
+    });
+    if (cancelled_) {
+        std::erase(waiters_, &waiter);
+        throw std::runtime_error("Shared execution was cancelled.");
+    }
+    const auto free = capacity_ - active_;
+    for (auto* earlier : waiters_) {
+        if (earlier == &waiter) {
+            break;
+        }
+        if (earlier->units > free) {
+            ++earlier->bypasses;
+        }
+    }
+    std::erase(waiters_, &waiter);
+    active_ += units;
+    peak_active_ = std::max(peak_active_, active_);
+    available_.notify_all();
+    return Lease(*this, units);
+}
+
+void ExecutionCapacityPool::release(std::uint32_t units) noexcept {
+    {
+        std::scoped_lock lock(mutex_);
+        active_ -= units;
+    }
+    available_.notify_all();
+}
+
+void ExecutionCapacityPool::cancel() noexcept {
+    {
+        std::scoped_lock lock(mutex_);
+        cancelled_ = true;
+    }
+    available_.notify_all();
+}
+
+ExecutionCapacitySnapshot ExecutionCapacityPool::snapshot() const {
+    std::scoped_lock lock(mutex_);
+    return {
+        capacity_, active_, peak_active_, waiters_.size(), peak_waiting_};
+}
+
 void ExecutionResources::validate() const {
     if (contexts == 0) {
         throw std::invalid_argument("Execution context count must be positive.");
     }
     if (maximum_working_bytes == 0) {
         throw std::invalid_argument("Execution working-memory limit must be positive.");
+    }
+    if (capacity_units == 0) {
+        throw std::invalid_argument("Execution capacity units must be positive.");
     }
 }
 
@@ -177,6 +290,8 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
             return true;
         }
         if (waiters_.front() != &ticket) {
+            peak_waiting_contexts_ = std::max<std::uint64_t>(
+                peak_waiting_contexts_, waiters_.size());
             return false;
         }
         auto can_admit = [&] {
@@ -214,6 +329,8 @@ ExecutionContextPool::Lease ExecutionContextPool::acquire(
                 }
             }
         }
+        peak_waiting_contexts_ = std::max<std::uint64_t>(
+            peak_waiting_contexts_, waiters_.size());
         return false;
     });
     if (cancelled_) {
@@ -257,15 +374,15 @@ void ExecutionContextPool::cancel() noexcept {
 
 ExecutionSnapshot ExecutionContextPool::snapshot() const {
     std::scoped_lock lock(mutex_);
-    auto result = ExecutionSnapshot{
-        requests_,
-        active_contexts_,
-        peak_active_contexts_,
-        admitted_bytes_,
-        peak_admitted_bytes_,
-        retained_bytes_locked(),
-    };
+    ExecutionSnapshot result;
+    result.requests = requests_;
+    result.active_contexts = active_contexts_;
+    result.peak_active_contexts = peak_active_contexts_;
+    result.admitted_bytes = admitted_bytes_;
+    result.peak_admitted_bytes = peak_admitted_bytes_;
+    result.retained_workspace_bytes = retained_bytes_locked();
     result.waiting_contexts = waiters_.size();
+    result.peak_waiting_contexts = peak_waiting_contexts_;
     return result;
 }
 

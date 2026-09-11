@@ -17,6 +17,7 @@ struct TensorView {
     std::uint64_t time_index{0};
     double physical_time{0.0};
     std::uint64_t solver_time_index{0};
+    std::uint64_t topology_generation{0};
 
     [[nodiscard]] bindnordic::TensorView model_view() const {
         return {name, element, shape, bytes};
@@ -41,6 +42,7 @@ struct Tensor {
     std::uint64_t time_index{0};
     double physical_time{0.0};
     std::uint64_t solver_time_index{0};
+    std::uint64_t topology_generation{0};
 
     [[nodiscard]] TensorView view() const {
         return {
@@ -50,7 +52,8 @@ struct Tensor {
             bytes,
             time_index,
             physical_time,
-            solver_time_index};
+            solver_time_index,
+            topology_generation};
     }
 };
 
@@ -62,6 +65,7 @@ struct MutableTensorView {
     std::uint64_t time_index{0};
     double physical_time{0.0};
     std::uint64_t solver_time_index{0};
+    std::uint64_t topology_generation{0};
 
     [[nodiscard]] TensorView read_only() const {
         return {
@@ -71,7 +75,8 @@ struct MutableTensorView {
             bytes,
             time_index,
             physical_time,
-            solver_time_index};
+            solver_time_index,
+            topology_generation};
     }
 
     [[nodiscard]] bindnordic::MutableTensorView model_view() const {

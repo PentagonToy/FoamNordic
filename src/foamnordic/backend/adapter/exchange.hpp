@@ -34,9 +34,20 @@ using InputFieldMap =
 using OutputFieldMap =
     std::unordered_map<std::string, fjord::MutableTensorView>;
 
+struct SolverExchangeSnapshot {
+    std::uint64_t samples{0};
+    std::uint64_t round_trip_nanoseconds{0};
+    std::uint64_t request_publish_nanoseconds{0};
+    std::uint64_t response_wait_nanoseconds{0};
+    std::uint64_t field_commit_nanoseconds{0};
+};
+
 class AtomicFieldExchange {
 public:
-    AtomicFieldExchange(fjord::Harbor& harbor, ExchangeContract contract);
+    AtomicFieldExchange(
+        fjord::Harbor& harbor,
+        ExchangeContract contract,
+        std::uint64_t profile_every = 0);
 
     void execute(
         std::uint64_t exchange_index,
@@ -47,27 +58,37 @@ public:
         double physical_time,
         const InputFieldMap& inputs,
         const OutputFieldMap& outputs);
+    [[nodiscard]] SolverExchangeSnapshot profile_snapshot() const noexcept;
 
 private:
     fjord::Harbor& harbor_;
     ExchangeContract contract_;
     std::uint64_t previous_exchange_{0};
     bool has_previous_exchange_{false};
+    std::uint64_t profile_every_{0};
+    std::uint64_t profile_sequence_{0};
+    SolverExchangeSnapshot profile_;
 };
 
 class BlockingFieldExchange {
 public:
-    BlockingFieldExchange(fjord::Harbor& harbor, ExchangeContract contract);
+    BlockingFieldExchange(
+        fjord::Harbor& harbor,
+        ExchangeContract contract,
+        std::uint64_t profile_every = 0);
 
     [[nodiscard]] std::uint64_t execute(
         std::uint64_t time_index,
         double physical_time,
-        const MutableFieldMap& fields);
+        const MutableFieldMap& fields,
+        std::uint64_t topology_generation = 0);
     [[nodiscard]] std::uint64_t execute(
         std::uint64_t time_index,
         double physical_time,
         const InputFieldMap& inputs,
-        const OutputFieldMap& outputs);
+        const OutputFieldMap& outputs,
+        std::uint64_t topology_generation = 0);
+    [[nodiscard]] SolverExchangeSnapshot profile_snapshot() const noexcept;
 
 private:
     AtomicFieldExchange exchange_;

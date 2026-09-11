@@ -53,7 +53,7 @@ Tag pushes also trigger wheel CI. Do not replace already validated artifacts wit
 
 ```console
 python3 others/release/release_notes.py --tag v1.0.7
-python3 -m unittest discover -s others/release/tests -v
+python3 -m pytest others/release/tests
 ```
 
 Use the generated wheelhouse `release-notes.md` verbatim for the GitHub release associated with the validated tag. Publish the GitHub release after confirming the PyPI upload. Neither wheel preparation nor changelog extraction creates a tag or a release automatically.

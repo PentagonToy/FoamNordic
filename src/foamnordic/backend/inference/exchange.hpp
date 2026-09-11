@@ -74,7 +74,8 @@ public:
         std::uint64_t exchange_index,
         double physical_time,
         std::uint64_t cell_count,
-        std::uint64_t solver_time_index = 0);
+        std::uint64_t solver_time_index = 0,
+        std::uint64_t topology_generation = 0);
     void add_input(fjord::Tensor tensor);
     void seal_inputs();
     [[nodiscard]] const std::vector<std::uint64_t>& prepare(const CellEvaluationPolicy& policy);
@@ -87,6 +88,7 @@ public:
     [[nodiscard]] std::uint64_t exchange_index() const noexcept;
     [[nodiscard]] double physical_time() const noexcept;
     [[nodiscard]] std::uint64_t solver_time_index() const noexcept;
+    [[nodiscard]] std::uint64_t topology_generation() const noexcept;
     [[nodiscard]] std::uint64_t cell_count() const noexcept;
     [[nodiscard]] const TensorMap& inputs() const noexcept;
     [[nodiscard]] const std::string& failure_reason() const noexcept;
@@ -110,6 +112,7 @@ private:
     bool has_previous_exchange_{false};
     double physical_time_{0.0};
     std::uint64_t solver_time_index_{0};
+    std::uint64_t topology_generation_{0};
     std::uint64_t cell_count_{0};
     TensorMap inputs_;
     TensorMap predictions_;
