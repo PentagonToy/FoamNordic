@@ -56,6 +56,19 @@ public:
         return kernel_.execution_snapshot();
     }
 
+    [[nodiscard]] bool telemetry_enabled() const noexcept override {
+        return kernel_.telemetry_enabled();
+    }
+
+    void observe_exchange(
+        std::uint64_t rows,
+        std::uint64_t active_cells,
+        std::uint64_t input_payload_bytes,
+        std::uint64_t output_payload_bytes) noexcept override {
+        kernel_.observe_exchange(
+            rows, active_cells, input_payload_bytes, output_payload_bytes);
+    }
+
     void cancel_pending() noexcept override { kernel_.cancel_pending(); }
 
 private:
@@ -81,7 +94,13 @@ void ModelLoadOptions::validate() const {
                           std::numeric_limits<std::int32_t>::max())) {
         throw std::invalid_argument("Model thread count must be positive.");
     }
-    ExecutionResources{execution_contexts, maximum_working_bytes}.validate();
+    ExecutionResources{
+        execution_contexts,
+        maximum_working_bytes,
+        profile_every,
+        capacity,
+        capacity_units,
+    }.validate();
 }
 
 LoadedModel load_model(
@@ -133,6 +152,8 @@ LoadedModel load_model(
             options.execution_contexts,
             options.maximum_working_bytes,
             options.profile_every,
+            std::move(options.capacity),
+            options.capacity_units,
         });
     return {std::move(artifact), std::move(kernel)};
 }

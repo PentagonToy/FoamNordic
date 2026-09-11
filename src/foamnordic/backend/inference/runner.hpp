@@ -35,6 +35,16 @@ public:
         return {};
     }
 
+    [[nodiscard]] virtual bool telemetry_enabled() const noexcept {
+        return false;
+    }
+
+    virtual void observe_exchange(
+        std::uint64_t,
+        std::uint64_t,
+        std::uint64_t,
+        std::uint64_t) noexcept {}
+
     virtual void cancel_pending() noexcept {}
 
     [[nodiscard]] virtual TensorMap evaluate(
@@ -69,6 +79,7 @@ private:
     ReceiveCreditPool* receive_credits_;
     ReceiveCreditPool* output_credits_;
     std::uint64_t output_bytes_per_cell_{0};
+    bool telemetry_enabled_{false};
 };
 
 }  // namespace foamnordic::inference

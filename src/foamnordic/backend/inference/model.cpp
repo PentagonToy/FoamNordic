@@ -20,6 +20,14 @@
 namespace foamnordic::inference {
 namespace {
 
+void update_peak(std::atomic<std::uint64_t>& peak, std::uint64_t value) noexcept {
+    auto current = peak.load(std::memory_order_relaxed);
+    while (current < value
+           && !peak.compare_exchange_weak(
+               current, value, std::memory_order_relaxed)) {
+    }
+}
+
 std::uint64_t checked_tensor_bytes(
     std::size_t rows,
     std::uint64_t width,
@@ -64,6 +72,10 @@ ArtifactModelKernel::ArtifactModelKernel(
       smedja_(artifact_.contract),
       contexts_(resources),
       capabilities_(kernel.capabilities()),
+      capacity_(std::move(resources.capacity)),
+      capacity_units_(capabilities_.owns_compute_threads
+                          ? resources.capacity_units
+                          : 1),
       profile_every_(resources.profile_every) {
     artifact_.validate();
 }
@@ -132,17 +144,19 @@ TensorMap ArtifactModelKernel::evaluate(
     }
     bindnordic::Tensor model_predictions;
     auto backend_started = inference_started;
-    if (capabilities_.concurrent_evaluation) {
-        model_predictions = kernel_.evaluate(
-            packed.view().model_view(), exchange_index, physical_time, rank);
-    } else {
-        auto backend_lease = backend_gate_.acquire(0);
-        if (sampled) {
-            backend_started = std::chrono::steady_clock::now();
-        }
-        model_predictions = kernel_.evaluate(
-            packed.view().model_view(), exchange_index, physical_time, rank);
+    ExecutionContextPool::Lease backend_lease;
+    if (!capabilities_.concurrent_evaluation) {
+        backend_lease = backend_gate_.acquire(0);
     }
+    ExecutionCapacityPool::Lease capacity_lease;
+    if (capacity_) {
+        capacity_lease = capacity_->acquire(capacity_units_);
+    }
+    if (sampled) {
+        backend_started = std::chrono::steady_clock::now();
+    }
+    model_predictions = kernel_.evaluate(
+        packed.view().model_view(), exchange_index, physical_time, rank);
     if (model_predictions.shape.empty()
         || model_predictions.shape.front() != active_cells.size()) {
         throw std::invalid_argument("Packed model output does not match its contract.");
@@ -205,6 +219,21 @@ bool ArtifactModelKernel::owns_backend_synchronization() const noexcept {
 
 ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
     auto snapshot = contexts_.snapshot();
+    snapshot.completed_exchanges =
+        completed_exchanges_.load(std::memory_order_relaxed);
+    snapshot.rows = rows_.load(std::memory_order_relaxed);
+    snapshot.active_cells = active_cells_.load(std::memory_order_relaxed);
+    snapshot.input_payload_bytes =
+        input_payload_bytes_.load(std::memory_order_relaxed);
+    snapshot.output_payload_bytes =
+        output_payload_bytes_.load(std::memory_order_relaxed);
+    snapshot.peak_rows = peak_rows_.load(std::memory_order_relaxed);
+    snapshot.peak_active_cells =
+        peak_active_cells_.load(std::memory_order_relaxed);
+    snapshot.peak_input_payload_bytes =
+        peak_input_payload_bytes_.load(std::memory_order_relaxed);
+    snapshot.peak_output_payload_bytes =
+        peak_output_payload_bytes_.load(std::memory_order_relaxed);
     snapshot.profile_samples = profile_samples_.load(std::memory_order_relaxed);
     snapshot.packing_nanoseconds =
         packing_nanoseconds_.load(std::memory_order_relaxed);
@@ -217,9 +246,35 @@ ExecutionSnapshot ArtifactModelKernel::execution_snapshot() const {
     return snapshot;
 }
 
+bool ArtifactModelKernel::telemetry_enabled() const noexcept {
+    return profile_every_ != 0;
+}
+
+void ArtifactModelKernel::observe_exchange(
+    std::uint64_t rows,
+    std::uint64_t active_cells,
+    std::uint64_t input_payload_bytes,
+    std::uint64_t output_payload_bytes) noexcept {
+    if (!telemetry_enabled()) {
+        return;
+    }
+    completed_exchanges_.fetch_add(1, std::memory_order_relaxed);
+    rows_.fetch_add(rows, std::memory_order_relaxed);
+    active_cells_.fetch_add(active_cells, std::memory_order_relaxed);
+    input_payload_bytes_.fetch_add(input_payload_bytes, std::memory_order_relaxed);
+    output_payload_bytes_.fetch_add(output_payload_bytes, std::memory_order_relaxed);
+    update_peak(peak_rows_, rows);
+    update_peak(peak_active_cells_, active_cells);
+    update_peak(peak_input_payload_bytes_, input_payload_bytes);
+    update_peak(peak_output_payload_bytes_, output_payload_bytes);
+}
+
 void ArtifactModelKernel::cancel_pending() noexcept {
     contexts_.cancel();
     backend_gate_.cancel();
+    if (capacity_) {
+        capacity_->cancel();
+    }
 }
 
 }  // namespace foamnordic::inference

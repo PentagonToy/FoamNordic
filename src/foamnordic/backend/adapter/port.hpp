@@ -44,11 +44,15 @@ private:
 
 class FieldProgramPort {
 public:
-    FieldProgramPort(fjord::Harbor& harbor, ExchangeContract contract);
+    FieldProgramPort(
+        fjord::Harbor& harbor,
+        ExchangeContract contract,
+        std::uint64_t profile_every = 0);
 
     [[nodiscard]] FieldInvocation begin(
         std::uint64_t time_index,
         double physical_time);
+    [[nodiscard]] SolverExchangeSnapshot profile_snapshot() const noexcept;
 
 private:
     BlockingFieldExchange exchange_;

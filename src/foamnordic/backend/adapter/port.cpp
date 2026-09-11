@@ -62,13 +62,18 @@ std::uint64_t FieldInvocation::commit() {
 
 FieldProgramPort::FieldProgramPort(
     fjord::Harbor& harbor,
-    ExchangeContract contract)
-    : exchange_(harbor, std::move(contract)) {}
+    ExchangeContract contract,
+    std::uint64_t profile_every)
+    : exchange_(harbor, std::move(contract), profile_every) {}
 
 FieldInvocation FieldProgramPort::begin(
     std::uint64_t time_index,
     double physical_time) {
     return FieldInvocation(exchange_, time_index, physical_time);
+}
+
+SolverExchangeSnapshot FieldProgramPort::profile_snapshot() const noexcept {
+    return exchange_.profile_snapshot();
 }
 
 }  // namespace foamnordic::adapter

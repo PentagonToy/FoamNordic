@@ -45,6 +45,7 @@ fjordExchange::~fjordExchange() {
         observation_.reset();
     }
     if (harbor_) {
+        foamNordic::writeSolverTelemetry(name(), exchange_->profile_snapshot());
         try {
             harbor_->shutdown();
         } catch (...) {
@@ -67,6 +68,12 @@ bool fjordExchange::read(const dictionary& dict) {
     ucx_ = dict.getOrDefault<bool>("ucx", false);
     sessionId_ = static_cast<std::uint64_t>(
         dict.getOrDefault<label>("sessionId", 1));
+    const auto profileEvery = dict.getOrDefault<label>("profileEvery", 0);
+    if (profileEvery < 0) {
+        FatalIOErrorInFunction(dict)
+            << "profileEvery must not be negative" << exit(FatalIOError);
+    }
+    profileEvery_ = static_cast<std::uint64_t>(profileEvery);
     const auto stage = dict.getOrDefault<word>(
         "exchangeStage", "timeStepStart");
     if (stage == "timeStepStart") {
@@ -117,7 +124,7 @@ void fjordExchange::connectPeer() {
         contract.outputs.emplace_back(key.c_str());
     }
     exchange_ = std::make_unique<foamnordic::adapter::AtomicFieldExchange>(
-        *harbor_, std::move(contract));
+        *harbor_, std::move(contract), profileEvery_);
 }
 
 bool fjordExchange::execute() {

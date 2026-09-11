@@ -16,6 +16,14 @@ This file records user-visible changes. Internal refactors and historical protoc
 - Custom OpenFOAM integration templates can place closure update bodies explicitly, allowing a modelled reaction rate and a tabulated thermochemical-state update to share one `Longship` lifecycle without implying direct model composition.
 - Runtime template discovery now follows one validated rule across OpenFOAM dictionaries, Slurm scripts and banners: packaged resources take precedence, with `tools/templates` used as the source-checkout fallback.
 
+### Profiling
+
+- Opt-in telemetry reports ModelHost workload, memory and stage timings together with per-rank solver request-to-response, request publication, response wait and atomic field-commit timings. `profile_every=0` leaves both execution paths uninstrumented.
+
+### Resources
+
+- FNOM execution metadata now distinguishes backends that own compute threads from backends that support concurrent independent evaluations, providing a backend-neutral contract for future shared ModelHost resource pools.
+
 ## [1.0.7] - 2026-09-10
 
 ### Model loading

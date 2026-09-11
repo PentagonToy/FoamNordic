@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -21,6 +22,7 @@
 #include <vector>
 
 #include "foamnordic/backend/inference/affine.hpp"
+#include "foamnordic/backend/inference/manifest.hpp"
 #include "foamnordic/backend/inference/model.hpp"
 #include "foamnordic/backend/inference/worker.hpp"
 #include "foamnordic/fjord/endpoint.hpp"
@@ -56,6 +58,24 @@ std::vector<double> values_of(const foamnordic::fjord::Tensor& tensor) {
     std::vector<double> values(tensor.bytes.size() / sizeof(double));
     std::memcpy(values.data(), tensor.bytes.data(), tensor.bytes.size());
     return values;
+}
+
+template<class Value>
+void append_value(std::vector<std::byte>& bytes, Value value) {
+    const auto offset = bytes.size();
+    bytes.resize(offset + sizeof(Value));
+    std::memcpy(bytes.data() + offset, &value, sizeof(Value));
+}
+
+void write_bytes(
+    const std::filesystem::path& path,
+    const std::vector<std::byte>& bytes) {
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    require(stream.good(), "Could not create a temporary table payload.");
+    stream.write(
+        reinterpret_cast<const char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size()));
+    require(stream.good(), "Could not write a temporary table payload.");
 }
 
 foamnordic::fjord::Harbor connect_rank(
@@ -193,6 +213,110 @@ void test_resident_worker_lifecycle() {
     require(
         !std::filesystem::exists(socket_path),
         "Resident worker left its Unix socket behind.");
+}
+
+void test_table_bundle_runs_through_resident_worker() {
+    const auto root = std::filesystem::temp_directory_path();
+    const auto nonce = std::to_string(std::random_device{}());
+    const auto socket_path = root / ("foamnordic-table-worker-" + nonce + ".sock");
+    const auto payload_path = root / ("foamnordic-table-worker-" + nonce + ".table");
+    const auto bundle_path = root / ("foamnordic-table-worker-" + nonce + ".fnom");
+
+    std::vector<std::byte> payload;
+    for (const char character : std::string("FNOTAB1\0", 8)) {
+        append_value(payload, character);
+    }
+    append_value(payload, std::uint8_t{2});
+    append_value(payload, std::uint8_t{1});
+    append_value(payload, std::uint16_t{0});
+    append_value(payload, std::uint64_t{1});
+    append_value(payload, std::uint8_t{0});
+    append_value(payload, std::uint64_t{2});
+    append_value(payload, 0.0);
+    append_value(payload, 1.0);
+    append_value(payload, 0.0);
+    append_value(payload, 2.0);
+    write_bytes(payload_path, payload);
+
+    foamnordic::inference::write_bundle(
+        bundle_path,
+        {
+            foamnordic::inference::ModelFormat::table,
+            payload_path.filename().string(),
+            {
+                "table-worker",
+                {{"x", foamnordic::fjord::Element::float64, 1}},
+                {{"result", foamnordic::fjord::Element::float64, 1}},
+            },
+            {},
+            std::nullopt,
+            std::nullopt,
+            "table",
+        },
+        payload_path);
+
+    foamnordic::inference::EvaluateAllCells bypass;
+    std::exception_ptr worker_failure;
+    {
+        foamnordic::inference::ModelWorker worker(
+            foamnordic::fjord::FjordAddress::local(socket_path.string()),
+            bundle_path,
+            bypass);
+        std::thread worker_thread([&] {
+            try {
+                worker.run();
+            } catch (...) {
+                worker_failure = std::current_exception();
+            }
+        });
+
+        foamnordic::fjord::Harbor client(
+            foamnordic::fjord::connect(worker.address()));
+        const auto session = client.connect_session({
+            4096,
+            foamnordic::fjord::Capability::uds
+                | foamnordic::fjord::Capability::shm,
+            0,
+            1,
+            4096,
+        });
+        if (foamnordic::fjord::any(
+                session.capabilities & foamnordic::fjord::Capability::shm)) {
+            client.accept_shared_memory();
+        }
+        client.send(scalar_field("x", {0.25, 0.75}).view());
+        client.complete(4, 1);
+
+        const auto message = client.receive_message();
+        require(
+            message.kind == foamnordic::fjord::RuneKind::tensor
+                && message.tensor.has_value(),
+            "Table worker did not return a prediction tensor.");
+        const auto actual = values_of(*message.tensor);
+        require(
+            actual.size() == 2
+                && std::abs(actual[0] - 0.5) < 1.0e-12
+                && std::abs(actual[1] - 1.5) < 1.0e-12,
+            "Table worker returned incorrect interpolated values.");
+        std::uint64_t completed_exchange = 0;
+        require(
+            client.receive_control(&completed_exchange)
+                    == foamnordic::fjord::RuneKind::complete
+                && completed_exchange == 4,
+            "Table worker returned an incorrect atomic completion.");
+        client.shutdown();
+        worker_thread.join();
+        if (worker_failure) {
+            std::rethrow_exception(worker_failure);
+        }
+    }
+
+    std::error_code ignored;
+    std::filesystem::remove(payload_path, ignored);
+    std::filesystem::remove(bundle_path, ignored);
+    require(
+        !std::filesystem::exists(socket_path),
+        "Table worker left its Unix socket behind.");
 }
 
 void test_one_resident_host_serves_multiple_solver_ranks() {
@@ -387,6 +511,7 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
 
 int main() {
     test_resident_worker_lifecycle();
+    test_table_bundle_runs_through_resident_worker();
     test_one_resident_host_serves_multiple_solver_ranks();
     test_worker_rejects_an_empty_model_cpu_budget();
 #ifdef FOAMNORDIC_HAVE_UCX

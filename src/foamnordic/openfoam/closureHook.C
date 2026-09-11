@@ -123,7 +123,8 @@ ClosureHook::ClosureHook(const dictionary& dict)
     : inputs_(readInputs(dict)),
       outputs_(readOutputs(dict)),
       session_(dict, contract(inputs_, outputs_)),
-      observation_(FieldProgramObservation::create(dict)) {}
+      observation_(FieldProgramObservation::create(dict)),
+      program_(dict.getOrDefault<word>("profileProgram", "closure")) {}
 
 ClosureHook::~ClosureHook() noexcept {
     try {
@@ -188,6 +189,7 @@ void ClosureHook::shutdown() {
         observation_->shutdown();
         observation_.reset();
     }
+    writeSolverTelemetry(program_, session_.profileSnapshot());
     session_.shutdown();
 }
 

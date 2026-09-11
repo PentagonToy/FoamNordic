@@ -19,9 +19,9 @@ The authoritative [package boundary](../README.md) defines its scope: BindNordic
 Install FoamNordic from the repository root; the resulting FoamNordic distribution includes BindNordic. Run the Python package tests with:
 
 ```console
-python -m unittest discover -s packages/bindnordic/tests -v
+python -m pytest
 ```
 
-Run its native tests through the root FoamNordic CMake build. Public installation and usage instructions belong to the root [FoamNordic README](../../README.md).
+The repository-level pytest configuration runs BindNordic and FoamNordic together while keeping their same-named test modules isolated. Run BindNordic's native tests through the root FoamNordic CMake build. Public installation and usage instructions belong to the root [FoamNordic README](../../README.md).
 
 Do not add release notes, publishing helpers, product assets, or duplicated architecture documentation here. Those responsibilities belong to the FoamNordic repository root.

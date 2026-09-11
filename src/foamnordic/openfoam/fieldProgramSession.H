@@ -16,6 +16,7 @@
 #include "Time.H"
 #include "dictionary.H"
 #include "string.H"
+#include "word.H"
 
 #include "foamnordic/backend/adapter/port.hpp"
 
@@ -36,6 +37,10 @@ namespace Foam::foamNordic {
     bool ucx,
     std::uint64_t sessionId);
 
+void writeSolverTelemetry(
+    const word& program,
+    const foamnordic::adapter::SolverExchangeSnapshot& snapshot);
+
 class FieldProgramSession final {
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::FieldProgramPort> port_;
@@ -51,6 +56,9 @@ public:
 
     [[nodiscard]] foamnordic::adapter::FieldInvocation begin(
         const Time& time);
+
+    [[nodiscard]] foamnordic::adapter::SolverExchangeSnapshot
+    profileSnapshot() const noexcept;
 
     void shutdown();
 };

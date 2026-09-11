@@ -35,7 +35,8 @@ InferenceRunner::InferenceRunner(
       kernel_(kernel),
       maximum_exchange_payload_(maximum_exchange_payload),
       receive_credits_(receive_credits),
-      output_credits_(output_credits) {
+      output_credits_(output_credits),
+      telemetry_enabled_(kernel.telemetry_enabled()) {
     for (const auto& field : contract.outputs) {
         const auto width = fjord::element_size(field.element);
         if (field.components > (std::numeric_limits<std::uint64_t>::max() - output_bytes_per_cell_) / width)
@@ -172,6 +173,23 @@ bool InferenceRunner::run_one() {
             output_views.push_back(tensor.view());
         }
         harbor_.publish(exchange_.exchange_index(), output_views);
+        if (telemetry_enabled_) {
+            std::uint64_t output_payload_bytes = 0;
+            for (const auto& output : output_views) {
+                if (output.bytes.size()
+                    > std::numeric_limits<std::uint64_t>::max()
+                        - output_payload_bytes) {
+                    throw std::overflow_error(
+                        "Model output payload byte count overflowed.");
+                }
+                output_payload_bytes += output.bytes.size();
+            }
+            kernel_.observe_exchange(
+                exchange_.cell_count(),
+                active_cells.size(),
+                received_payload_bytes,
+                output_payload_bytes);
+        }
         return true;
     } catch (...) {
         if (receive_credits_) {

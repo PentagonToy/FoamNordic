@@ -24,6 +24,8 @@ Each context owns a reusable Smedja workspace. Immutable field layouts are compi
 
 Backends declare whether evaluation is concurrent. Non-concurrent backends use a narrow lock around evaluation only; packing and output handling remain request-local.
 
+Backend capabilities distinguish internal compute-thread ownership from safe concurrent evaluation. A table lookup may not own a thread pool yet still use several CPUs by serving independent solver-rank requests concurrently; resource planning must therefore preserve both dimensions instead of assigning CPUs from backend names.
+
 ## Outputs
 
 Predictions are matched to declared output names and widths. Scaling, numeric conversion, finite-value checks, and destination alias checks complete before any solver-owned field changes. Multi-output publication is atomic.
@@ -38,4 +40,6 @@ Malformed input, model failure, invalid output, timeout, transport loss, or canc
 
 ## Profiling
 
-Longship.launch(profile_every=N) samples admission, packing, backend waiting, inference, and output time. Zero disables sampling and adds no clock reads to the production path.
+`Longship.launch(profile_every=N)` samples the ModelHost and each solver rank once every `N` exchanges. On clean shutdown, `Model telemetry` records workload, memory and model-stage costs. `Solver telemetry` records mean request publication, response wait, request-to-response round trip and atomic field commit times.
+
+Response wait includes queueing, model execution and return transport, so it is not a pure network-latency measurement. `profile_every=0` disables telemetry without clock reads, payload scans or counter updates in the request path.

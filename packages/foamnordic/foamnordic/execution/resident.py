@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         _native.run_native_worker(
             arguments.address, str(manifest_path), arguments.connections,
             arguments.ready_file, not arguments.no_shm, model_threads,
-            arguments.receive_bytes, arguments.profile_every,
+            arguments.receive_bytes, arguments.profile_every, arguments.program,
         )
         return 0
     payload = _payload(manifest_path, manifest)
@@ -278,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.address, str(manifest_path), str(library),
             arguments.connections, arguments.ready_file, not arguments.no_shm,
             model_threads, arguments.receive_bytes, arguments.profile_every,
+            arguments.program,
         )
         return 0
     outputs = _output_contract(manifest)
@@ -315,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
         model_threads,
         arguments.receive_bytes,
         arguments.profile_every,
+        arguments.program,
     )
     return 0
 

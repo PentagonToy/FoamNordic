@@ -22,6 +22,28 @@
 
 namespace Foam::foamNordic {
 
+void writeSolverTelemetry(
+    const word& program,
+    const foamnordic::adapter::SolverExchangeSnapshot& snapshot) {
+    if (snapshot.samples == 0) {
+        return;
+    }
+    const auto mean = [&snapshot](std::uint64_t total) {
+        return total / snapshot.samples;
+    };
+    Info<< "[FoamNordic] Solver telemetry: {\"program\":\"" << program
+        << "\",\"rank\":" << Pstream::myProcNo()
+        << ",\"samples\":" << snapshot.samples
+        << ",\"mean_round_trip_nanoseconds\":"
+        << mean(snapshot.round_trip_nanoseconds)
+        << ",\"mean_request_publish_nanoseconds\":"
+        << mean(snapshot.request_publish_nanoseconds)
+        << ",\"mean_response_wait_nanoseconds\":"
+        << mean(snapshot.response_wait_nanoseconds)
+        << ",\"mean_field_commit_nanoseconds\":"
+        << mean(snapshot.field_commit_nanoseconds) << '}' << nl;
+}
+
 string resolveRankAddress(const string& address) {
     std::string resolved(address.c_str());
     const std::string marker("{rank}");
@@ -100,9 +122,17 @@ FieldProgramSession::FieldProgramSession(
     const auto ucx = dict.getOrDefault<bool>("ucx", false);
     const auto sessionId = static_cast<std::uint64_t>(
         dict.getOrDefault<label>("sessionId", 1));
+    const auto configuredProfileEvery =
+        dict.getOrDefault<label>("profileEvery", 0);
+    if (configuredProfileEvery < 0) {
+        throw std::invalid_argument(
+            "FoamNordic profileEvery must not be negative.");
+    }
+    const auto profileEvery =
+        static_cast<std::uint64_t>(configuredProfileEvery);
     harbor_ = connectSession(address, sharedMemory, ucx, sessionId);
     port_ = std::make_unique<foamnordic::adapter::FieldProgramPort>(
-        *harbor_, std::move(contract));
+        *harbor_, std::move(contract), profileEvery);
 }
 
 FieldProgramSession::~FieldProgramSession() {
@@ -120,6 +150,12 @@ foamnordic::adapter::FieldInvocation FieldProgramSession::begin(
     return port_->begin(
         static_cast<std::uint64_t>(time.timeIndex()),
         static_cast<double>(time.value()));
+}
+
+foamnordic::adapter::SolverExchangeSnapshot
+FieldProgramSession::profileSnapshot() const noexcept {
+    return port_ ? port_->profile_snapshot()
+                 : foamnordic::adapter::SolverExchangeSnapshot{};
 }
 
 void FieldProgramSession::shutdown() {

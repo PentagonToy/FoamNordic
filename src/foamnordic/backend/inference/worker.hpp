@@ -23,6 +23,7 @@
 namespace foamnordic::inference {
 
 struct WorkerOptions {
+    std::string program;
     bool shared_memory{true};
     bool ucx{false};
     std::string ucx_host;

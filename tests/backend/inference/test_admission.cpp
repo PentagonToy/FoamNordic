@@ -22,6 +22,13 @@ static void queued(ExecutionContextPool& pool, unsigned count) {
         std::this_thread::yield();
     }
 }
+static void queued(ExecutionCapacityPool& pool, unsigned count) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (pool.snapshot().waiting != count) {
+        if (std::chrono::steady_clock::now() > deadline) throw std::runtime_error("Capacity queue timed out.");
+        std::this_thread::yield();
+    }
+}
 int main() {
     ExecutionContextPool pool({1, 64});
     auto held = pool.acquire(64);
@@ -35,6 +42,8 @@ int main() {
         }));
         queued(pool, i + 1);
     }
+    if (pool.snapshot().peak_waiting_contexts != 8)
+        throw std::runtime_error("Admission queue peak was not recorded.");
     held = {};
     for (auto& request : requests) request.get();
     for (unsigned i = 0; i < order.size(); ++i)
@@ -51,4 +60,49 @@ int main() {
     held = {};
     if (pool.snapshot().admitted_bytes || pool.snapshot().waiting_contexts)
         throw std::runtime_error("Admission credit or waiter leaked.");
+
+    ExecutionCapacityPool capacity(4, 1);
+    auto occupied = capacity.acquire(3);
+    auto wide_started = std::promise<void>();
+    auto wide = std::async(std::launch::async, [&] {
+        auto lease = capacity.acquire(4);
+        wide_started.set_value();
+    });
+    queued(capacity, 1);
+    auto narrow = std::async(std::launch::async, [&] {
+        auto lease = capacity.acquire(1);
+    });
+    narrow.get();
+    queued(capacity, 1);
+    auto second_narrow = std::async(std::launch::async, [&] {
+        auto lease = capacity.acquire(1);
+    });
+    queued(capacity, 2);
+    if (wide_started.get_future().wait_for(std::chrono::milliseconds(10))
+        != std::future_status::timeout)
+        throw std::runtime_error("Wide request ran without sufficient capacity.");
+    occupied = {};
+    wide.get();
+    second_narrow.get();
+    const auto capacity_snapshot = capacity.snapshot();
+    if (capacity_snapshot.active || capacity_snapshot.waiting
+        || capacity_snapshot.peak_active != 4
+        || capacity_snapshot.peak_waiting != 2)
+        throw std::runtime_error("Shared execution capacity accounting is invalid.");
+
+    ExecutionCapacityPool cancelled_capacity(1);
+    auto cancelled_occupied = cancelled_capacity.acquire(1);
+    auto cancelled_capacity_waiter = std::async(std::launch::async, [&] {
+        try { auto lease = cancelled_capacity.acquire(1); }
+        catch (const std::runtime_error&) { return true; }
+        return false;
+    });
+    queued(cancelled_capacity, 1);
+    cancelled_capacity.cancel();
+    if (!cancelled_capacity_waiter.get())
+        throw std::runtime_error("Capacity cancellation did not release waiter.");
+    cancelled_occupied = {};
+    if (cancelled_capacity.snapshot().active
+        || cancelled_capacity.snapshot().waiting)
+        throw std::runtime_error("Cancelled execution capacity leaked.");
 }

@@ -169,14 +169,14 @@ def _observations(run) -> list[dict[str, object]]:
 
 
 def _comparison(
-    stock: fno.Result,
+    of_fno: fno.Result,
     coupled: fno.Result,
     fields: tuple[str, ...],
     rtol: float,
     atol: float,
 ) -> tuple[dict[str, dict[str, object]], bool]:
     metrics = fno.Postprocess.compare(
-        stock,
+        of_fno,
         coupled,
         fields=fields,
         time_idx=-1,
@@ -186,7 +186,7 @@ def _comparison(
     passed = True
     for field, values in metrics.items():
         reference = np.asarray(
-            stock.postprocess.field(field, time_idx=-1), dtype=np.float64
+            of_fno.postprocess.field(field, time_idx=-1), dtype=np.float64
         )
         scale = float(np.max(np.abs(reference)))
         values["reference_max_abs"] = scale
@@ -216,7 +216,7 @@ def main() -> int:
     parser.add_argument(
         "--fields",
         default=",".join(DEFAULT_FIELDS),
-        help="comma-separated final fields compared against stock OpenFOAM",
+        help="comma-separated final fields compared against OF/FNO",
     )
     arguments = parser.parse_args()
 
@@ -245,10 +245,10 @@ def main() -> int:
     requested = tuple(
         field.strip() for field in arguments.fields.split(",") if field.strip()
     )
-    _, stock, stock_wall = _launch(
+    _, of_fno, of_fno_wall = _launch(
         fno.Longship(
             case=_case(
-                "combustion-stock", prepared, output, arguments.application
+                "combustion-of-fno", prepared, output, arguments.application
             )
         ),
         arguments.timeout,
@@ -285,7 +285,7 @@ def main() -> int:
         arguments.timeout,
     )
     comparison, passed = _comparison(
-        stock,
+        of_fno,
         coupled,
         requested,
         arguments.rtol,
@@ -301,10 +301,10 @@ def main() -> int:
         "comparison_fields": list(requested),
         "rtol": arguments.rtol,
         "atol": arguments.atol,
-        "stock": {
-            "total_seconds": stock_wall,
-            **_solver_facts(stock.solver_log),
-            "run": str(stock.work_dir),
+        "of_fno": {
+            "total_seconds": of_fno_wall,
+            **_solver_facts(of_fno.solver_log),
+            "run": str(of_fno.work_dir),
         },
         "foamnordic": {
             "total_seconds": coupled_wall,

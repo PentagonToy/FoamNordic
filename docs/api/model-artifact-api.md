@@ -2,6 +2,47 @@
 
 `fno.Export.sklearn()`, `fno.Export.equinox()`, `fno.Export.onnx()`, and `fno.Export.table()` create self-contained `.fnom` files. `fno.Operator.model()` declares an executable model and `fno.Operator.table()` declares a data-only lookup table; inspection returns metadata rather than raw backend bytes.
 
+## Supported backends
+
+| Export | Backend | Execution |
+| ------ | ------- | --------- |
+| `Export.sklearn()` | Compiled, native forest, or Joblib | Native C++ or resident Python |
+| `Export.onnx()` | ONNX | Native ONNX Runtime |
+| `Export.equinox()` | Equinox | Resident JAX |
+| `Export.table()` | Regular-grid table | Native multilinear interpolation |
+
+`Export.sklearn()` uses `backend="auto"` by default: supported estimators use the compiled backend and other sklearn-compatible predictors use Joblib. Select `compiled`, `forest`, or `joblib` explicitly only when the deployed representation must be fixed. The native forest backend accepts `ExtraTreesRegressor` and `RandomForestRegressor`; Joblib accepts a fitted object with `predict()` or a callable object.
+
+### Compiled estimators
+
+| Family | Models |
+| ------ | ------ |
+| Linear | `LinearRegression`, `Ridge`, `Lasso`, `ElasticNet` |
+| Forest | `ExtraTreesRegressor`, `RandomForestRegressor` |
+| Nearest neighbours | `KNeighborsRegressor` |
+| Boosting | `GradientBoostingRegressor`, `XGBRegressor`, `XGBRFRegressor`, `LGBMRegressor` |
+| Ensemble | `VotingRegressor` composed only of supported models |
+
+The compiled lowering currently emits one numerical value per estimator. This concerns the packed model output width, not OpenFOAM's `volScalarField` type. A one-value prediction can be bound to a compatible scalar field, while Joblib, ONNX, and Equinox support wider model outputs. In normal use an ML engineer can leave `backend="auto"` selected and let unsupported models fall back to Joblib.
+
+```python
+artifact = fno.Export.sklearn(
+    model,
+    path="smagorinsky.fnom",
+    inputs={"features": fno.Tensor.vector(components=10)},
+    outputs={"nut": fno.Tensor.scalar()},
+    x_scaler=scaler_X,
+)
+```
+
+The first compiled load creates and caches a target-specific native library. XGBoost and LightGBM are required only while exporting their fitted models, and the resulting compiled FNOM does not depend on either runtime. Use `foamnordic compile smagorinsky.fnom` to warm the cache when the login and compute nodes share the same target ABI. The `runtime` argument applies only to Joblib and selects `sklearn` or `sklearnex`.
+
+### Scalers
+
+`x_scaler` and `y_scaler` accept fitted `StandardScaler`, `MinMaxScaler`, `MaxAbsScaler`, `RobustScaler`, or a shape-preserving affine `FunctionTransformer`. Custom affine scaler types can be registered with `bindnordic.scalers.register_scaler_adapter()`. FoamNordic stores the resulting gain and bias in FNOM, transforms inputs before inference, and reverses output scaling before field commit. Nonlinear and feature-mixing transforms are not representable by this native scaler contract.
+
+## Inspecting an artefact
+
 ```python
 import foamnordic as fno
 
@@ -33,28 +74,6 @@ foamnordic diff reference.fnom candidate.fnom --json
 `diff` validates both artefacts, compares their complete execution manifests and streams embedded or external payloads through SHA-256. File names, external payload paths, and container padding do not affect equivalence, and neither model payload is executed.
 
 See the [FNOM format specification](../architecture/fnom.md) for binary layout and trust boundaries.
-
-## Compiled estimator backend
-
-`sklearn()` selects the compiled backend for supported fitted estimators and uses Joblib for other sklearn-compatible models:
-
-```python
-artifact = fno.Export.sklearn(
-    model,
-    path="smagorinsky.fnom",
-    inputs={"features": fno.Tensor.vector(components=10)},
-    outputs={"nut": fno.Tensor.scalar()},
-    x_scaler=scaler_X,
-)
-```
-
-The first load asks BindNordic to compile portable C++ into the target-specific cache; later loads reuse it. Version 1 supports scalar-output linear and forest models, KNN, scikit-learn gradient boosting, XGBoost, LightGBM, and voting graphs composed from supported estimators. XGBoost and LightGBM are needed only while exporting their fitted models; the resulting FNOM has no dependency on either runtime. Selection can be fixed for reproducibility with `backend="compiled"` or `backend="joblib"`; the default is `backend="auto"`. The `runtime` argument applies only to Joblib selection.
-
-Warm the cache before entering an HPC allocation when the login and compute nodes share the same target ABI:
-
-```console
-foamnordic compile smagorinsky.fnom
-```
 
 ## Regular-grid tables
 

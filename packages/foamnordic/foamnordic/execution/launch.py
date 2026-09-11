@@ -204,7 +204,7 @@ def _host_command(
             f"{tuple(program.outputs)!r} != {manifest_outputs!r}"
         )
     executable: list[object]
-    if model_format == "onnx":
+    if model_format in {"onnx", "table"}:
         executable = [_worker(longship)]
     elif model_format in {"compiled", "joblib", "equinox"}:
         executable = [sys.executable, "-m", "foamnordic.execution.resident"]
@@ -220,11 +220,13 @@ def _host_command(
         str(model_threads),
         "--profile-every",
         str(profile_every),
+        "--program",
+        program.name,
         "--ready-file",
         prepared.ready,
     ]
     if model_format in {"joblib", "equinox"}:
-        values.extend(("--key", program.key.to_json(), "--program", program.name))
+        values.extend(("--key", program.key.to_json()))
     if receive_memory_bytes is not None:
         values.extend(("--receive-bytes", str(receive_memory_bytes)))
     if longship.placement.data_path == "uds":
@@ -370,6 +372,7 @@ def launch(
         plan,
         integration_library,
         verbose=verbose,
+        profile_every=profile_every,
     )
     def pin_runtime() -> tuple[Path, ...]:
         if integration_library is None:

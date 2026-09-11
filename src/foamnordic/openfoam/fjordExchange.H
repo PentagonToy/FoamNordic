@@ -48,6 +48,7 @@ class fjordExchange final : public fvMeshFunctionObject {
     bool sharedMemory_{true};
     bool ucx_{false};
     std::uint64_t sessionId_{1};
+    std::uint64_t profileEvery_{0};
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::AtomicFieldExchange> exchange_;
     std::unique_ptr<foamnordic::adapter::ExchangeSequence> sequence_;

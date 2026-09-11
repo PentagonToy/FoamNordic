@@ -12,6 +12,7 @@
 #include "foamnordic/backend/adapter/exchange.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -119,15 +120,19 @@ void ExchangeContract::validate() const {
 
 AtomicFieldExchange::AtomicFieldExchange(
     fjord::Harbor& harbor,
-    ExchangeContract contract)
-    : harbor_(harbor), contract_(std::move(contract)) {
+    ExchangeContract contract,
+    std::uint64_t profile_every)
+    : harbor_(harbor),
+      contract_(std::move(contract)),
+      profile_every_(profile_every) {
     contract_.validate();
 }
 
 BlockingFieldExchange::BlockingFieldExchange(
     fjord::Harbor& harbor,
-    ExchangeContract contract)
-    : exchange_(harbor, std::move(contract)) {}
+    ExchangeContract contract,
+    std::uint64_t profile_every)
+    : exchange_(harbor, std::move(contract), profile_every) {}
 
 std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
@@ -199,7 +204,15 @@ void AtomicFieldExchange::execute(
         }
         inputs.push_back(std::move(input));
     }
+    const auto sampled = profile_every_ != 0
+        && profile_sequence_++ % profile_every_ == 0;
+    const auto round_trip_started = sampled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     harbor_.publish_request(exchange_index, inputs);
+    const auto request_published = sampled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
 
     std::unordered_map<std::string, fjord::Tensor> prepared;
     while (true) {
@@ -236,6 +249,9 @@ void AtomicFieldExchange::execute(
         }
         break;
     }
+    const auto response_received = sampled
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
 
     std::vector<PreparedCopy> copies;
     copies.reserve(contract_.outputs.size());
@@ -279,9 +295,30 @@ void AtomicFieldExchange::execute(
     for (const auto& copy : copies) {
         copy_values(*copy.source, copy.destination, copy.kind);
     }
+    if (sampled) {
+        const auto field_committed = std::chrono::steady_clock::now();
+        const auto nanoseconds = [](auto duration) {
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(duration)
+                    .count());
+        };
+        ++profile_.samples;
+        profile_.round_trip_nanoseconds +=
+            nanoseconds(response_received - round_trip_started);
+        profile_.request_publish_nanoseconds +=
+            nanoseconds(request_published - round_trip_started);
+        profile_.response_wait_nanoseconds +=
+            nanoseconds(response_received - request_published);
+        profile_.field_commit_nanoseconds +=
+            nanoseconds(field_committed - response_received);
+    }
 
     previous_exchange_ = exchange_index;
     has_previous_exchange_ = true;
+}
+
+SolverExchangeSnapshot AtomicFieldExchange::profile_snapshot() const noexcept {
+    return profile_;
 }
 
 std::uint64_t BlockingFieldExchange::execute(
@@ -314,6 +351,10 @@ std::uint64_t BlockingFieldExchange::execute(
         rebound_inputs,
         rebound_outputs);
     return *exchange_index;
+}
+
+SolverExchangeSnapshot BlockingFieldExchange::profile_snapshot() const noexcept {
+    return exchange_.profile_snapshot();
 }
 
 }  // namespace foamnordic::adapter

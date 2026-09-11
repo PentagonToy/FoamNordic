@@ -76,7 +76,7 @@ The `ml` extra uses CPU JAX on Linux and macOS. Replace it with `ml-cuda12` on a
 
 ## Runtime invariants
 
-- A pure OpenFOAM baseline starts no ModelHost.
+- An OpenFOAM baseline starts no ModelHost.
 - A model-driven workload loads each FNOM artefact once per resident worker.
 - Node-local Slurm placement starts one ModelHost per solver node.
 - `Case.of_cmd` selects the matching installed OpenFOAM ABI at launch.
@@ -90,9 +90,9 @@ The `ml` extra uses CPU JAX on Linux and macOS. Replace it with `ml-cuda12` on a
 Run the Python suite from the repository root in an installed development environment:
 
 ```console
-python -m unittest discover -s packages/foamnordic/tests -v
+python -m pytest
 ```
 
-Native-extension tests skip when `_native` is not installed. Backend tests may also require their optional runtime libraries. The native C++ suite is built from the repository root with `FOAMNORDIC_TESTS=ON`; see the main README.
+This command runs the BindNordic and FoamNordic Python suites together. Native-extension tests skip when `_native` is not installed. Backend tests may also require their optional runtime libraries. The native C++ suite is built from the repository root with `FOAMNORDIC_TESTS=ON`; see the main README.
 
 Architecture and ownership details are in [the architecture guide](../../docs/architecture/README.md). Measured behaviour is kept separately under [benchmarks](../../docs/benchmarks/README.md).

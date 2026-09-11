@@ -17,6 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <random>
 #include <span>
@@ -610,6 +611,131 @@ private:
     std::atomic<std::uint32_t> peak_{0};
 };
 
+class SharedCapacityProbeKernel final
+    : public foamnordic::inference::PackedModelKernel {
+public:
+    SharedCapacityProbeKernel(
+        foamnordic::inference::BackendCapabilities capabilities,
+        std::atomic<std::uint32_t>& active,
+        std::atomic<std::uint32_t>& peak)
+        : capabilities_(capabilities), active_(active), peak_(peak) {}
+
+    [[nodiscard]] foamnordic::inference::BackendCapabilities capabilities()
+        const noexcept override {
+        return capabilities_;
+    }
+
+    bindnordic::Tensor evaluate(
+        bindnordic::TensorView features,
+        std::uint64_t,
+        double,
+        std::uint32_t) override {
+        const auto active = active_.fetch_add(1) + 1;
+        auto peak = peak_.load();
+        while (active > peak && !peak_.compare_exchange_weak(peak, active)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        active_.fetch_sub(1);
+        std::vector<double> values(features.shape.front(), 1.0);
+        std::vector<std::byte> bytes(values.size() * sizeof(double));
+        std::memcpy(bytes.data(), values.data(), bytes.size());
+        return {
+            "bindnordic.predictions",
+            bindnordic::Element::float64,
+            {features.shape.front(), 1},
+            std::move(bytes),
+        };
+    }
+
+private:
+    foamnordic::inference::BackendCapabilities capabilities_;
+    std::atomic<std::uint32_t>& active_;
+    std::atomic<std::uint32_t>& peak_;
+};
+
+foamnordic::inference::TensorMap capacity_inputs() {
+    foamnordic::inference::TensorMap inputs;
+    inputs.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+    inputs.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+    inputs.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+    return inputs;
+}
+
+foamnordic::inference::ModelArtifact capacity_artifact() {
+    return {
+        foamnordic::inference::ModelFormat::onnx,
+        "artifact/model.onnx",
+        contract(),
+        {},
+        std::nullopt,
+        std::nullopt,
+    };
+}
+
+void test_artifact_kernels_share_idle_execution_capacity() {
+    auto capacity = std::make_shared<
+        foamnordic::inference::ExecutionCapacityPool>(2);
+    std::atomic<std::uint32_t> active{0};
+    std::atomic<std::uint32_t> peak{0};
+    const auto capabilities = foamnordic::inference::BackendCapabilities{
+        .concurrent_evaluation = true,
+        .row_independent = true,
+        .owns_compute_threads = false,
+    };
+    SharedCapacityProbeKernel first_backend(capabilities, active, peak);
+    SharedCapacityProbeKernel second_backend(capabilities, active, peak);
+    auto resources = foamnordic::inference::ExecutionResources{2, 4096};
+    resources.capacity = capacity;
+    resources.capacity_units = 2;
+    foamnordic::inference::ArtifactModelKernel first(
+        capacity_artifact(), first_backend, resources);
+    foamnordic::inference::ArtifactModelKernel second(
+        capacity_artifact(), second_backend, resources);
+    auto first_request = std::async(std::launch::async, [&] {
+        return first.evaluate(capacity_inputs(), {0, 1}, 1, 0.1);
+    });
+    auto second_request = std::async(std::launch::async, [&] {
+        return second.evaluate(capacity_inputs(), {0, 1}, 2, 0.1);
+    });
+    first_request.get();
+    second_request.get();
+    require(
+        peak.load() == 2 && capacity->snapshot().peak_active == 2,
+        "Independent kernels did not borrow idle shared execution capacity.");
+}
+
+void test_thread_owning_backends_reserve_their_full_capacity() {
+    auto capacity = std::make_shared<
+        foamnordic::inference::ExecutionCapacityPool>(2);
+    std::atomic<std::uint32_t> active{0};
+    std::atomic<std::uint32_t> peak{0};
+    const auto capabilities = foamnordic::inference::BackendCapabilities{
+        .concurrent_evaluation = true,
+        .row_independent = true,
+        .owns_compute_threads = true,
+    };
+    SharedCapacityProbeKernel first_backend(capabilities, active, peak);
+    SharedCapacityProbeKernel second_backend(capabilities, active, peak);
+    auto resources = foamnordic::inference::ExecutionResources{2, 4096};
+    resources.capacity = capacity;
+    resources.capacity_units = 2;
+    foamnordic::inference::ArtifactModelKernel first(
+        capacity_artifact(), first_backend, resources);
+    foamnordic::inference::ArtifactModelKernel second(
+        capacity_artifact(), second_backend, resources);
+    auto first_request = std::async(std::launch::async, [&] {
+        return first.evaluate(capacity_inputs(), {0, 1}, 1, 0.1);
+    });
+    auto second_request = std::async(std::launch::async, [&] {
+        return second.evaluate(capacity_inputs(), {0, 1}, 2, 0.1);
+    });
+    first_request.get();
+    second_request.get();
+    require(
+        peak.load() == 1 && capacity->snapshot().peak_active == 2,
+        "Thread-owning backends oversubscribed shared execution capacity.");
+}
+
 void test_artifact_kernel_owns_a_narrow_backend_lock() {
     ConcurrentProbeKernel packed_kernel;
     foamnordic::inference::ArtifactModelKernel kernel(
@@ -725,6 +851,66 @@ void test_artifact_kernel_samples_stage_costs_on_request() {
     require(
         kernel.execution_snapshot().profile_samples == 2,
         "Artifact kernel did not honour its profiling sample interval.");
+}
+
+void test_artifact_kernel_records_completed_workload() {
+    ConcurrentProbeKernel packed_kernel(true);
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            foamnordic::inference::ModelFormat::compiled,
+            "artifact/model.cpp",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+            "compiled",
+        },
+        packed_kernel,
+        {1, 4096, 1});
+    kernel.observe_exchange(100, 80, 2400, 800);
+    kernel.observe_exchange(120, 90, 2880, 960);
+    const auto snapshot = kernel.execution_snapshot();
+    require(
+        snapshot.completed_exchanges == 2
+            && snapshot.rows == 220
+            && snapshot.active_cells == 170
+            && snapshot.input_payload_bytes == 5280
+            && snapshot.output_payload_bytes == 1760,
+        "Artifact kernel did not accumulate completed workload telemetry.");
+    require(
+        snapshot.peak_rows == 120
+            && snapshot.peak_active_cells == 90
+            && snapshot.peak_input_payload_bytes == 2880
+            && snapshot.peak_output_payload_bytes == 960,
+        "Artifact kernel did not retain per-exchange workload peaks.");
+}
+
+void test_artifact_kernel_disables_workload_telemetry_by_default() {
+    ConcurrentProbeKernel packed_kernel(true);
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            foamnordic::inference::ModelFormat::compiled,
+            "artifact/model.cpp",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+            "compiled",
+        },
+        packed_kernel,
+        {1, 4096, 0});
+    require(
+        !kernel.telemetry_enabled(),
+        "Artifact kernel enabled telemetry for profile_every=0.");
+    kernel.observe_exchange(100, 80, 2400, 800);
+    const auto snapshot = kernel.execution_snapshot();
+    require(
+        snapshot.completed_exchanges == 0
+            && snapshot.rows == 0
+            && snapshot.active_cells == 0
+            && snapshot.input_payload_bytes == 0
+            && snapshot.output_payload_bytes == 0,
+        "Disabled telemetry updated workload counters.");
 }
 
 class LoadedProbeKernel final : public foamnordic::inference::PackedModelKernel {
@@ -1139,8 +1325,12 @@ int main() {
     test_smedja_fuses_float_input_conversion_with_packing();
     test_artifact_kernel_owns_a_narrow_backend_lock();
     test_reentrant_backend_uses_bounded_execution_contexts();
+    test_artifact_kernels_share_idle_execution_capacity();
+    test_thread_owning_backends_reserve_their_full_capacity();
     test_artifact_kernel_rejects_an_oversized_working_set();
     test_artifact_kernel_samples_stage_costs_on_request();
+    test_artifact_kernel_records_completed_workload();
+    test_artifact_kernel_disables_workload_telemetry_by_default();
     test_loaded_artifact_preserves_backend_synchronization_ownership();
     test_table_bundle_loads_through_the_model_boundary();
     test_dense_affine_kernel_float64();
