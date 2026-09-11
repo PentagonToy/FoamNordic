@@ -27,6 +27,8 @@ struct OnnxOptions {
     void validate() const;
 };
 
+[[nodiscard]] BackendCapabilities onnx_backend_capabilities() noexcept;
+
 class OnnxPackedKernel final : public PackedModelKernel {
 public:
     explicit OnnxPackedKernel(

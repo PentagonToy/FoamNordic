@@ -14,6 +14,8 @@ Before tensor bodies, the solver announces exchange identity, tensor count, and 
 
 Outputs use the same atomic boundary. Every tensor is validated, floating outputs must be finite, and publication credit remains held until the receiver accepts the complete result.
 
+Rune carries the solver-owned topology generation in request announcements, tensors and completion markers. Harbor requires one generation throughout an atomic batch, and the OpenFOAM adapter rejects stale responses before writing any solver-owned destination.
+
 ## Channels
 
 | Channel | Intended use |

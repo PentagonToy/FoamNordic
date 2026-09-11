@@ -57,10 +57,12 @@ def validate_case(longship: Longship) -> None:
             "time_step_start and time_step_end"
         )
     source = longship.case.case_dir.resolve()
-    initial = longship.case.initial_directory
+    # Resolve both paths before reporting a relative location.  On macOS,
+    # /tmp and /private/tmp name the same directory but Path.relative_to()
+    # quite correctly treats their lexical forms as unrelated.
+    initial = longship.case.initial_directory.resolve()
     required = (
-        initial / "U",
-        initial / "p",
+        initial,
         source / "system/controlDict",
         source / "system/fvSchemes",
         source / "system/fvSolution",

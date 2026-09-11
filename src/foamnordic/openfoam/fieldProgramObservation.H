@@ -46,6 +46,7 @@ public:
         const fvMesh& mesh,
         const Time& time,
         std::uint64_t exchangeIndex,
+        std::uint64_t topologyGeneration,
         double closureWait) noexcept;
     void shutdown() noexcept;
 };

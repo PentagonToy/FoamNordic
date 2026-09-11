@@ -242,7 +242,9 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def run_program(
+    argv: list[str], capacity=None, *, configure_threads: bool = True
+) -> int:
     if _native is None:
         raise RuntimeError(
             "the managed resident requires a FoamNordic binary wheel"
@@ -252,15 +254,22 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("profile_every must not be negative")
     if arguments.receive_bytes <= 0:
         raise ValueError("receive_bytes must be positive")
-    model_threads = _configure_model_threads(arguments.threads)
+    model_threads = (
+        _configure_model_threads(arguments.threads)
+        if configure_threads
+        else arguments.threads
+    )
+    if capacity is None:
+        capacity = _native._ExecutionCapacity(model_threads)
     manifest_path = arguments.manifest.expanduser().resolve()
     manifest = _manifest(manifest_path)
     model_format = str(manifest["format"])
-    if manifest.get("runtime") == "forest":
+    if model_format in {"onnx", "table"} or manifest.get("runtime") == "forest":
         _native.run_native_worker(
             arguments.address, str(manifest_path), arguments.connections,
             arguments.ready_file, not arguments.no_shm, model_threads,
             arguments.receive_bytes, arguments.profile_every, arguments.program,
+            capacity,
         )
         return 0
     payload = _payload(manifest_path, manifest)
@@ -279,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.connections, arguments.ready_file, not arguments.no_shm,
             model_threads, arguments.receive_bytes, arguments.profile_every,
             arguments.program,
+            capacity,
         )
         return 0
     outputs = _output_contract(manifest)
@@ -317,8 +327,13 @@ def main(argv: list[str] | None = None) -> int:
         arguments.receive_bytes,
         arguments.profile_every,
         arguments.program,
+        capacity,
     )
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_program(sys.argv[1:] if argv is None else argv)
 
 
 if __name__ == "__main__":

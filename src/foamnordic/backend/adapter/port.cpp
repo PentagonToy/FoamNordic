@@ -20,10 +20,12 @@ namespace foamnordic::adapter {
 FieldInvocation::FieldInvocation(
     BlockingFieldExchange& exchange,
     std::uint64_t time_index,
-    double physical_time)
+    double physical_time,
+    std::uint64_t topology_generation)
     : exchange_(exchange),
       time_index_(time_index),
-      physical_time_(physical_time) {
+      physical_time_(physical_time),
+      topology_generation_(topology_generation) {
     if (!std::isfinite(physical_time_)) {
         throw std::invalid_argument(
             "FoamNordic model invocation physical time must be finite.");
@@ -55,7 +57,8 @@ std::uint64_t FieldInvocation::commit() {
             "FoamNordic model invocation was committed more than once.");
     }
     const auto exchange_index =
-        exchange_.execute(time_index_, physical_time_, inputs_, outputs_);
+        exchange_.execute(
+            time_index_, physical_time_, inputs_, outputs_, topology_generation_);
     committed_ = true;
     return exchange_index;
 }
@@ -68,8 +71,10 @@ FieldProgramPort::FieldProgramPort(
 
 FieldInvocation FieldProgramPort::begin(
     std::uint64_t time_index,
-    double physical_time) {
-    return FieldInvocation(exchange_, time_index, physical_time);
+    double physical_time,
+    std::uint64_t topology_generation) {
+    return FieldInvocation(
+        exchange_, time_index, physical_time, topology_generation);
 }
 
 SolverExchangeSnapshot FieldProgramPort::profile_snapshot() const noexcept {

@@ -124,6 +124,49 @@ def test_missing_mesh_has_actionable_initialization_error() -> None:
             _mesh_commands(fno.Longship(case=case), root / "case")
 
 
+def test_validate_case_accepts_nonconventional_initial_fields() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        source = root / "case"
+        for relative in (
+            "0/alpha.water",
+            "0/p_rgh",
+            "constant/transportProperties",
+            "system/controlDict",
+            "system/fvSchemes",
+            "system/fvSolution",
+        ):
+            path = source / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+        write_mesh(source)
+
+        case = fno.OpenFOAM.Case(case_dir=source, run_dir=root / "runs")
+        validate_case(fno.Longship(case=case))
+
+
+def test_validate_case_canonicalizes_symlinked_case_root() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        source = root / "real/case"
+        for relative in (
+            "0/p_rgh",
+            "constant/transportProperties",
+            "system/controlDict",
+            "system/fvSchemes",
+            "system/fvSolution",
+        ):
+            path = source / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n", encoding="utf-8")
+        write_mesh(source)
+        alias = root / "alias"
+        alias.symlink_to(root / "real", target_is_directory=True)
+
+        case = fno.OpenFOAM.Case(case_dir=alias / "case", run_dir=root / "runs")
+        validate_case(fno.Longship(case=case))
+
+
 def test_block_mesh_initialization_precedes_validation() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -827,7 +870,7 @@ def test_closure_update_requires_explicit_template_slot() -> None:
             )
 
 
-def test_prepare_case_allocates_one_worker_per_closure_stage(mocker) -> None:
+def test_prepare_case_allocates_one_endpoint_per_closure_stage(mocker) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         source = root / "source"
@@ -1262,7 +1305,7 @@ def test_compiled_artifact_selects_managed_resident_automatically(mocker) -> Non
     assert "--key" not in command
 
 
-def test_table_artifact_selects_native_worker_automatically(mocker) -> None:
+def test_table_artifact_selects_managed_resident_without_onnx_worker(mocker) -> None:
     example = example_longship()
     closure = fno.Closure(
         name="tableClosure",
@@ -1280,9 +1323,9 @@ def test_table_artifact_selects_native_worker_automatically(mocker) -> None:
         "foamnordic.execution.launch._artifact_metadata",
         return_value=metadata,
     )
-    _mock_patch_15 = mocker.patch(
+    worker = mocker.patch(
         "foamnordic.execution.launch._worker",
-        return_value=Path("/tmp/foamnordic-model-host"),
+        side_effect=AssertionError("table launch must not require the ONNX worker"),
     )
     try:
         command = _host_command(
@@ -1296,14 +1339,17 @@ def test_table_artifact_selects_native_worker_automatically(mocker) -> None:
             model_threads=2,
         )
     finally:
-        mocker.stop(_mock_patch_15)
+        mocker.stop(worker)
         mocker.stop(_mock_patch_14)
-    assert command[0] == "/tmp/foamnordic-model-host"
+    assert command[:3] == (
+        sys.executable,
+        "-m",
+        "foamnordic.execution.resident",
+    )
     assert "--threads" in command
     assert command[command.index("--threads") + 1] == "2"
     assert "--program" in command
     assert command[command.index("--program") + 1] == "tableClosure"
-    assert "foamnordic.execution.resident" not in command
     assert "--key" not in command
 
 
@@ -1342,7 +1388,7 @@ def test_transform_selects_the_same_managed_resident(mocker) -> None:
     assert command[key_index + 1] == '{"entropy":[42,0],"path":[],"scope":"global"}'
 
 
-def test_multiple_programs_share_the_model_cpu_budget(mocker) -> None:
+def test_multiple_programs_can_borrow_the_full_model_host_cpu_budget(mocker) -> None:
     example = example_longship()
     closure = fno.Closure(
         name="joblibClosure",
@@ -1379,19 +1425,88 @@ def test_multiple_programs_share_the_model_cpu_budget(mocker) -> None:
         side_effect=command,
     )
     try:
-        with (
-            tempfile.TemporaryDirectory() as directory,
-        ):
-            _host_group_command(longship, prepared, Path(directory), host_cpus=5)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            host, ready = _host_group_command(
+                longship, prepared, root, host_cpus=5
+            )
+            configuration = json.loads(
+                (root / ".foamnordic/host-programs.json").read_text()
+            )
     finally:
         mocker.stop(_mock_patch_17)
-    assert budgets == [3, 2]
+    assert budgets == [5, 5]
+    assert host[1:3] == ("-m", "foamnordic.execution.host_group")
+    assert ready == (root / ".foamnordic/programs.ready",)
+    assert configuration["capacity_units"] == 5
+    assert configuration["programs"] == [["5"], ["5"]]
+    assert configuration["connector_plugins"] == []
 
-    with (
-        tempfile.TemporaryDirectory() as directory,
-        pytest.raises(ValueError, match="at least the number"),
-    ):
-        _host_group_command(longship, prepared, Path(directory), host_cpus=1)
+    budgets.clear()
+    _mock_patch_18 = mocker.patch(
+        "foamnordic.execution.launch._host_command",
+        side_effect=command,
+    )
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            _host_group_command(longship, prepared, Path(directory), host_cpus=1)
+    finally:
+        mocker.stop(_mock_patch_18)
+    assert budgets == [1, 1]
+
+
+def test_grouped_onnx_program_loads_the_runtime_connector(mocker) -> None:
+    example = example_longship()
+    closure = example.closures[0]
+    prepared = tuple(
+        PreparedProgram(
+            closure,
+            Path(f"/tmp/ready-{index}"),
+            Path(f"/tmp/program-{index}.sock"),
+            Path(f"/tmp/model-{index}.fnom"),
+        )
+        for index in range(2)
+    )
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        worker = root / "runtime/bin/foamnordic_model_worker"
+        worker.parent.mkdir(parents=True)
+        worker.touch()
+        plugin = root / "runtime/lib/libfoamnordic_onnx_connector.dylib"
+        plugin.parent.mkdir(parents=True)
+        plugin.touch()
+
+        def command(_longship, item, model_threads=1, **_options):
+            return (
+                str(worker),
+                f"unix://{item.socket}",
+                str(item.artifact),
+                "--threads",
+                str(model_threads),
+            )
+
+        _mock_patch_19 = mocker.patch(
+            "foamnordic.execution.launch._host_command", side_effect=command
+        )
+        _mock_patch_20 = mocker.patch(
+            "foamnordic.execution.launch._artifact_metadata",
+            return_value={"format": "onnx"},
+        )
+        try:
+            _host_group_command(
+                longship=example,
+                prepared=prepared,
+                work_dir=root,
+                host_cpus=2,
+            )
+            configuration = json.loads(
+                (root / ".foamnordic/host-programs.json").read_text()
+            )
+        finally:
+            mocker.stop(_mock_patch_20)
+            mocker.stop(_mock_patch_19)
+
+    assert configuration["connector_plugins"] == [str(plugin.resolve())]
 
 
 def test_ml_expression_schemes_are_planned_without_overriding_defaults() -> None:

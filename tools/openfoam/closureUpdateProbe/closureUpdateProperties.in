@@ -1,0 +1,27 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      closureUpdateProperties;
+}
+
+closure
+{
+    address          "@FOAMNORDIC_ADDRESS@";
+    sessionId        1;
+    sharedMemory     @FOAMNORDIC_SHARED_MEMORY@;
+    ucx              false;
+    profileEvery     @FOAMNORDIC_PROFILE_EVERY@;
+    profileProgram   @FOAMNORDIC_PROFILE_PROGRAM@;
+    inputs           (@FOAMNORDIC_INPUT_KEYS@);
+    inputExpressions (@FOAMNORDIC_INPUT_EXPRESSIONS@);
+    inputPatches     (@FOAMNORDIC_INPUT_PATCHES@);
+    outputs          (@FOAMNORDIC_OUTPUT_FIELDS@);
+    outputKeys       (@FOAMNORDIC_OUTPUT_KEYS@);
+    outputPatches    (@FOAMNORDIC_OUTPUT_PATCHES@);
+}
+
+update
+{
+    @FOAMNORDIC_UPDATE_0_BODY@
+}

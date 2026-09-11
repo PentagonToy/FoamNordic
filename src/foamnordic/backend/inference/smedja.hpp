@@ -47,6 +47,15 @@ class Smedja final {
         std::uint64_t exchange_index,
         double physical_time) const;
 
+    // The exchange boundary has already checked that these cells are sorted,
+    // unique, and within every input field.
+    [[nodiscard]] fjord::Tensor& pack_validated_into(
+        SmedjaWorkspace& workspace,
+        const TensorMap& inputs,
+        const std::vector<std::uint64_t>& active_cells,
+        std::uint64_t exchange_index,
+        double physical_time) const;
+
     [[nodiscard]] TensorMap unpack(fjord::Tensor packed) const;
 
     [[nodiscard]] std::uint64_t input_width() const noexcept;
@@ -69,6 +78,13 @@ class Smedja final {
     };
 
     [[nodiscard]] static Layout compile(const std::vector<FieldContract>& fields);
+    [[nodiscard]] fjord::Tensor& pack_impl(
+        SmedjaWorkspace& workspace,
+        const TensorMap& inputs,
+        const std::vector<std::uint64_t>& active_cells,
+        std::uint64_t exchange_index,
+        double physical_time,
+        bool validated_cells) const;
 
     Layout inputs_;
     Layout outputs_;

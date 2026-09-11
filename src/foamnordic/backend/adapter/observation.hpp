@@ -47,6 +47,7 @@ struct ObservationRecord {
     std::vector<FieldObservation> fields;
     double model_wait{0.0};
     double evaluate{0.0};
+    std::uint64_t topology_generation{0};
 
     [[nodiscard]] std::size_t byte_size() const noexcept;
 };
@@ -75,7 +76,8 @@ public:
     [[nodiscard]] std::optional<ObservationRecord> execute(
         std::uint64_t exchange_index,
         double physical_time,
-        const ReadOnlyFieldMap& fields) const;
+        const ReadOnlyFieldMap& fields,
+        std::uint64_t topology_generation = 0) const;
     [[nodiscard]] std::size_t size() const noexcept;
 
 private:

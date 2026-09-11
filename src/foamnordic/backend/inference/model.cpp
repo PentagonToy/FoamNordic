@@ -98,7 +98,7 @@ TensorMap ArtifactModelKernel::evaluate(
     const auto packing_started = sampled
                                      ? std::chrono::steady_clock::now()
                                      : std::chrono::steady_clock::time_point{};
-    auto& packed = smedja_.pack_into(
+    auto& packed = smedja_.pack_validated_into(
         context.workspace(), inputs, active_cells, exchange_index, physical_time);
     if (artifact_.input_scaler) {
         auto mutable_view = fjord::MutableTensorView{
@@ -109,6 +109,7 @@ TensorMap ArtifactModelKernel::evaluate(
             packed.time_index,
             packed.physical_time,
             packed.solver_time_index,
+            packed.topology_generation,
         };
         artifact_.input_scaler->transform(mutable_view.model_view());
     }
@@ -169,6 +170,7 @@ TensorMap ArtifactModelKernel::evaluate(
         exchange_index,
         physical_time,
         packed.solver_time_index,
+        packed.topology_generation,
     };
     const auto output_started = sampled
                                     ? std::chrono::steady_clock::now()
@@ -182,6 +184,7 @@ TensorMap ArtifactModelKernel::evaluate(
             predictions.time_index,
             predictions.physical_time,
             predictions.solver_time_index,
+            predictions.topology_generation,
         };
         artifact_.output_scaler->inverse_transform(mutable_view.model_view());
     }

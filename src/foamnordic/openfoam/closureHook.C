@@ -146,7 +146,7 @@ std::uint64_t ClosureHook::invoke(
     if (bindInputs) {
         bindInputs(frame);
     }
-    auto invocation = session_.begin(time);
+    auto invocation = session_.begin(mesh, time);
     for (const auto& input : inputs_) {
         if (input.patch.empty()) {
             frame.provide(invocation, input.key, input.expression);
@@ -179,7 +179,8 @@ std::uint64_t ClosureHook::invoke(
         }
     }
     if (observation_) {
-        observation_->publish(mesh, time, exchangeIndex, closureWait);
+        observation_->publish(
+            mesh, time, exchangeIndex, session_.topologyGeneration(), closureWait);
     }
     return exchangeIndex;
 }

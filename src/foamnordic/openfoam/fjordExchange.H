@@ -16,6 +16,7 @@
 #include "fvMeshFunctionObject.H"
 #include "scalarField.H"
 #include "wordList.H"
+#include "fieldProgramSession.H"
 
 #include <cstdint>
 #include <memory>
@@ -55,6 +56,7 @@ class fjordExchange final : public fvMeshFunctionObject {
     std::unique_ptr<foamNordic::FieldProgramObservation> observation_;
     std::vector<scalarField> inputScratch_;
     std::vector<scalarField> outputScratch_;
+    foamNordic::MeshTopologySequence topology_;
 
     enum class Stage { timeStepStart, outerCorrector, pressureCorrected, timeStepEnd };
     Stage stage_{Stage::timeStepStart};
@@ -81,6 +83,7 @@ public:
     bool read(const dictionary& dict) override;
     bool execute() override;
     bool write() override;
+    void updateMesh(const mapPolyMesh&) override;
 };
 
 }  // namespace Foam::functionObjects

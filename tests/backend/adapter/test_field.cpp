@@ -670,7 +670,9 @@ void test_stale_output_never_modifies_field() {
             {2},
             foamnordic::fjord::as_bytes(std::span(stalePrediction)),
             3,
-            0.05,
+            0.1,
+            0,
+            3,
         };
         closure.publish(3, std::span(&staleOutput, 1));
     });
@@ -685,6 +687,8 @@ void test_stale_output_never_modifies_field() {
             foamnordic::fjord::as_writable_bytes(std::span(values)),
             3,
             0.1,
+            0,
+            4,
         };
     };
     bool rejected = false;
@@ -697,10 +701,10 @@ void test_stale_output_never_modifies_field() {
         rejected = true;
     }
     worker.join();
-    require(rejected, "A stale closure output was accepted.");
+    require(rejected, "A stale-topology closure output was accepted.");
     require(
         viscosity == std::array<double, 2>{-1.0, -1.0},
-        "A stale closure output modified the solver field.");
+        "A stale-topology closure output modified the solver field.");
 }
 
 void test_worker_error_never_modifies_field(bool sharedMemory) {

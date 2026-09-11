@@ -385,9 +385,8 @@ def test_source_build_dry_run_is_visual_and_non_mutating(mocker) -> None:
         assert status == 0
         assert "[Step 1/5]" in output.getvalue()
         assert "Configure native SDK" in output.getvalue()
-        assert "foamnordic_model_worker" in output.getvalue()
+        assert "foamnordic_runtime_bundle" in output.getvalue()
         assert "Install native runtime tools" in output.getvalue()
-        assert "foamnordic-longship" in output.getvalue()
         assert "Build OpenFOAM integration" in output.getvalue()
         assert "Build progress-variable solver" not in output.getvalue()
         assert not build_dir.exists()
@@ -409,6 +408,11 @@ def test_packaged_buildkit_defines_native_model_worker() -> None:
     assert "add_subdirectory(src/foamnordic/backend/inference)" in buildkit
     assert "add_subdirectory(tools/resident)" in buildkit
     assert "foamnordic_inference" in buildkit
+    assert "add_custom_target(foamnordic_runtime_bundle" in buildkit
+    assert (
+        "add_dependencies(foamnordic_runtime_bundle foamnordic_onnx_connector)"
+        in buildkit
+    )
     assert "src/foamnordic/backend/inference" in packaging
     assert "src/foamnordic/backend/connectors" in packaging
     assert "tools/resident" in packaging
@@ -468,7 +472,7 @@ def test_build_refreshes_only_marker_owned_cache_from_another_source(mocker) -> 
             mocker.stop(_mock_patch_15)
         assert status == 0
         assert "Would refresh build cache" in output.getvalue()
-        assert "foamnordic_inference" in output.getvalue()
+        assert "foamnordic_runtime_bundle" in output.getvalue()
         assert "foamnordic_model_worker" not in output.getvalue()
         assert (build_dir / "CMakeCache.txt").is_file()
 

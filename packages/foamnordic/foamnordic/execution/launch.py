@@ -204,9 +204,9 @@ def _host_command(
             f"{tuple(program.outputs)!r} != {manifest_outputs!r}"
         )
     executable: list[object]
-    if model_format in {"onnx", "table"}:
+    if model_format == "onnx":
         executable = [_worker(longship)]
-    elif model_format in {"compiled", "joblib", "equinox"}:
+    elif model_format in {"compiled", "joblib", "equinox", "table"}:
         executable = [sys.executable, "-m", "foamnordic.execution.resident"]
     else:
         raise ValueError(f"unsupported field-program artifact format: {model_format}")
@@ -250,14 +250,7 @@ def _host_group_command(
 ) -> tuple[tuple[str, ...], tuple[Path, ...]]:
     if host_cpus < 1:
         raise ValueError("host_cpus must be positive")
-    if host_cpus < len(prepared):
-        raise ValueError(
-            "model cpus_per_task must be at least the number of field programs"
-        )
-    quotient, remainder = divmod(host_cpus, max(1, len(prepared)))
-    thread_budgets = tuple(
-        quotient + (index < remainder) for index in range(len(prepared))
-    )
+    thread_budgets = (host_cpus,) * len(prepared)
     commands = [
         (
             _host_command(
@@ -281,14 +274,44 @@ def _host_group_command(
     ]
     if len(commands) == 1:
         return commands[0], (prepared[0].ready,)
+    programs = []
+    plugins: list[str] = []
+    for command in commands:
+        if len(command) >= 4 and command[:3] == (
+            sys.executable,
+            "-m",
+            "foamnordic.execution.resident",
+        ):
+            programs.append(list(command[3:]))
+        else:
+            programs.append(list(command[1:]))
+            if len(command) >= 3:
+                metadata = _artifact_metadata(Path(command[2]))
+                if str(metadata["format"]) == "onnx":
+                    prefix = Path(command[0]).resolve().parent.parent
+                    candidates = (
+                        prefix / "lib/libfoamnordic_onnx_connector.dylib",
+                        prefix / "lib/libfoamnordic_onnx_connector.so",
+                        prefix / "lib64/libfoamnordic_onnx_connector.so",
+                    )
+                    plugin = next((path for path in candidates if path.is_file()), None)
+                    if plugin is None:
+                        raise RuntimeError(
+                            "The ONNX connector plugin is unavailable; rebuild the "
+                            "active FoamNordic runtime."
+                        )
+                    if str(plugin) not in plugins:
+                        plugins.append(str(plugin))
     aggregate = _internal_path(work_dir, "programs.ready")
     configuration = _internal_path(work_dir, "host-programs.json")
     configuration.write_text(
         json.dumps(
             {
-                "commands": [list(command) for command in commands],
+                "programs": programs,
+                "capacity_units": host_cpus,
                 "ready_files": [str(item.ready) for item in prepared],
                 "aggregate_ready": str(aggregate),
+                "connector_plugins": plugins,
             },
             indent=2,
         )

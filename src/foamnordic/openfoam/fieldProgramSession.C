@@ -22,6 +22,34 @@
 
 namespace Foam::foamNordic {
 
+std::uint64_t MeshTopologySequence::observe(const fvMesh& mesh) {
+    const string facesInstance(mesh.facesInstance());
+    const bool changing = mesh.topoChanging();
+    const bool changed = initialised_
+        && (explicitlyChanged_ || facesInstance != facesInstance_
+            || mesh.nCells() != cells_ || mesh.nFaces() != faces_
+            || mesh.nPoints() != points_ || (changing && !wasChanging_));
+    if (changed) {
+        ++generation_;
+    }
+    facesInstance_ = facesInstance;
+    cells_ = mesh.nCells();
+    faces_ = mesh.nFaces();
+    points_ = mesh.nPoints();
+    wasChanging_ = changing;
+    explicitlyChanged_ = false;
+    initialised_ = true;
+    return generation_;
+}
+
+void MeshTopologySequence::markChanged() noexcept {
+    explicitlyChanged_ = true;
+}
+
+std::uint64_t MeshTopologySequence::generation() const noexcept {
+    return generation_;
+}
+
 void writeSolverTelemetry(
     const word& program,
     const foamnordic::adapter::SolverExchangeSnapshot& snapshot) {
@@ -143,13 +171,19 @@ FieldProgramSession::~FieldProgramSession() {
 }
 
 foamnordic::adapter::FieldInvocation FieldProgramSession::begin(
+    const fvMesh& mesh,
     const Time& time) {
     if (!port_) {
         throw std::logic_error("FoamNordic closure session is shut down.");
     }
     return port_->begin(
         static_cast<std::uint64_t>(time.timeIndex()),
-        static_cast<double>(time.value()));
+        static_cast<double>(time.value()),
+        topology_.observe(mesh));
+}
+
+std::uint64_t FieldProgramSession::topologyGeneration() const noexcept {
+    return topology_.generation();
 }
 
 foamnordic::adapter::SolverExchangeSnapshot

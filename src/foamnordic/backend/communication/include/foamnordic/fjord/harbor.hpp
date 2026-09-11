@@ -57,6 +57,7 @@ struct HarborMessage {
     std::uint64_t exchange_index{0};
     std::uint32_t tensor_count{0};
     std::uint64_t payload_bytes{0};
+    std::uint64_t topology_generation{0};
 };
 
 struct PayloadAdmission {
@@ -91,7 +92,10 @@ public:
     [[nodiscard]] Tensor receive();
     [[nodiscard]] SessionHello connect_session(const SessionHello& offer);
     [[nodiscard]] SessionHello accept_session(const SessionHello& support);
-    void complete(std::uint64_t exchange_index, std::uint32_t tensor_count);
+    void complete(
+        std::uint64_t exchange_index,
+        std::uint32_t tensor_count,
+        std::uint64_t topology_generation = 0);
     void fail_exchange(std::uint64_t exchange_index);
     void shutdown();
     void offer_shared_memory(const std::string& name);
@@ -110,7 +114,8 @@ private:
         RuneKind kind,
         const SessionHello& session,
         std::uint64_t exchange_index = 0,
-        std::uint32_t tensor_count = 0);
+        std::uint32_t tensor_count = 0,
+        std::uint64_t topology_generation = 0);
     [[nodiscard]] RunePrefix receive_prefix();
     void wait_for_handshake();
 

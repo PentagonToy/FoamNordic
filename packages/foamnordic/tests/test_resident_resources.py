@@ -12,6 +12,7 @@ from bindnordic.models.runtime import (
 from foamnordic.core.native_plan import local_cpu_budget
 from foamnordic.execution.resident import (
     _parser,
+    run_program,
 )
 
 
@@ -69,3 +70,37 @@ def test_resident_cli_accepts_threads() -> None:
         ("unix:///tmp/model.sock", "model.fnom", "--threads", "12")
     )
     assert arguments.threads == 12
+
+
+@pytest.mark.parametrize("model_format", ("onnx", "table"))
+def test_grouped_native_backend_uses_native_worker(model_format, mocker) -> None:
+    manifest = {
+        "format": model_format,
+        "runtime": model_format,
+        "inputs": [("value", 1, "float64")],
+        "outputs": [("value", 1, "float64")],
+    }
+    mocker.patch(
+        "foamnordic.execution.resident._manifest",
+        return_value=manifest,
+    )
+    worker = mocker.patch(
+        "foamnordic.execution.resident._native.run_native_worker"
+    )
+    capacity = object()
+
+    assert run_program(
+        [
+            "unix:///tmp/model.sock",
+            "model.fnom",
+            "--threads",
+            "4",
+            "--ready-file",
+            "/tmp/model.ready",
+        ],
+        capacity,
+        configure_threads=False,
+    ) == 0
+
+    worker.assert_called_once()
+    assert worker.call_args.args[-1] is capacity
