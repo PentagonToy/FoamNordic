@@ -73,7 +73,8 @@ void CellInferenceExchange::begin(
     std::uint64_t exchange_index,
     double physical_time,
     std::uint64_t cell_count,
-    std::uint64_t solver_time_index) {
+    std::uint64_t solver_time_index,
+    std::uint64_t topology_generation) {
     if (state_ != ExchangeState::waiting && state_ != ExchangeState::completed) {
         throw std::logic_error("Model exchange cannot begin from its current state.");
     }
@@ -86,6 +87,7 @@ void CellInferenceExchange::begin(
     exchange_index_ = exchange_index;
     physical_time_ = physical_time;
     solver_time_index_ = solver_time_index;
+    topology_generation_ = topology_generation;
     cell_count_ = cell_count;
     inputs_.clear();
     predictions_.clear();
@@ -123,6 +125,7 @@ void CellInferenceExchange::validate_tensor(
     if ((!convertible && tensor.element != field.element)
         || tensor.time_index != exchange_index_
         || tensor.solver_time_index != solver_time_index_
+        || tensor.topology_generation != topology_generation_
         || tensor.shape.empty() || tensor.shape.front() != expected_cells
         || std::abs(tensor.physical_time - physical_time_) > 1.0e-12) {
         throw std::invalid_argument("Model tensor metadata does not match its exchange.");
@@ -229,6 +232,9 @@ std::uint64_t CellInferenceExchange::exchange_index() const noexcept { return ex
 double CellInferenceExchange::physical_time() const noexcept { return physical_time_; }
 std::uint64_t CellInferenceExchange::solver_time_index() const noexcept {
     return solver_time_index_;
+}
+std::uint64_t CellInferenceExchange::topology_generation() const noexcept {
+    return topology_generation_;
 }
 std::uint64_t CellInferenceExchange::cell_count() const noexcept { return cell_count_; }
 const TensorMap& CellInferenceExchange::inputs() const noexcept { return inputs_; }

@@ -198,10 +198,10 @@ fi
 [[ -s "$job_file" ]] || fail "Slurm proxy did not record the solver job"
 client_job=$(<"$job_file")
 client_log=${client_log/\%j/$client_job}
-[[ $(grep -Ec "Closure worker rank [0-9]+ data plane: UCX" "$host_log") \
+[[ $(grep -Ec "Model worker rank [0-9]+ data plane: UCX" "$host_log") \
         -eq "$ranks" ]] \
     || fail "not every solver rank negotiated UCX"
-[[ $(grep -c "Native closure runner stopped" "$host_log") -eq "$ranks" ]] \
+[[ $(grep -c "Native model runner stopped" "$host_log") -eq "$ranks" ]] \
     || fail "ModelHost did not reap every solver rank"
 grep -q "Selecting LES turbulence model kEqnFjord" "$client_log" \
     || fail "pimpleFoam did not select kEqnFjord"

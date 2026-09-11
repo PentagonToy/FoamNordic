@@ -215,6 +215,79 @@ void test_resident_worker_lifecycle() {
         "Resident worker left its Unix socket behind.");
 }
 
+void test_two_resident_workers_use_distinct_shared_memory() {
+    const auto root = std::filesystem::temp_directory_path();
+    const auto nonce = std::to_string(std::random_device{}());
+    const auto first_path = root / ("foamnordic-worker-a-" + nonce + ".sock");
+    const auto second_path = root / ("foamnordic-worker-b-" + nonce + ".sock");
+    const foamnordic::inference::ProgramContract contract{
+        "resident-affine",
+        {
+            {"a", foamnordic::fjord::Element::float64, 1},
+            {"b", foamnordic::fjord::Element::float64, 1},
+        },
+        {{"result", foamnordic::fjord::Element::float64, 1}},
+    };
+    foamnordic::inference::DenseAffineKernel first_affine(
+        2, 1, {2.0, -1.0}, {0.5});
+    foamnordic::inference::DenseAffineKernel second_affine(
+        2, 1, {2.0, -1.0}, {0.5});
+    const foamnordic::inference::ModelArtifact manifest{
+        foamnordic::inference::ModelFormat::onnx,
+        "reference.onnx",
+        contract,
+        {},
+        std::nullopt,
+        std::nullopt,
+    };
+    foamnordic::inference::ArtifactModelKernel first_kernel(
+        manifest, first_affine);
+    foamnordic::inference::ArtifactModelKernel second_kernel(
+        manifest, second_affine);
+    foamnordic::inference::EvaluateAllCells bypass;
+    foamnordic::inference::ModelWorker first(
+        foamnordic::fjord::FjordAddress::local(first_path.string()),
+        manifest,
+        bypass,
+        first_kernel);
+    foamnordic::inference::ModelWorker second(
+        foamnordic::fjord::FjordAddress::local(second_path.string()),
+        manifest,
+        bypass,
+        second_kernel);
+    std::exception_ptr first_failure;
+    std::exception_ptr second_failure;
+    std::thread first_thread([&] {
+        try {
+            first.run();
+        } catch (...) {
+            first_failure = std::current_exception();
+        }
+    });
+    std::thread second_thread([&] {
+        try {
+            second.run();
+        } catch (...) {
+            second_failure = std::current_exception();
+        }
+    });
+
+    auto first_client = connect_rank(first.address(), 0, 1);
+    auto second_client = connect_rank(second.address(), 0, 1);
+    verify_affine_exchange(first_client);
+    verify_affine_exchange(second_client);
+    first_client.shutdown();
+    second_client.shutdown();
+    first_thread.join();
+    second_thread.join();
+    if (first_failure) {
+        std::rethrow_exception(first_failure);
+    }
+    if (second_failure) {
+        std::rethrow_exception(second_failure);
+    }
+}
+
 void test_table_bundle_runs_through_resident_worker() {
     const auto root = std::filesystem::temp_directory_path();
     const auto nonce = std::to_string(std::random_device{}());
@@ -511,6 +584,7 @@ void test_resident_worker_upgrades_tcp_control_to_ucx() {
 
 int main() {
     test_resident_worker_lifecycle();
+    test_two_resident_workers_use_distinct_shared_memory();
     test_table_bundle_runs_through_resident_worker();
     test_one_resident_host_serves_multiple_solver_ranks();
     test_worker_rejects_an_empty_model_cpu_budget();

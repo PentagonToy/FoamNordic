@@ -28,6 +28,18 @@ if(FOAMNORDIC_RESIDENT_TOOLS)
     add_subdirectory(tools/resident)
 endif()
 
+add_custom_target(foamnordic_runtime_bundle
+    DEPENDS
+        foamnordic_adapter
+        foamnordic_inference
+        foamnordic-longship)
+if(FOAMNORDIC_RESIDENT_TOOLS)
+    add_dependencies(foamnordic_runtime_bundle foamnordic_model_worker)
+endif()
+if(FOAMNORDIC_ONNX_RUNTIME)
+    add_dependencies(foamnordic_runtime_bundle foamnordic_onnx_connector)
+endif()
+
 install(
     TARGETS
         foamnordic_runtime
@@ -52,6 +64,10 @@ install(
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/backend/adapter
     COMPONENT Development
     FILES_MATCHING PATTERN "*.hpp")
+install(
+    FILES src/foamnordic/backend/connectors/plugin.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/foamnordic/backend/connectors
+    COMPONENT Development)
 install(
     FILES
         src/foamnordic/openfoam/closureHook.H

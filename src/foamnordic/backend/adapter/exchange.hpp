@@ -80,12 +80,14 @@ public:
     [[nodiscard]] std::uint64_t execute(
         std::uint64_t time_index,
         double physical_time,
-        const MutableFieldMap& fields);
+        const MutableFieldMap& fields,
+        std::uint64_t topology_generation = 0);
     [[nodiscard]] std::uint64_t execute(
         std::uint64_t time_index,
         double physical_time,
         const InputFieldMap& inputs,
-        const OutputFieldMap& outputs);
+        const OutputFieldMap& outputs,
+        std::uint64_t topology_generation = 0);
     [[nodiscard]] SolverExchangeSnapshot profile_snapshot() const noexcept;
 
 private:

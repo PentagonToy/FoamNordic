@@ -364,6 +364,29 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
             else "not installed (optional without ONNX)",
         )
     )
+    connector = next(
+        (
+            path
+            for directory in ("lib", "lib64")
+            for name in (
+                "libfoamnordic_onnx_connector.dylib",
+                "libfoamnordic_onnx_connector.so",
+            )
+            if (path := runtime / directory / name).is_file()
+        ),
+        None,
+    )
+    checks.append(
+        (
+            "PASS"
+            if connector is not None
+            else ("FAIL" if model_host.is_file() else "WARN"),
+            "ONNX connector",
+            str(connector)
+            if connector is not None
+            else "not installed (optional without ONNX)",
+        )
+    )
     return checks
 
 
@@ -627,14 +650,6 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
         f"-DFOAMNORDIC_ONNX_RUNTIME={'ON' if onnxruntime else 'OFF'}",
         f"-DFOAMNORDIC_RESIDENT_TOOLS={'ON' if onnxruntime else 'OFF'}",
     ]
-    # Development installation always exports the inference core, including
-    # Smedja and non-ONNX kernels. Build it even when the optional ONNX-backed
-    # resident executable is disabled.
-    runtime_targets = [
-        "foamnordic_adapter",
-        "foamnordic_inference",
-        "foamnordic-longship",
-    ]
     if onnxruntime is not None:
         configure.extend(
             (
@@ -643,7 +658,6 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
                 f"-DFOAMNORDIC_ONNXRUNTIME_LIBRARY={onnxruntime.library}",
             )
         )
-        runtime_targets.append("foamnordic_model_worker")
     commands: list[tuple[str, list[str]]] = [
         (
             "Configure native SDK",
@@ -656,7 +670,7 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
                 "--build",
                 str(build_dir),
                 "--target",
-                *runtime_targets,
+                "foamnordic_runtime_bundle",
                 "--parallel",
                 str(args.jobs),
             ],
@@ -762,6 +776,18 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
             if not worker.is_file():
                 raise RuntimeError(
                     "native build completed without installing ModelHost"
+                )
+            connector_names = (
+                "libfoamnordic_onnx_connector.dylib",
+                "libfoamnordic_onnx_connector.so",
+            )
+            if not any(
+                (prefix / directory / name).is_file()
+                for directory in ("lib", "lib64")
+                for name in connector_names
+            ):
+                raise RuntimeError(
+                    "native build completed without installing the ONNX connector"
                 )
             print(
                 f"ONNX Runtime: {ONNXRUNTIME_VERSION} ({onnxruntime.source})",

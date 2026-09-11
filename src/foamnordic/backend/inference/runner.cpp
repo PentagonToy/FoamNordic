@@ -59,6 +59,7 @@ bool InferenceRunner::run_one() {
     bool announced = false;
     std::uint32_t announced_tensors = 0;
     std::uint64_t announced_payload_bytes = 0;
+    std::uint64_t announced_topology_generation = 0;
     std::uint32_t received_tensors = 0;
     std::uint64_t received_payload_bytes = 0;
     try {
@@ -97,6 +98,7 @@ bool InferenceRunner::run_one() {
                 announced = true;
                 announced_tensors = message.tensor_count;
                 announced_payload_bytes = message.payload_bytes;
+                announced_topology_generation = message.topology_generation;
                 if (receive_reservation) {
                     receive_reservation->acquire(announced_payload_bytes);
                     receive_reservation->seal();
@@ -108,11 +110,18 @@ bool InferenceRunner::run_one() {
                     throw std::runtime_error("Model input tensor is incomplete.");
                 }
                 if (!started) {
+                    if (announced
+                        && message.tensor->topology_generation
+                               != announced_topology_generation) {
+                        throw std::runtime_error(
+                            "Model request topology does not match its admission metadata.");
+                    }
                     exchange_.begin(
                         message.tensor->time_index,
                         message.tensor->physical_time,
                         message.tensor->shape.front(),
-                        message.tensor->solver_time_index);
+                        message.tensor->solver_time_index,
+                        message.tensor->topology_generation);
                     started = true;
                 }
                 received_payload_bytes += message.tensor->bytes.size();
@@ -123,6 +132,11 @@ bool InferenceRunner::run_one() {
             if (message.kind == fjord::RuneKind::complete) {
                 if (!started || message.exchange_index != exchange_.exchange_index()) {
                     throw std::runtime_error("Model completion marker does not match its batch.");
+                }
+                if (message.topology_generation
+                    != exchange_.topology_generation()) {
+                    throw std::runtime_error(
+                        "Model completion marker does not match its topology generation.");
                 }
                 if (message.tensor_count != received_tensors) {
                     throw std::runtime_error(
@@ -162,6 +176,7 @@ bool InferenceRunner::run_one() {
         for (auto& [name, tensor] : predictions) {
             (void)name;
             tensor.solver_time_index = exchange_.solver_time_index();
+            tensor.topology_generation = exchange_.topology_generation();
             exchange_.add_output(std::move(tensor));
         }
         exchange_.seal_outputs(bypass_);

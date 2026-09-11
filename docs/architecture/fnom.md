@@ -18,7 +18,7 @@ trained model ---> fno.Export.* ---> model.fnom
 
 | Backend | Execution |
 | --- | --- |
-| ONNX | native ONNX Runtime worker |
+| ONNX | native ONNX Runtime connector built by `foamnordic build` |
 | Compiled estimator | target-native cached library |
 | Native forest | checked data-only tree evaluator |
 | Regular-grid table | native multilinear interpolation |
@@ -26,6 +26,10 @@ trained model ---> fno.Export.* ---> model.fnom
 | Equinox | persistent JAX resident |
 
 Backend choice does not change solver bindings or the `Operator.model` API.
+
+### Tree-estimator guidance
+
+Prefer compiled estimators and native forests for small estimators or modest tree and boosting-iteration counts. Large compiled estimators can generate C++ whose compilation cost or memory use outweighs the inference benefit; native forests avoid compilation, but their execution cost still scales with model size. Joblib is the general compatibility choice and avoids generated C++ compilation, although its persistent Python execution can be slower. Benchmark representative workloads before selecting a production backend.
 
 ## Inspection and trust
 

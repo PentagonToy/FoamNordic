@@ -143,6 +143,7 @@ bool fjordExchange::exchange() {
         }
         const auto exchangeIndex = *selected;
         const auto physicalTime = static_cast<double>(mesh_.time().value());
+        const auto topologyGeneration = topology_.observe(mesh_);
         const auto exchangeStarted = std::chrono::steady_clock::now();
         foamnordic::adapter::InputFieldMap inputs;
         foamnordic::adapter::OutputFieldMap outputs;
@@ -167,6 +168,7 @@ bool fjordExchange::exchange() {
                     exchangeIndex,
                     physicalTime);
             view.name = key.c_str();
+            view.topology_generation = topologyGeneration;
             inputs.emplace(key.c_str(), std::move(view));
         }
         forAll(outputs_, index) {
@@ -182,6 +184,7 @@ bool fjordExchange::exchange() {
                     exchangeIndex,
                     physicalTime);
             view.name = key.c_str();
+            view.topology_generation = topologyGeneration;
             outputs.emplace(key.c_str(), std::move(view));
         }
         exchange_->execute(exchangeIndex, physicalTime, inputs, outputs);
@@ -196,7 +199,8 @@ bool fjordExchange::exchange() {
             const auto exchangeWait = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - exchangeStarted).count();
             observation_->publish(
-                mesh_, mesh_.time(), exchangeIndex, exchangeWait);
+                mesh_, mesh_.time(), exchangeIndex, topologyGeneration,
+                exchangeWait);
         }
         return true;
     } catch (const std::exception& error) {
@@ -210,6 +214,11 @@ bool fjordExchange::write() {
         return true;
     }
     return exchange();
+}
+
+void fjordExchange::updateMesh(const mapPolyMesh& map) {
+    fvMeshFunctionObject::updateMesh(map);
+    topology_.markChanged();
 }
 
 }  // namespace Foam::functionObjects

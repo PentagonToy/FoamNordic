@@ -3,6 +3,7 @@ EXE_INC = \
     -Wno-overloaded-virtual \
     -I$(LIB_SRC)/finiteVolume/lnInclude \
     -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(BINDNORDIC_SOURCE_DIR)/include \
     -I$(FOAMNORDIC_SOURCE)/src \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/openfoam \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/openfoam/operations \

@@ -5,13 +5,15 @@ import os
 import re
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from foamnordic.core.managed import generated_kind, mark_generated
 from foamnordic.core.native_plan import available as native_available
-from foamnordic.execution.host_group import main as run_host_group
 from foamnordic.execution.launch import _openfoam_library, _submission_environment
+from foamnordic.execution.host_group import main as run_host_group
 from foamnordic.execution.run import _launch_process, _longship_executable
 
 import foamnordic as fno
@@ -34,36 +36,140 @@ def write_mesh(case: Path) -> None:
         (mesh / name).write_text("fixture\n", encoding="utf-8")
 
 
-def test_multiple_workers_publish_one_group_readiness_marker() -> None:
+def test_multiple_programs_run_in_one_model_host_process(monkeypatch) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         aggregate = root / "all.ready"
-        commands = []
-        ready_files = []
-        for index in range(2):
-            ready = root / f"worker-{index}.ready"
-            ready_files.append(str(ready))
-            script = (
-                "from pathlib import Path; import time; "
-                f"Path({str(ready)!r}).touch(); "
-                f"aggregate=Path({str(aggregate)!r}); "
-                "\nwhile not aggregate.exists(): time.sleep(0.01)"
-            )
-            commands.append([sys.executable, "-c", script])
+        ready_files = [root / "first.ready", root / "second.ready"]
         configuration = root / "group.json"
         configuration.write_text(
             json.dumps(
                 {
-                    "commands": commands,
-                    "ready_files": ready_files,
+                    "programs": [
+                        ["first", "--ready-file", str(ready_files[0])],
+                        ["second", "--ready-file", str(ready_files[1])],
+                    ],
+                    "capacity_units": 4,
+                    "ready_files": [str(path) for path in ready_files],
+                    "aggregate_ready": str(aggregate),
+                    "connector_plugins": [str(root / "connector.so")],
+                }
+            ),
+            encoding="utf-8",
+        )
+        capacity = object()
+        seen: list[tuple[int, object, str]] = []
+        loaded: list[str] = []
+
+        def serve(arguments, shared_capacity, *, configure_threads) -> int:
+            assert configure_threads is False
+            ready = Path(arguments[arguments.index("--ready-file") + 1])
+            ready.touch()
+            seen.append((os.getpid(), shared_capacity, arguments[0]))
+            while not aggregate.exists():
+                import time
+
+                time.sleep(0.001)
+            return 0
+
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group._native._ExecutionCapacity",
+            lambda _units: capacity,
+        )
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group.run_program", serve
+        )
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group._configure_model_threads",
+            lambda units: units,
+        )
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group._native._load_connector_plugin",
+            loaded.append,
+        )
+
+        assert run_host_group(str(configuration)) == 0
+        assert sorted(name for _, _, name in seen) == ["first", "second"]
+        assert {pid for pid, _, _ in seen} == {os.getpid()}
+        assert all(shared is capacity for _, shared, _ in seen)
+        assert loaded == [str(root / "connector.so")]
+        assert not aggregate.exists()
+        assert all(not path.exists() for path in ready_files)
+
+
+@pytest.mark.parametrize("fail_after_readiness", (False, True))
+def test_grouped_program_failure_cleans_all_local_endpoints(
+    monkeypatch, fail_after_readiness
+) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        aggregate = root / "all.ready"
+        ready_files = [root / "first.ready", root / "second.ready"]
+        sockets = [root / "first.sock", root / "second.sock"]
+        configuration = root / "group.json"
+        configuration.write_text(
+            json.dumps(
+                {
+                    "programs": [
+                        [
+                            f"unix://{sockets[0]}",
+                            "--ready-file",
+                            str(ready_files[0]),
+                        ],
+                        [
+                            f"unix://{sockets[1]}",
+                            "--ready-file",
+                            str(ready_files[1]),
+                        ],
+                    ],
+                    "capacity_units": 1,
+                    "ready_files": [str(path) for path in ready_files],
                     "aggregate_ready": str(aggregate),
                 }
             ),
             encoding="utf-8",
         )
-        assert run_host_group(str(configuration)) == 0
+        release = threading.Event()
+        first_ready = threading.Event()
+
+        def serve(arguments, _capacity, *, configure_threads):
+            assert configure_threads is False
+            ready = Path(arguments[arguments.index("--ready-file") + 1])
+            socket = Path(arguments[0].removeprefix("unix://"))
+            ready.touch()
+            socket.touch()
+            if ready == ready_files[0]:
+                first_ready.set()
+                release.wait(1)
+                return 0
+            first_ready.wait(1)
+            if fail_after_readiness:
+                time.sleep(0.05)
+            raise RuntimeError("expected grouped failure")
+
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group._native._ExecutionCapacity",
+            lambda _units: object(),
+        )
+        monkeypatch.setattr("foamnordic.execution.host_group.run_program", serve)
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group._configure_model_threads",
+            lambda units: units,
+        )
+        monkeypatch.setattr(
+            "foamnordic.execution.host_group.os._exit",
+            lambda status: (_ for _ in ()).throw(SystemExit(status)),
+        )
+
+        try:
+            with pytest.raises(SystemExit) as stopped:
+                run_host_group(str(configuration))
+        finally:
+            release.set()
+
+        assert stopped.value.code == 1
         assert not aggregate.exists()
-        assert all(not Path(path).exists() for path in ready_files)
+        assert all(not path.exists() for path in (*ready_files, *sockets))
 
 
 def test_slurm_identity_and_timing_are_finalized_after_completion() -> None:

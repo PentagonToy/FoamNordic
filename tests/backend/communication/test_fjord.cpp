@@ -57,7 +57,7 @@ void test_rune_codec() {
     const std::array<double, 6> values{0.5, 1.5, 2.5, 3.5, 4.5, 5.5};
     const TensorView original{
         "U", Element::float64, {2, 3}, foamnordic::fjord::as_bytes(std::span(values)),
-        17, 0.125, 9};
+        17, 0.125, 9, 12};
 
     const auto frame = foamnordic::fjord::encode_tensor(original);
     const auto decoded = foamnordic::fjord::decode_tensor(frame);
@@ -71,6 +71,9 @@ void test_rune_codec() {
     require(
         decoded.solver_time_index == 9,
         "Rune did not preserve the solver time index.");
+    require(
+        decoded.topology_generation == 12,
+        "Rune did not preserve the topology generation.");
     require(
         std::abs(decoded.physical_time - 0.125) < 1.0e-15,
         "Rune did not preserve physical time.");

@@ -15,6 +15,7 @@
 
 #include "Time.H"
 #include "dictionary.H"
+#include "fvMesh.H"
 #include "string.H"
 #include "word.H"
 
@@ -41,9 +42,26 @@ void writeSolverTelemetry(
     const word& program,
     const foamnordic::adapter::SolverExchangeSnapshot& snapshot);
 
+class MeshTopologySequence final {
+    string facesInstance_;
+    label cells_{-1};
+    label faces_{-1};
+    label points_{-1};
+    std::uint64_t generation_{0};
+    bool initialised_{false};
+    bool wasChanging_{false};
+    bool explicitlyChanged_{false};
+
+public:
+    [[nodiscard]] std::uint64_t observe(const fvMesh& mesh);
+    void markChanged() noexcept;
+    [[nodiscard]] std::uint64_t generation() const noexcept;
+};
+
 class FieldProgramSession final {
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::FieldProgramPort> port_;
+    MeshTopologySequence topology_;
 
 public:
     FieldProgramSession(
@@ -55,7 +73,9 @@ public:
     FieldProgramSession& operator=(const FieldProgramSession&) = delete;
 
     [[nodiscard]] foamnordic::adapter::FieldInvocation begin(
+        const fvMesh& mesh,
         const Time& time);
+    [[nodiscard]] std::uint64_t topologyGeneration() const noexcept;
 
     [[nodiscard]] foamnordic::adapter::SolverExchangeSnapshot
     profileSnapshot() const noexcept;

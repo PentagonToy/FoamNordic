@@ -546,6 +546,29 @@ void test_smedja_packs_contiguous_and_sparse_cell_ranges() {
         sparse_values,
         {10.0, 30.0, 50.0},
         "Smedja sparse gather packing changed field values.");
+
+    foamnordic::inference::SmedjaWorkspace workspace;
+    const auto& validated_contiguous = smedja.pack_validated_into(
+        workspace, inputs, {1, 2, 3}, 22, 0.4);
+    std::memcpy(
+        contiguous_values.data(),
+        validated_contiguous.bytes.data(),
+        validated_contiguous.bytes.size());
+    require_close(
+        contiguous_values,
+        {20.0, 30.0, 40.0},
+        "Smedja changed a validated contiguous cell range.");
+
+    const auto& validated_sparse = smedja.pack_validated_into(
+        workspace, inputs, {0, 2, 4}, 23, 0.5);
+    std::memcpy(
+        sparse_values.data(),
+        validated_sparse.bytes.data(),
+        validated_sparse.bytes.size());
+    require_close(
+        sparse_values,
+        {10.0, 30.0, 50.0},
+        "Smedja changed a validated sparse cell selection.");
 }
 
 void test_smedja_fuses_float_input_conversion_with_packing() {
@@ -946,8 +969,9 @@ public:
     }
 
     [[nodiscard]] std::unique_ptr<foamnordic::inference::PackedModelKernel> load(
-        const std::filesystem::path& /*payload*/,
-        const foamnordic::inference::ModelArtifact& /*artifact*/) const override {
+        std::span<const std::byte> /*payload*/,
+        const foamnordic::inference::ModelArtifact& /*artifact*/,
+        std::uint32_t /*threads*/) const override {
         return std::make_unique<LoadedProbeKernel>();
     }
 };

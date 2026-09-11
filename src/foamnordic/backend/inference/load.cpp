@@ -141,8 +141,23 @@ LoadedModel load_model(
     } else
 #endif
     {
-        packed = foamnordic::backend::connect_model(
-            resolve_artifact(manifest_path, artifact.artifact_path), artifact);
+        std::vector<std::byte> data;
+        if (is_bundle(manifest_path)) {
+            data = read_bundle_payload(manifest_path);
+        } else {
+            std::ifstream stream(
+                resolve_artifact(manifest_path, artifact.artifact_path),
+                std::ios::binary | std::ios::ate);
+            if (!stream || stream.tellg() < 0) {
+                throw std::runtime_error("Cannot read model connector payload.");
+            }
+            data.resize(static_cast<std::size_t>(stream.tellg()));
+            stream.seekg(0);
+            if (!stream.read(reinterpret_cast<char*>(data.data()), data.size())) {
+                throw std::runtime_error("Truncated model connector payload.");
+            }
+        }
+        packed = foamnordic::backend::connect_model(data, artifact, options.threads);
     }
 
     auto kernel = std::make_unique<OwnedArtifactKernel>(

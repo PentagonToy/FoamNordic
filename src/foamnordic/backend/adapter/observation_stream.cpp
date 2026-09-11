@@ -27,8 +27,8 @@ namespace {
 
 constexpr std::array<std::byte, 4> mark{
     std::byte{'F'}, std::byte{'N'}, std::byte{'O'}, std::byte{'B'}};
-constexpr std::uint16_t version = 2;
-constexpr std::size_t header_size = 48;
+constexpr std::uint16_t version = 3;
+constexpr std::size_t header_size = 56;
 constexpr std::size_t field_size = 48;
 constexpr std::uint64_t maximum_frame = 16U * 1024U * 1024U;
 
@@ -75,12 +75,13 @@ template <class Integer>
     write_integer<std::uint32_t>(
         frame, 8, static_cast<std::uint32_t>(record.fields.size()));
     write_integer<std::uint64_t>(frame, 16, record.exchange_index);
+    write_integer<std::uint64_t>(frame, 24, record.topology_generation);
     write_integer<std::uint64_t>(
-        frame, 24, std::bit_cast<std::uint64_t>(record.physical_time));
+        frame, 32, std::bit_cast<std::uint64_t>(record.physical_time));
     write_integer<std::uint64_t>(
-        frame, 32, std::bit_cast<std::uint64_t>(record.model_wait));
+        frame, 40, std::bit_cast<std::uint64_t>(record.model_wait));
     write_integer<std::uint64_t>(
-        frame, 40, std::bit_cast<std::uint64_t>(record.evaluate));
+        frame, 48, std::bit_cast<std::uint64_t>(record.evaluate));
     std::size_t offset = header_size;
     for (const auto& field : record.fields) {
         write_integer<std::uint32_t>(
@@ -111,12 +112,13 @@ template <class Integer>
     ObservationRecord record;
     const auto count = read_integer<std::uint32_t>(frame, 8);
     record.exchange_index = read_integer<std::uint64_t>(frame, 16);
+    record.topology_generation = read_integer<std::uint64_t>(frame, 24);
     record.physical_time = std::bit_cast<double>(
-        read_integer<std::uint64_t>(frame, 24));
-    record.model_wait = std::bit_cast<double>(
         read_integer<std::uint64_t>(frame, 32));
-    record.evaluate = std::bit_cast<double>(
+    record.model_wait = std::bit_cast<double>(
         read_integer<std::uint64_t>(frame, 40));
+    record.evaluate = std::bit_cast<double>(
+        read_integer<std::uint64_t>(frame, 48));
     record.fields.reserve(count);
     std::size_t offset = header_size;
     for (std::uint32_t index = 0; index < count; ++index) {

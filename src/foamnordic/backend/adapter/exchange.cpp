@@ -137,7 +137,8 @@ BlockingFieldExchange::BlockingFieldExchange(
 std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
     double physical_time,
-    const MutableFieldMap& fields) {
+    const MutableFieldMap& fields,
+    std::uint64_t topology_generation) {
     const auto exchange_index = sequence_.next(time_index);
     if (!exchange_index) {
         throw std::logic_error(
@@ -149,6 +150,7 @@ std::uint64_t BlockingFieldExchange::execute(
         field.time_index = *exchange_index;
         field.physical_time = physical_time;
         field.solver_time_index = time_index;
+        field.topology_generation = topology_generation;
     }
     exchange_.execute(*exchange_index, physical_time, rebound);
     return *exchange_index;
@@ -198,6 +200,8 @@ void AtomicFieldExchange::execute(
         if (input.time_index != exchange_index
             || input.solver_time_index
                    != input_fields.begin()->second.solver_time_index
+            || input.topology_generation
+                   != input_fields.begin()->second.topology_generation
             || std::abs(input.physical_time - physical_time) > 1.0e-12) {
             throw std::invalid_argument(
                 "FoamNordic input field metadata is out of sync: " + name);
@@ -225,6 +229,8 @@ void AtomicFieldExchange::execute(
             if (!message.tensor || message.tensor->time_index != exchange_index
                 || message.tensor->solver_time_index
                        != input_fields.begin()->second.solver_time_index
+                || message.tensor->topology_generation
+                       != input_fields.begin()->second.topology_generation
                 || std::abs(
                        message.tensor->physical_time - physical_time)
                        > 1.0e-12
@@ -242,6 +248,8 @@ void AtomicFieldExchange::execute(
         }
         if (message.kind != fjord::RuneKind::complete
             || message.exchange_index != exchange_index
+            || message.topology_generation
+                   != input_fields.begin()->second.topology_generation
             || message.tensor_count != prepared.size()
             || prepared.size() != contract_.outputs.size()) {
             throw std::runtime_error(
@@ -266,6 +274,8 @@ void AtomicFieldExchange::execute(
         if (destination.time_index != exchange_index
             || destination.solver_time_index
                    != input_fields.begin()->second.solver_time_index
+            || destination.topology_generation
+                   != input_fields.begin()->second.topology_generation
             || std::abs(destination.physical_time - physical_time) > 1.0e-12) {
             throw std::invalid_argument(
                 "FoamNordic output field metadata is out of sync: " + name);
@@ -325,7 +335,8 @@ std::uint64_t BlockingFieldExchange::execute(
     std::uint64_t time_index,
     double physical_time,
     const InputFieldMap& inputs,
-    const OutputFieldMap& outputs) {
+    const OutputFieldMap& outputs,
+    std::uint64_t topology_generation) {
     const auto exchange_index = sequence_.next(time_index);
     if (!exchange_index) {
         throw std::logic_error(
@@ -337,6 +348,7 @@ std::uint64_t BlockingFieldExchange::execute(
         field.time_index = *exchange_index;
         field.physical_time = physical_time;
         field.solver_time_index = time_index;
+        field.topology_generation = topology_generation;
     }
     auto rebound_outputs = outputs;
     for (auto& [name, field] : rebound_outputs) {
@@ -344,6 +356,7 @@ std::uint64_t BlockingFieldExchange::execute(
         field.time_index = *exchange_index;
         field.physical_time = physical_time;
         field.solver_time_index = time_index;
+        field.topology_generation = topology_generation;
     }
     exchange_.execute(
         *exchange_index,

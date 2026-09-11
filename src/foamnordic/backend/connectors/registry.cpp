@@ -59,13 +59,14 @@ void register_connector(std::unique_ptr<ModelConnector> connector) {
 }
 
 std::unique_ptr<inference::PackedModelKernel> connect_model(
-    const std::filesystem::path& payload,
-    const inference::ModelArtifact& artifact) {
+    std::span<const std::byte> payload,
+    const inference::ModelArtifact& artifact,
+    std::uint32_t threads) {
     auto& value = registry();
     std::scoped_lock lock(value.mutex);
     for (const auto& connector : value.connectors) {
         if (connector->supports(artifact.format)) {
-            return connector->load(payload, artifact);
+            return connector->load(payload, artifact, threads);
         }
     }
     throw std::runtime_error(

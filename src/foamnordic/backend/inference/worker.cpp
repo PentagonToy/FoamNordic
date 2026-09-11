@@ -12,6 +12,7 @@
 #include "foamnordic/backend/inference/worker.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 #include <mutex>
 #include <stdexcept>
@@ -32,6 +33,8 @@
 
 namespace foamnordic::inference {
 namespace {
+
+std::atomic<std::uint64_t> shared_memory_sequence{0};
 
 fjord::FjordListener make_listener(const fjord::FjordAddress& address) {
     if (address.kind == fjord::FjordKind::unix_socket) {
@@ -259,6 +262,8 @@ void ModelWorker::run() {
             const auto shared_memory_name =
                 std::string("/fnc-")
                 + std::to_string(static_cast<long long>(::getpid())) + '-'
+                + std::to_string(shared_memory_sequence.fetch_add(
+                    1, std::memory_order_relaxed)) + '-'
                 + std::to_string(session.session_id) + '-'
                 + std::to_string(session.rank);
             harbor->offer_shared_memory(shared_memory_name);

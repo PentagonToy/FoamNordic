@@ -12,6 +12,7 @@ Supported stored-field layouts include scalar, vector, symmetric tensor, tensor,
 - Logical model port names are separate from OpenFOAM field names.
 - Shapes and dimensions are validated before launch and again at exchange.
 - Field storage is resolved for every invocation; mesh-owned pointers are not retained across topology or storage changes.
+- Each solver adapter owns a monotonic topology generation. A changed mesh instance, cell/face/point count, topology-changing transition, or explicit mesh-update callback advances it; requests and responses must retain that exact generation.
 - Patch selection is explicit and does not imply whole-field correction.
 - Multiple writers may not target the same field at the same solver stage.
 

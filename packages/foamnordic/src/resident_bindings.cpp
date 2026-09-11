@@ -37,6 +37,7 @@
 #include "foamnordic/backend/inference/compiled.hpp"
 #include "foamnordic/backend/inference/load.hpp"
 #include "foamnordic/backend/inference/forest.hpp"
+#include "foamnordic/backend/connectors/plugin.hpp"
 #include "foamnordic/fjord/endpoint.hpp"
 
 namespace nb = nanobind;
@@ -173,9 +174,23 @@ private:
     std::filesystem::path path_;
 };
 
+class SharedExecutionCapacity {
+public:
+    explicit SharedExecutionCapacity(std::uint32_t units)
+        : pool(std::make_shared<
+               foamnordic::inference::ExecutionCapacityPool>(units)) {}
+
+    std::shared_ptr<foamnordic::inference::ExecutionCapacityPool> pool;
+};
+
 }  // namespace
 
 void bind_resident(nb::module_& module) {
+    module.def("_load_connector_plugin", [](const std::string& path) {
+        foamnordic::backend::load_connector_plugin(path);
+    });
+    nb::class_<SharedExecutionCapacity>(module, "_ExecutionCapacity")
+        .def(nb::init<std::uint32_t>(), "units"_a);
     module.def("_evaluate_native_model", [](const std::string& manifest,
         const std::string& library, nb::bytes data, std::uint64_t rows,
         std::uint64_t columns, std::uint32_t threads) {
@@ -195,7 +210,7 @@ void bind_resident(nb::module_& module) {
         const std::string& manifest, std::uint32_t connections,
         const std::string& ready_file, bool shared_memory, std::uint32_t threads,
         std::uint64_t receive_bytes, std::uint64_t profile_every,
-        const std::string& program) {
+        const std::string& program, SharedExecutionCapacity* capacity) {
         using namespace foamnordic::inference;
         WorkerOptions options;
         options.connections = connections; options.model_threads = threads;
@@ -203,7 +218,22 @@ void bind_resident(nb::module_& module) {
         options.profile_every = profile_every;
         options.program = program;
         EvaluateAllCells bypass;
-        ModelWorker worker(foamnordic::fjord::FjordAddress::parse(address), manifest, bypass, options);
+        auto shared = capacity == nullptr
+                          ? std::make_shared<ExecutionCapacityPool>(threads)
+                          : capacity->pool;
+        auto loaded = load_model(
+            manifest,
+            {
+                threads,
+                std::min(connections, threads),
+                options.maximum_working_bytes,
+                profile_every,
+                std::move(shared),
+                threads,
+            });
+        ModelWorker worker(
+            foamnordic::fjord::FjordAddress::parse(address),
+            std::move(loaded.artifact), bypass, *loaded.kernel, options);
         ReadyMarker ready(ready_file);
         nb::gil_scoped_release release;
         worker.run();
@@ -212,7 +242,8 @@ void bind_resident(nb::module_& module) {
         const std::string& manifest, const std::string& library,
         std::uint32_t connections, const std::string& ready_file,
         bool shared_memory, std::uint32_t threads, std::uint64_t receive_bytes,
-        std::uint64_t profile_every, const std::string& program) {
+        std::uint64_t profile_every, const std::string& program,
+        SharedExecutionCapacity* capacity) {
         using namespace foamnordic::inference;
         auto artifact = read_manifest(manifest);
         if (artifact.format != ModelFormat::compiled)
@@ -225,10 +256,12 @@ void bind_resident(nb::module_& module) {
         options.profile_every = profile_every;
         options.program = program;
         CompiledKernel packed(library, threads);
-        auto capacity = std::make_shared<ExecutionCapacityPool>(threads);
+        auto shared = capacity == nullptr
+                          ? std::make_shared<ExecutionCapacityPool>(threads)
+                          : capacity->pool;
         ArtifactModelKernel kernel(artifact, packed,
             {std::min(connections, threads), options.maximum_working_bytes,
-             profile_every, std::move(capacity), threads});
+             profile_every, std::move(shared), threads});
         EvaluateAllCells bypass;
         ModelWorker worker(foamnordic::fjord::FjordAddress::parse(address), artifact,
             bypass, kernel, options);
@@ -247,7 +280,8 @@ void bind_resident(nb::module_& module) {
            std::uint32_t model_threads,
            std::uint64_t maximum_receive_bytes,
            std::uint64_t profile_every,
-           const std::string& program) {
+           const std::string& program,
+           SharedExecutionCapacity* capacity) {
             auto artifact = foamnordic::inference::read_manifest(manifest_path);
             if (artifact.format == foamnordic::inference::ModelFormat::onnx) {
                 throw std::invalid_argument(
@@ -261,8 +295,11 @@ void bind_resident(nb::module_& module) {
             options.profile_every = profile_every;
             options.program = program;
             PythonPackedKernel packed(std::move(evaluator), output_width(artifact));
-            auto capacity = std::make_shared<
-                foamnordic::inference::ExecutionCapacityPool>(model_threads);
+            auto shared = capacity == nullptr
+                              ? std::make_shared<
+                                    foamnordic::inference::ExecutionCapacityPool>(
+                                    model_threads)
+                              : capacity->pool;
             foamnordic::inference::ArtifactModelKernel kernel(
                 artifact,
                 packed,
@@ -270,7 +307,7 @@ void bind_resident(nb::module_& module) {
                     std::min(connections, model_threads),
                     options.maximum_working_bytes,
                     profile_every,
-                    std::move(capacity),
+                    std::move(shared),
                     model_threads,
                 });
             foamnordic::inference::EvaluateAllCells bypass;
@@ -298,5 +335,6 @@ void bind_resident(nb::module_& module) {
         "maximum_receive_bytes"_a = 16ULL * 1024ULL * 1024ULL * 1024ULL,
         "profile_every"_a = 0,
         "program"_a = "model",
+        "capacity"_a = nb::none(),
         "Run a managed Python model behind the native Fjord worker.");
 }
