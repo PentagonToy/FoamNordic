@@ -297,6 +297,7 @@ nb::dict manifest_dict(const foamnordic::inference::ModelArtifact& artifact) {
     result["runtime"] = artifact.runtime.empty()
                             ? nb::object(nb::none())
                             : nb::cast(artifact.runtime);
+    result["input_format"] = artifact.input_format;
     return result;
 }
 
@@ -310,7 +311,8 @@ foamnordic::inference::ModelArtifact make_artifact(
     const std::vector<Leaf>& tree_leaves,
     nb::object x_scaler,
     nb::object y_scaler,
-    const std::string& runtime) {
+    const std::string& runtime,
+    const std::string& input_format) {
     const auto value_type = element(dtype);
     return {
         format(model_format),
@@ -320,6 +322,7 @@ foamnordic::inference::ModelArtifact make_artifact(
         create_cpp_scaler(std::move(x_scaler), feature_count(inputs)),
         create_cpp_scaler(std::move(y_scaler), feature_count(outputs)),
         runtime,
+        input_format,
     };
 }
 
@@ -338,7 +341,8 @@ void bind_artifacts(nb::module_& module) {
            const std::vector<Leaf>& tree_leaves,
            nb::object x_scaler,
            nb::object y_scaler,
-           const std::string& runtime) {
+           const std::string& runtime,
+           const std::string& input_format) {
             foamnordic::inference::write_bundle(
                 manifest_path,
                 make_artifact(
@@ -351,7 +355,8 @@ void bind_artifacts(nb::module_& module) {
                     tree_leaves,
                     std::move(x_scaler),
                     std::move(y_scaler),
-                    runtime),
+                    runtime,
+                    input_format),
                 payload_path);
         },
         "manifest_path"_a,
@@ -365,6 +370,7 @@ void bind_artifacts(nb::module_& module) {
         "x_scaler"_a = nb::none(),
         "y_scaler"_a = nb::none(),
         "runtime"_a = "",
+        "input_format"_a = "numpy",
         "Write one self-contained, uncompressed FNOM model bundle.");
 
     module.def(

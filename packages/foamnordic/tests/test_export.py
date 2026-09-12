@@ -218,6 +218,37 @@ def test_sklearnex_runtime_is_stored_in_fnom() -> None:
 @pytest.mark.skipif(
     not native_available(), reason="nanobind extension is not installed"
 )
+def test_sklearn_input_format_is_stored_in_fnom() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        manifest = fno.export.sklearn(
+            _LinearPrediction(),
+            path=Path(directory) / "named.fnom",
+            inputs={
+                "first": fno.Tensor.scalar(),
+                "second": fno.Tensor.scalar(),
+            },
+            outputs={"prediction": fno.Tensor.scalar()},
+            input_format="pandas",
+        )
+        metadata = fno._native.read_model_manifest(str(manifest))
+    assert metadata["input_format"] == "pandas"
+
+
+def test_named_sklearn_input_format_rejects_vector_ports() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        with pytest.raises(ValueError, match="require scalar input ports"):
+            fno.export.sklearn(
+                _LinearPrediction(),
+                path=Path(directory) / "named.fnom",
+                inputs={"features": fno.Tensor.vector(components=2)},
+                outputs={"prediction": fno.Tensor.scalar()},
+                input_format="pandas",
+            )
+
+
+@pytest.mark.skipif(
+    not native_available(), reason="nanobind extension is not installed"
+)
 def test_existing_onnx_payload_exports_self_contained_bundle() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -255,6 +286,7 @@ def test_models_load_exposes_read_only_fnom_contract() -> None:
     assert artifact.backend == "onnx"
     assert artifact.inputs[0].name == "c"
     assert artifact.outputs[0].name == "omega_c"
+    assert artifact.input_format == "numpy"
     assert artifact.payload_size == len(b"onnx-payload")
     assert "FnomArtifact" in dir(fno.Models)
 

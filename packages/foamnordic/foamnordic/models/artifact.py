@@ -31,6 +31,7 @@ class FnomArtifact:
     bundled: bool
     payload_offset: int | None
     payload_size: int | None
+    input_format: str = "numpy"
 
     @property
     def backend(self) -> str:
@@ -80,6 +81,7 @@ def load(path: str | Path) -> FnomArtifact:
         inputs=tuple(TensorContract(value.name, value.components, value.dtype) for value in artifact.inputs),
         outputs=tuple(TensorContract(value.name, value.components, value.dtype) for value in artifact.outputs),
         runtime=artifact.runtime,
+        input_format=artifact.input_format,
         input_scaler=None if artifact.input_scaler is None else artifact.input_scaler.kind,
         output_scaler=None if artifact.output_scaler is None else artifact.output_scaler.kind,
         bundled=True,

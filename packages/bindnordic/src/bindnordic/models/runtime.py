@@ -207,8 +207,14 @@ def joblib_evaluator(
     runtime: str = "sklearn",
     threads: int = 1,
     *,
+    input_names: tuple[str, ...] | None = None,
+    input_format: str = "numpy",
     object_evaluator: Callable[[object], Callable[..., object] | None] | None = None,
 ):
+    if input_format not in {"numpy", "pandas", "polars"}:
+        raise ValueError("model input format must be numpy, pandas, or polars")
+    if input_format != "numpy" and not input_names:
+        raise ValueError("named model input formats require input names")
     threads = configure_model_threads(threads)
     _activate_joblib_runtime(runtime)
     try:
@@ -252,6 +258,22 @@ def joblib_evaluator(
     ):
         del _threadpool_limiter, _payload_storage, _payload_mode
         features = np.frombuffer(buffer, dtype=dtype).reshape(rows, columns)
+        if input_format == "pandas":
+            try:
+                import pandas as pd
+            except ImportError as error:
+                raise ImportError(
+                    "pandas is required by this FNOM model input format"
+                ) from error
+            features = pd.DataFrame(features, columns=input_names, copy=False)
+        elif input_format == "polars":
+            try:
+                import polars as pl
+            except ImportError as error:
+                raise ImportError(
+                    "Polars is required by this FNOM model input format"
+                ) from error
+            features = pl.DataFrame(features, schema=input_names, orient="row")
         return packed_result(function(features), outputs, rows, dtype)
 
     evaluate.bindnordic_payload_mode = payload_mode

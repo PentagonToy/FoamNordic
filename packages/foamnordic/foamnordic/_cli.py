@@ -935,6 +935,7 @@ def _inspect_fnom(args: argparse.Namespace, stream: TextIO) -> int:
         ("Backend", artifact.backend),
         ("Trust", artifact.trust_policy),
         ("Runtime", artifact.runtime or "default"),
+        ("Input format", artifact.input_format),
         ("Inputs", inputs),
         ("Outputs", outputs),
         ("Scalers", scalers),

@@ -390,6 +390,7 @@ std::vector<std::byte> encode_manifest(const ModelArtifact& artifact) {
         writer.u64(leaf.byte_count);
     }
     writer.string(artifact.runtime);
+    writer.string(artifact.input_format);
     return std::move(writer).finish();
 }
 
@@ -431,6 +432,7 @@ ModelArtifact decode_manifest(std::span<const std::byte> bytes) {
         artifact.tree_leaves.push_back(std::move(leaf));
     }
     artifact.runtime = reader.string();
+    artifact.input_format = reader.empty() ? "numpy" : reader.string();
     if (!reader.empty()) {
         throw std::invalid_argument("Manifest contains trailing data.");
     }

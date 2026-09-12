@@ -180,6 +180,7 @@ def _manifest_contract(
     x_scaler: object | None = None,
     y_scaler: object | None = None,
     runtime: str | None = None,
+    input_format: str = "numpy",
 ) -> str:
     input_contract = _contracts(inputs, "inputs")
     output_contract = _contracts(outputs, "outputs")
@@ -199,6 +200,7 @@ def _manifest_contract(
         x_scaler=x_scaler,
         y_scaler=y_scaler,
         runtime=runtime,
+        input_format=input_format,
     )
     return dtype
 
@@ -227,6 +229,7 @@ def _joblib(
     x_scaler: object | None = None,
     y_scaler: object | None = None,
     runtime: str = "sklearn",
+    input_format: str = "numpy",
     verbose: bool = False,
 ) -> Path:
     """Export one Joblib model with an explicit resident execution runtime."""
@@ -235,6 +238,14 @@ def _joblib(
         raise TypeError("verbose must be a boolean")
     if runtime not in {"sklearn", "sklearnex"}:
         raise ValueError("Joblib runtime must be 'sklearn' or 'sklearnex'")
+    if input_format not in {"numpy", "pandas", "polars"}:
+        raise ValueError("input_format must be 'numpy', 'pandas', or 'polars'")
+    if input_format != "numpy" and any(
+        tensor.components != 1 for tensor in inputs.values()
+    ):
+        raise ValueError(
+            "pandas and polars input formats currently require scalar input ports"
+        )
     manifest, payload, default_name = _destination(path, ".joblib")
     model_name = require_nonempty(name or default_name, "model name")
     temporary = _temporary_for(payload)
@@ -252,6 +263,7 @@ def _joblib(
             x_scaler=x_scaler,
             y_scaler=y_scaler,
             runtime=runtime,
+            input_format=input_format,
         )
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -341,6 +353,7 @@ def sklearn(
     y_scaler: object | None = None,
     backend: str = "auto",
     runtime: str = "sklearn",
+    input_format: str = "numpy",
     verbose: bool = False,
 ) -> Path:
     """Export a fitted sklearn-compatible estimator into one FNOM artifact."""
@@ -349,9 +362,15 @@ def sklearn(
         raise ValueError("sklearn backend must be 'auto', 'compiled', 'forest', or 'joblib'")
     if runtime not in {"sklearn", "sklearnex"}:
         raise ValueError("sklearn Joblib runtime must be 'sklearn' or 'sklearnex'")
+    if input_format not in {"numpy", "pandas", "polars"}:
+        raise ValueError("input_format must be 'numpy', 'pandas', or 'polars'")
     from bindnordic.models.compiled import supports
 
-    selected = "compiled" if backend == "auto" and supports(model) else backend
+    selected = (
+        "compiled"
+        if backend == "auto" and input_format == "numpy" and supports(model)
+        else backend
+    )
     if selected == "auto":
         selected = "joblib"
     arguments = {
@@ -364,10 +383,12 @@ def sklearn(
         "verbose": verbose,
     }
     if selected in {"compiled", "forest"}:
+        if input_format != "numpy":
+            raise ValueError("compiled sklearn backends require input_format='numpy'")
         if runtime != "sklearn":
             raise ValueError("runtime applies only when the sklearn backend is joblib")
         return _compiled(model, forest=selected == "forest", **arguments)
-    return _joblib(model, runtime=runtime, **arguments)
+    return _joblib(model, runtime=runtime, input_format=input_format, **arguments)
 
 
 def equinox(
@@ -444,6 +465,7 @@ def _display_export(
         ("Payload", f"embedded {model.suffix}"),
         ("Format", f"{format_name} + FNOM"),
         ("Dtype", dtype),
+        ("Input format", metadata["input_format"]),
         ("Inputs", ", ".join(f"{key}[{value.components}]" for key, value in inputs.items())),
         ("Outputs", ", ".join(f"{key}[{value.components}]" for key, value in outputs.items())),
         ("Input scaler", "none" if input_scaler is None else input_scaler["kind"]),

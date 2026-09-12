@@ -47,6 +47,7 @@ struct ModelArtifact {
     std::optional<AffineScaler> input_scaler;
     std::optional<AffineScaler> output_scaler;
     std::string runtime;
+    std::string input_format{"numpy"};
 
     void validate() const;
 };

@@ -109,6 +109,7 @@ class ModelArtifact:
     inputs: tuple[TensorContract, ...]
     outputs: tuple[TensorContract, ...]
     runtime: str | None
+    input_format: str
     input_scaler: AffineScaler | None
     output_scaler: AffineScaler | None
     tree_leaves: tuple[TreeLeaf, ...]
@@ -157,6 +158,7 @@ class ModelArtifact:
             "input_scaler": None if self.input_scaler is None else self.input_scaler.as_dict(),
             "output_scaler": None if self.output_scaler is None else self.output_scaler.as_dict(),
             "runtime": self.runtime,
+            "input_format": self.input_format,
             "bundled": True,
             "capabilities": {
                 "owns_compute_threads": self.owns_compute_threads,
@@ -410,6 +412,7 @@ def _encode(
     input_scaler: AffineScaler | None,
     output_scaler: AffineScaler | None,
     runtime: str | None,
+    input_format: str,
 ) -> bytes:
     if not artifact_path or not name or model_format not in MODEL_FORMATS:
         raise ValueError("model artifact metadata is invalid")
@@ -420,6 +423,12 @@ def _encode(
     if output_scaler and len(output_scaler.gain) != sum(v.components for v in outputs):
         raise ValueError("output scaler does not match model output features")
     selected_runtime = runtime or ""
+    if input_format not in {"numpy", "pandas", "polars"}:
+        raise ValueError("model input format must be numpy, pandas, or polars")
+    if model_format != "joblib" and input_format != "numpy":
+        raise ValueError("only Joblib artifacts may use named input formats")
+    if input_format != "numpy" and any(port.components != 1 for port in inputs):
+        raise ValueError("named input formats require scalar input ports")
     spec = get_model_format(model_format)
     spec.validate(runtime, bool(leaves))
     previous_end = 0
@@ -448,6 +457,7 @@ def _encode(
         writer.u64(leaf.byte_offset)
         writer.u64(leaf.byte_count)
     writer.string(selected_runtime)
+    writer.string(input_format)
     return bytes(writer.data)
 
 
@@ -484,6 +494,7 @@ def write_bundle(
     x_scaler: object | None = None,
     y_scaler: object | None = None,
     runtime: str | None = None,
+    input_format: str = "numpy",
 ) -> None:
     """Write a byte-compatible FNOM bundle from one payload file."""
 
@@ -504,6 +515,7 @@ def write_bundle(
         normalize_scaler(x_scaler, sum(p.components for p in in_ports)),
         normalize_scaler(y_scaler, sum(p.components for p in out_ports)),
         runtime,
+        input_format,
     )
     payload_offset = (_HEADER.size + len(manifest) + _ALIGNMENT - 1) // _ALIGNMENT * _ALIGNMENT
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -559,12 +571,17 @@ def load(path: str | Path) -> ModelArtifact:
         shape = tuple(reader.u64() for _ in range(rank))
         leaves.append(TreeLeaf(leaf_path, leaf_dtype, shape, reader.u64(), reader.u64()))
     runtime = reader.string() or None
+    input_format = reader.string() if reader.offset != len(value) else "numpy"
     if reader.offset != len(value):
         raise ValueError("manifest contains trailing data")
-    _encode(artifact_path, name, model_format, inputs, outputs, leaves, input_scaler, output_scaler, runtime)
+    _encode(
+        artifact_path, name, model_format, inputs, outputs, leaves,
+        input_scaler, output_scaler, runtime, input_format,
+    )
     return ModelArtifact(
         selected, name, model_format, artifact_path, inputs, outputs, runtime,
-        input_scaler, output_scaler, tuple(leaves), payload_offset, payload_size,
+        input_format, input_scaler, output_scaler, tuple(leaves), payload_offset,
+        payload_size,
     )
 
 
