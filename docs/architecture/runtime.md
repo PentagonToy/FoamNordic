@@ -26,6 +26,10 @@ Backends declare whether evaluation is concurrent. Non-concurrent backends use a
 
 Backend capabilities distinguish internal compute-thread ownership from safe concurrent evaluation. A table lookup may not own a thread pool yet still use several CPUs by serving independent solver-rank requests concurrently; resource planning must therefore preserve both dimensions instead of assigning CPUs from backend names.
 
+The same capability contract declares input and output memory spaces (`host`, `pinned_host`, `device` or `unified`), persistent device state, synchronous or event completion, shape-sensitive workspace recreation, preferred batch rows and alignment. The current ModelHost path admits only synchronous host tensor boundaries and rejects unsupported declarations before execution. Connectors may publish the memory contract through an optional ABI without breaking older host-only plugins.
+
+Long-lived backends may implement the internal `StatefulEngineBackend` contract. `TransactionalEngine` owns committed state and generation metadata, publishes a candidate only after a complete successful `advance()`, and provides optional checkpoint and restore operations. A topology change requires explicit reinitialisation unless the backend declares that its state survives the change. An optional observer receives per-operation sizes, timings, retries, fallbacks and device-memory use without granting the runtime authority to redistribute mesh or model work.
+
 Every kernel may use the full node-local CPU budget when it runs alone. A backend that owns compute threads reserves that budget for its evaluation, while independent threadless kernels consume one capacity unit per request and may run concurrently. Field programs keep independent listeners, so consolidation adds no broker or transport hop to an exchange. A program failure terminates the node-local ModelHost and the coupled supervisor tears down the remaining workload.
 
 ## Outputs

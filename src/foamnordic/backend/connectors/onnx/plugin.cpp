@@ -106,10 +106,26 @@ const foamnordic_connector_api_v1 api{
     release,
 };
 
+const foamnordic_connector_memory_api_v1 memory_api{
+    FOAMNORDIC_CONNECTOR_MEMORY_ABI_V1,
+    FOAMNORDIC_MEMORY_HOST_V1,
+    FOAMNORDIC_MEMORY_HOST_V1,
+    static_cast<std::uint8_t>(capabilities.persistent_device_state),
+    FOAMNORDIC_COMPLETION_SYNCHRONOUS_V1,
+    static_cast<std::uint8_t>(capabilities.workspace_recreated_on_shape_change),
+    capabilities.preferred_batch_rows,
+    capabilities.alignment_bytes,
+};
+
 }  // namespace
 
 extern "C" const foamnordic_connector_api_v1* foamnordic_connector_v1() {
     return &api;
+}
+
+extern "C" const foamnordic_connector_memory_api_v1*
+foamnordic_connector_memory_v1() {
+    return &memory_api;
 }
 // clang-format off
 /*

@@ -46,6 +46,24 @@ public:
             handle_ = nullptr;
             throw std::runtime_error("FoamNordic connector plugin has an invalid v1 ABI.");
         }
+        ::dlerror();
+        const auto memory_entry = reinterpret_cast<
+            foamnordic_connector_memory_entry_v1>(
+            ::dlsym(handle_, "foamnordic_connector_memory_v1"));
+        if (::dlerror() == nullptr && memory_entry != nullptr) {
+            const auto* memory = memory_entry();
+            if (memory == nullptr
+                || memory->abi_version != FOAMNORDIC_CONNECTOR_MEMORY_ABI_V1
+                || memory->input_memory > FOAMNORDIC_MEMORY_UNIFIED_V1
+                || memory->output_memory > FOAMNORDIC_MEMORY_UNIFIED_V1
+                || memory->completion > FOAMNORDIC_COMPLETION_EVENT_V1) {
+                ::dlclose(handle_);
+                handle_ = nullptr;
+                throw std::runtime_error(
+                    "FoamNordic connector plugin has an invalid memory ABI.");
+            }
+            memory_ = *memory;
+        }
     }
 
     ~PluginLibrary() {
@@ -61,9 +79,34 @@ public:
         return *api_;
     }
 
+    [[nodiscard]] bindnordic::BackendCapabilities capabilities() const noexcept {
+        return {
+            api_->concurrent_evaluation != 0,
+            api_->row_independent != 0,
+            api_->owns_compute_threads != 0,
+            static_cast<bindnordic::MemorySpace>(memory_.input_memory),
+            static_cast<bindnordic::MemorySpace>(memory_.output_memory),
+            memory_.persistent_device_state != 0,
+            static_cast<bindnordic::CompletionMode>(memory_.completion),
+            memory_.workspace_recreated_on_shape_change != 0,
+            memory_.preferred_batch_rows,
+            memory_.alignment_bytes,
+        };
+    }
+
 private:
     void* handle_{nullptr};
     const foamnordic_connector_api_v1* api_{nullptr};
+    foamnordic_connector_memory_api_v1 memory_{
+        FOAMNORDIC_CONNECTOR_MEMORY_ABI_V1,
+        FOAMNORDIC_MEMORY_HOST_V1,
+        FOAMNORDIC_MEMORY_HOST_V1,
+        0,
+        FOAMNORDIC_COMPLETION_SYNCHRONOUS_V1,
+        0,
+        0,
+        1,
+    };
 };
 
 std::string plugin_error(const std::array<char, 1024>& error) {
@@ -93,12 +136,7 @@ public:
 
     [[nodiscard]] bindnordic::BackendCapabilities capabilities()
         const noexcept override {
-        const auto& api = library_->api();
-        return {
-            api.concurrent_evaluation != 0,
-            api.row_independent != 0,
-            api.owns_compute_threads != 0,
-        };
+        return library_->capabilities();
     }
 
     bindnordic::Tensor evaluate(

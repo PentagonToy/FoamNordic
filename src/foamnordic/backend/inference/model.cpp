@@ -78,6 +78,15 @@ ArtifactModelKernel::ArtifactModelKernel(
                           : 1),
       profile_every_(resources.profile_every) {
     artifact_.validate();
+    if (!capabilities_.valid()) {
+        throw std::invalid_argument("Model backend memory capabilities are invalid.");
+    }
+    if (capabilities_.input_memory != bindnordic::MemorySpace::host
+        || capabilities_.output_memory != bindnordic::MemorySpace::host
+        || capabilities_.completion != bindnordic::CompletionMode::synchronous) {
+        throw std::invalid_argument(
+            "ModelHost requires synchronous host tensor boundaries for this execution path.");
+    }
 }
 
 TensorMap ArtifactModelKernel::evaluate(

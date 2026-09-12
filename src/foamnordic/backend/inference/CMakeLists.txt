@@ -2,6 +2,7 @@ add_library(foamnordic_inference STATIC
     ../connectors/registry.cpp
     ../connectors/plugin.cpp
     exchange.cpp
+    engine.cpp
     execution.cpp
     smedja.cpp
     load.cpp
