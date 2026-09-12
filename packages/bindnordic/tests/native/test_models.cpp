@@ -1,3 +1,14 @@
+// clang-format off
+/*
+ *  ___ __   __  __ __   __  _  __  ___ __  _  ___
+ * | __/__\\ /  \\|  V  | |  \\| |/__\\| _ \\ _\\| |/ _/
+ * | _| \\/ | /\\ | \\_/ | | | ' | \\/ | v / v | | \\__
+ * |_| \\__/|_||_|_| |_| |_|\\__|\\__/|_|_\\__/|_|\\__/
+ *
+ * BindNordic
+ */
+// clang-format on
+
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -46,6 +57,18 @@ int main() {
     assert(std::abs(value(scaled, 1) - 1.0) < 1.0e-12);
 
     bindnordic::DenseAffineKernel kernel(2, 1, {2.0, -1.0}, {0.5});
+    const auto kernel_capabilities = kernel.capabilities();
+    assert(kernel_capabilities.valid());
+    assert(kernel_capabilities.input_memory == bindnordic::MemorySpace::host);
+    assert(kernel_capabilities.output_memory == bindnordic::MemorySpace::host);
+    assert(
+        kernel_capabilities.completion
+        == bindnordic::CompletionMode::synchronous);
+    assert(!kernel_capabilities.persistent_device_state);
+    assert(kernel_capabilities.alignment_bytes == 1);
+    auto invalid_capabilities = kernel_capabilities;
+    invalid_capabilities.alignment_bytes = 3;
+    assert(!invalid_capabilities.valid());
     const auto input = bytes({3.0, 4.0, 5.0, 1.0});
     const auto output = kernel.evaluate(
         {"x", bindnordic::Element::float64, {2, 2}, input},

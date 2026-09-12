@@ -11,6 +11,8 @@
 
 #include "foamnordic/backend/inference/model.hpp"
 
+#include "foamnordic/backend/inference/residency.hpp"
+
 #include <chrono>
 #include <cmath>
 #include <limits>
@@ -78,6 +80,14 @@ ArtifactModelKernel::ArtifactModelKernel(
                           : 1),
       profile_every_(resources.profile_every) {
     artifact_.validate();
+    const auto residency = plan_residency(capabilities_);
+    if (!capabilities_.valid()) {
+        throw std::invalid_argument("Model backend memory capabilities are invalid.");
+    }
+    if (!residency.direct()) {
+        throw std::invalid_argument(
+            "ModelHost requires synchronous host tensor boundaries for this execution path.");
+    }
 }
 
 TensorMap ArtifactModelKernel::evaluate(

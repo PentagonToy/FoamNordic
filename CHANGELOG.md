@@ -25,6 +25,8 @@ This file records user-visible changes. Internal refactors and historical protoc
 
 ### Resources
 
+- Backend capabilities declare memory residence, completion mode, persistent device state, shape-sensitive workspace recreation, preferred batch rows and alignment. A residency planner distinguishes direct, explicitly staged and unsupported paths; unsupported execution fails before model evaluation rather than copying data implicitly.
+- A transactional resident-engine contract supports long-lived state, optional checkpoint and restore, explicit topology-change behaviour and opt-in cost observation without adding domain semantics or mesh redistribution to the runtime.
 - Native runtime builds use the CMake-owned `foamnordic_runtime_bundle` target so every enabled runtime component, including the optional ONNX connector, is built before installation.
 - FNOM execution metadata distinguishes backends that own compute threads from backends that support concurrent independent evaluations.
 - Field programs assigned to the same node now run inside one ModelHost process and borrow the full available execution capacity from one shared pool instead of receiving static CPU partitions, while retaining separate artifacts, endpoints, kernels and backend state.

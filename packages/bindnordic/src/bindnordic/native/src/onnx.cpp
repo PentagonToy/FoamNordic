@@ -301,6 +301,13 @@ BackendCapabilities onnx_backend_capabilities() noexcept {
         .concurrent_evaluation = false,
         .row_independent = false,
         .owns_compute_threads = true,
+        .input_memory = MemorySpace::host,
+        .output_memory = MemorySpace::host,
+        .persistent_device_state = false,
+        .completion = CompletionMode::synchronous,
+        .workspace_recreated_on_shape_change = true,
+        .preferred_batch_rows = 0,
+        .alignment_bytes = alignof(float),
     };
 }
 

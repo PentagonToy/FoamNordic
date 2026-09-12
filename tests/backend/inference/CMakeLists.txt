@@ -3,6 +3,14 @@ target_link_libraries(foamnordic_inference_test PRIVATE FoamNordic::inference)
 
 add_test(NAME backend.inference.exchange COMMAND foamnordic_inference_test)
 
+add_executable(foamnordic_engine_test test_engine.cpp)
+target_link_libraries(foamnordic_engine_test PRIVATE FoamNordic::inference)
+add_test(NAME backend.inference.engine COMMAND foamnordic_engine_test)
+
+add_executable(foamnordic_residency_test test_residency.cpp)
+target_link_libraries(foamnordic_residency_test PRIVATE FoamNordic::inference)
+add_test(NAME backend.inference.residency COMMAND foamnordic_residency_test)
+
 add_executable(foamnordic_inference_runner_test test_runner.cpp)
 target_link_libraries(foamnordic_inference_runner_test PRIVATE FoamNordic::inference)
 

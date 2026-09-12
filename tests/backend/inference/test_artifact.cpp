@@ -695,6 +695,40 @@ foamnordic::inference::ModelArtifact capacity_artifact() {
     };
 }
 
+void test_artifact_kernel_rejects_unsupported_memory_boundaries() {
+    std::atomic<std::uint32_t> active{0};
+    std::atomic<std::uint32_t> peak{0};
+    auto capabilities = foamnordic::inference::BackendCapabilities{};
+    capabilities.input_memory = bindnordic::MemorySpace::device;
+    SharedCapacityProbeKernel device_backend(capabilities, active, peak);
+    require_throws(
+        [&] {
+            foamnordic::inference::ArtifactModelKernel kernel(
+                capacity_artifact(), device_backend);
+        },
+        "ModelHost accepted a device input without a device tensor boundary.");
+
+    capabilities = {};
+    capabilities.completion = bindnordic::CompletionMode::event;
+    SharedCapacityProbeKernel event_backend(capabilities, active, peak);
+    require_throws(
+        [&] {
+            foamnordic::inference::ArtifactModelKernel kernel(
+                capacity_artifact(), event_backend);
+        },
+        "ModelHost accepted event completion without an event boundary.");
+
+    capabilities = {};
+    capabilities.alignment_bytes = 3;
+    SharedCapacityProbeKernel invalid_backend(capabilities, active, peak);
+    require_throws(
+        [&] {
+            foamnordic::inference::ArtifactModelKernel kernel(
+                capacity_artifact(), invalid_backend);
+        },
+        "ModelHost accepted an invalid backend alignment.");
+}
+
 void test_artifact_kernels_share_idle_execution_capacity() {
     auto capacity = std::make_shared<
         foamnordic::inference::ExecutionCapacityPool>(2);
@@ -1351,6 +1385,7 @@ int main() {
     test_reentrant_backend_uses_bounded_execution_contexts();
     test_artifact_kernels_share_idle_execution_capacity();
     test_thread_owning_backends_reserve_their_full_capacity();
+    test_artifact_kernel_rejects_unsupported_memory_boundaries();
     test_artifact_kernel_rejects_an_oversized_working_set();
     test_artifact_kernel_samples_stage_costs_on_request();
     test_artifact_kernel_records_completed_workload();

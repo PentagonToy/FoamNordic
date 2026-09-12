@@ -1,3 +1,14 @@
+// clang-format off
+/*
+ *  ___ __   __  __ __   __  _  __  ___ __  _  ___
+ * | __/__\\ /  \\|  V  | |  \\| |/__\\| _ \\ _\\| |/ _/
+ * | _| \\/ | /\\ | \\_/ | | | ' | \\/ | v / v | | \\__
+ * |_| \\__/|_||_|_| |_| |_|\\__|\\__/|_|_\\__/|_|\\__/
+ *
+ * FoamNordic
+ */
+// clang-format on
+
 #include "foamnordic/backend/connectors/plugin.h"
 
 #include <algorithm>
@@ -106,18 +117,24 @@ const foamnordic_connector_api_v1 api{
     release,
 };
 
+const foamnordic_connector_memory_api_v1 memory_api{
+    FOAMNORDIC_CONNECTOR_MEMORY_ABI_V1,
+    FOAMNORDIC_MEMORY_HOST_V1,
+    FOAMNORDIC_MEMORY_HOST_V1,
+    static_cast<std::uint8_t>(capabilities.persistent_device_state),
+    FOAMNORDIC_COMPLETION_SYNCHRONOUS_V1,
+    static_cast<std::uint8_t>(capabilities.workspace_recreated_on_shape_change),
+    capabilities.preferred_batch_rows,
+    capabilities.alignment_bytes,
+};
+
 }  // namespace
 
 extern "C" const foamnordic_connector_api_v1* foamnordic_connector_v1() {
     return &api;
 }
-// clang-format off
-/*
- *  ___ __   __  __ __   __  _  __  ___ __  _  ___
- * | __/__\\ /  \\|  V  | |  \\| |/__\\| _ \\ _\\| |/ _/
- * | _| \\/ | /\\ | \\_/ | | | ' | \\/ | v / v | | \\__
- * |_| \\__/|_||_|_| |_| |_|\\__|\\__/|_|_\\__/|_|\\__/
- *
- * FoamNordic
- */
-// clang-format on
+
+extern "C" const foamnordic_connector_memory_api_v1*
+foamnordic_connector_memory_v1() {
+    return &memory_api;
+}
