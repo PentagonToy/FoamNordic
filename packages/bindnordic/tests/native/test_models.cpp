@@ -62,6 +62,7 @@ int main() {
         scaler,
         std::nullopt,
         "compiled",
+        "numpy",
     };
     const auto manifest = bindnordic::encode_manifest(artifact);
     const auto decoded = bindnordic::decode_manifest(manifest);

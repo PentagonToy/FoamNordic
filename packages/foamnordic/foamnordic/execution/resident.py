@@ -59,6 +59,9 @@ def _joblib_evaluator(
     outputs,
     runtime: str = "sklearn",
     threads: int = 1,
+    *,
+    input_names: tuple[str, ...] | None = None,
+    input_format: str = "numpy",
 ):
     def specialized(model):
         if isinstance(model, dict) and model.get("schema") == "foamnordic.function":
@@ -70,6 +73,8 @@ def _joblib_evaluator(
         outputs,
         runtime,
         threads,
+        input_names=input_names,
+        input_format=input_format,
         object_evaluator=specialized,
     )
 
@@ -295,7 +300,14 @@ def run_program(
     dtype = str(manifest["inputs"][0][2])
     if model_format == "joblib":
         runtime = str(manifest.get("runtime") or "sklearn")
-        evaluator = _joblib_evaluator(payload, outputs, runtime, model_threads)
+        evaluator = _joblib_evaluator(
+            payload,
+            outputs,
+            runtime,
+            model_threads,
+            input_names=tuple(str(item[0]) for item in manifest["inputs"]),
+            input_format=str(manifest.get("input_format") or "numpy"),
+        )
     elif model_format == "equinox":
         evaluator = _equinox_evaluator(
             payload,

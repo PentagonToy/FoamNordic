@@ -27,18 +27,37 @@ def test_round_trip_preserves_contract_scalers_and_payload():
             payload,
             "model",
             "joblib",
-            [("x", 3)],
+            [("x0", 1), ("x1", 1), ("x2", 1)],
             [("y", 1)],
             x_scaler=StandardScaler().fit(values),
             y_scaler=MinMaxScaler(clip=True).fit(values[:, :1]),
             runtime="sklearn",
+            input_format="pandas",
         )
         artifact = load(path)
         assert artifact.name == "model"
-        assert artifact.inputs[0].components == 3
+        assert tuple(port.name for port in artifact.inputs) == ("x0", "x1", "x2")
         assert artifact.input_scaler.kind == "standard"
         assert artifact.output_scaler.kind == "minmax"
+        assert artifact.input_format == "pandas"
         assert read_payload(path) == b"payload"
+
+
+def test_named_input_formats_are_joblib_only():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        payload = root / "model.onnx"
+        payload.write_bytes(b"payload")
+        with pytest.raises(ValueError, match="only Joblib"):
+            write_bundle(
+                root / "model.fnom",
+                payload,
+                "model",
+                "onnx",
+                [("x", 1)],
+                [("y", 1)],
+                input_format="polars",
+            )
 
 
 def test_invalid_bundle_size_is_rejected():

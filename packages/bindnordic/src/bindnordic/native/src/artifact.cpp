@@ -50,6 +50,19 @@ void ModelArtifact::validate() const {
             throw std::invalid_argument("Model artifact runtime is invalid.");
         }
     }
+    if (input_format != "numpy" && input_format != "pandas"
+        && input_format != "polars") {
+        throw std::invalid_argument("Model artifact input format is invalid.");
+    }
+    if (format != ModelFormat::joblib && input_format != "numpy") {
+        throw std::invalid_argument("Only Joblib artifacts may use named input formats.");
+    }
+    if (input_format != "numpy"
+        && std::ranges::any_of(contract.inputs, [](const auto& field) {
+               return field.components != 1;
+           })) {
+        throw std::invalid_argument("Named input formats require scalar input ports.");
+    }
     contract.validate();
     const auto feature_count = [](const std::vector<FieldContract>& fields) {
         std::uint64_t count = 0;

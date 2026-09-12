@@ -13,6 +13,8 @@
 
 `Export.sklearn()` uses `backend="auto"` by default: supported estimators use the compiled backend and other sklearn-compatible predictors use Joblib. Select `compiled`, `forest`, or `joblib` explicitly only when the deployed representation must be fixed. The native forest backend accepts `ExtraTreesRegressor` and `RandomForestRegressor`; Joblib accepts a fitted object with `predict()` or a callable object.
 
+Joblib models receive a NumPy array by default. Set `input_format="pandas"` or `input_format="polars"` when a model requires a named DataFrame; FoamNordic records the choice in FNOM and constructs columns from the declared scalar input ports in their contract order. These formats require the corresponding optional dependency in the ModelHost environment, while compiled backends retain the NumPy-only native path.
+
 ### Compiled estimators
 
 | Family | Models |
