@@ -6,8 +6,8 @@ Templates are grouped by the component that consumes them:
 - `slurm/` contains scheduler scripts. Solver output belongs in `logs/Sailing_<name>_<jobid>.out`; FoamNordic lifecycle output belongs in `logs/Sailing_<name>_<jobid>.log`.
 - `shell/` contains local execution and environment wrappers.
 - `large_banner.txt` is the runtime splash shown at the start of a user-facing FoamNordic run. Do not paste it into source files, generated dictionaries, or routine diagnostic output.
-- `small_banner.txt` is the file header for FoamNordic-owned C and C++ sources that do not depend directly on the OpenFOAM API. This includes the native runtime, communication, inference, bindings, tests, and standalone tools.
-- `openfoam/openfoamHeader.in` is the file header for C++ sources and headers compiled against OpenFOAM, including `wmake` libraries, turbulence models, function objects, probes, and out-of-tree adapter examples. Keep the short FoamNordic licence block immediately below it. Do not use the small banner in these files.
+- `small_banner.txt` is the file header for FoamNordic-owned C and C++ sources that do not depend directly on the OpenFOAM API. This includes the native runtime, communication, inference, bindings, tests, and standalone tools. It must appear exactly once at the beginning of the file, before `#pragma once`, includes, declarations, or definitions.
+- `openfoam/openfoamHeader.in` is the file header for C++ sources and headers compiled against OpenFOAM, including `wmake` libraries, turbulence models, function objects, probes, and out-of-tree adapter examples. It must appear exactly once at the beginning of the file. Keep the short FoamNordic licence block immediately below it and do not use the small banner in these files.
 
 New FoamNordic-authored files use `SPDX-License-Identifier: GPL-3.0-only`. Preserve an upstream file's original copyright and licence notice when it is copied or substantially derived; do not replace such a notice with a FoamNordic template. Generated OpenFOAM dictionaries may use `openfoamHeader.in` without a source-code licence block when a conventional `FoamFile` header is useful.
 

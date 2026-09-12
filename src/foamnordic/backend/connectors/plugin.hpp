@@ -1,12 +1,3 @@
-#pragma once
-
-#include <filesystem>
-
-namespace foamnordic::backend {
-
-void load_connector_plugin(const std::filesystem::path& path);
-
-}  // namespace foamnordic::backend
 // clang-format off
 /*
  *  ___ __   __  __ __   __  _  __  ___ __  _  ___
@@ -17,3 +8,13 @@ void load_connector_plugin(const std::filesystem::path& path);
  * FoamNordic
  */
 // clang-format on
+
+#pragma once
+
+#include <filesystem>
+
+namespace foamnordic::backend {
+
+void load_connector_plugin(const std::filesystem::path& path);
+
+}  // namespace foamnordic::backend

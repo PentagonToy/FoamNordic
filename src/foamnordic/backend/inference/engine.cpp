@@ -1,4 +1,17 @@
+// clang-format off
+/*
+ *  ___ __   __  __ __   __  _  __  ___ __  _  ___
+ * | __/__\\ /  \\|  V  | |  \\| |/__\\| _ \\ _\\| |/ _/
+ * | _| \\/ | /\\ | \\_/ | | | ' | \\/ | v / v | | \\__
+ * |_| \\__/|_||_|_| |_| |_|\\__|\\__/|_|_\\__/|_|\\__/
+ *
+ * FoamNordic
+ */
+// clang-format on
+
 #include "foamnordic/backend/inference/engine.hpp"
+
+#include "foamnordic/backend/inference/residency.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -73,13 +86,11 @@ TransactionalEngine::TransactionalEngine(
       observer_(observer) {
     contract_.validate();
     resources_.validate();
+    const auto residency = plan_residency(backend_capabilities_);
     if (!backend_capabilities_.valid()) {
         throw std::invalid_argument("Stateful engine memory capabilities are invalid.");
     }
-    if (backend_capabilities_.input_memory != bindnordic::MemorySpace::host
-        || backend_capabilities_.output_memory != bindnordic::MemorySpace::host
-        || backend_capabilities_.completion
-               != bindnordic::CompletionMode::synchronous) {
+    if (!residency.direct()) {
         throw std::invalid_argument(
             "Stateful engine requires synchronous host tensor boundaries for this execution path.");
     }

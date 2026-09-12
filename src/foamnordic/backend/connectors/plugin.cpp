@@ -1,3 +1,14 @@
+// clang-format off
+/*
+ *  ___ __   __  __ __   __  _  __  ___ __  _  ___
+ * | __/__\\ /  \\|  V  | |  \\| |/__\\| _ \\ _\\| |/ _/
+ * | _| \\/ | /\\ | \\_/ | | | ' | \\/ | v / v | | \\__
+ * |_| \\__/|_||_|_| |_| |_|\\__|\\__/|_|_\\__/|_|\\__/
+ *
+ * FoamNordic
+ */
+// clang-format on
+
 #include "foamnordic/backend/connectors/plugin.hpp"
 
 #include <array>
@@ -221,13 +232,3 @@ void load_connector_plugin(const std::filesystem::path& path) {
 }
 
 }  // namespace foamnordic::backend
-// clang-format off
-/*
- *  ___ __   __  __ __   __  _  __  ___ __  _  ___
- * | __/__\\ /  \\|  V  | |  \\| |/__\\| _ \\ _\\| |/ _/
- * | _| \\/ | /\\ | \\_/ | | | ' | \\/ | v / v | | \\__
- * |_| \\__/|_||_|_| |_| |_|\\__|\\__/|_|_\\__/|_|\\__/
- *
- * FoamNordic
- */
-// clang-format on
