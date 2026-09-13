@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark OF/FNO Smagorinsky against FNO-coupled nutFjord."""
+"""Benchmark OF/FNO Smagorinsky against FNO-native nutFjord."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def main() -> int:
 
     modes = (
         ("openfoam-via-foamnordic", None),
-        ("fno-coupled", smagorinsky_function),
+        ("fno-native", smagorinsky_function),
     )
     for mode, function in modes:
         print(f"[FoamNordic] Warm-up: {mode}")
@@ -86,7 +86,7 @@ def main() -> int:
             pair[mode] = result
         comparisons.append(
             nutfjord.compare(
-                pair["openfoam-via-foamnordic"], pair["fno-coupled"]
+                pair["openfoam-via-foamnordic"], pair["fno-native"]
             )
         )
 
@@ -110,12 +110,12 @@ def main() -> int:
             )
         }
     reference = report["openfoam_via_foamnordic"]
-    coupled = report["fno_coupled"]
+    native = report["fno_native"]
     report["wall_ratio"] = (
-        coupled["wall_seconds"]["median"] / reference["wall_seconds"]["median"]
+        native["wall_seconds"]["median"] / reference["wall_seconds"]["median"]
     )
     report["openfoam_execution_ratio"] = (
-        coupled["openfoam_execution_seconds"]["median"]
+        native["openfoam_execution_seconds"]["median"]
         / reference["openfoam_execution_seconds"]["median"]
     )
     path = root / "benchmark.json"

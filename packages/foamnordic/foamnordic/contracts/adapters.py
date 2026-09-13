@@ -20,6 +20,7 @@ class AdapterContract:
 
     name: str
     category: str
+    native_execution: frozenset[str]
     inputs: Mapping[str, FieldLayout]
     outputs: Mapping[str, FieldLayout]
 
@@ -64,16 +65,35 @@ def _contracts() -> Mapping[str, AdapterContract]:
             raise RuntimeError("OpenFOAM adapter contract has an invalid name")
         if not isinstance(declaration, dict):
             raise RuntimeError(f"adapter {name} must be a mapping")
-        if set(declaration) != {"category", "inputs", "outputs"}:
+        if set(declaration) != {
+            "category",
+            "native_execution",
+            "inputs",
+            "outputs",
+        }:
             raise RuntimeError(
-                f"adapter {name} must declare category, inputs, and outputs"
+                f"adapter {name} must declare category, native_execution, "
+                "inputs, and outputs"
             )
         category = declaration["category"]
         if not isinstance(category, str) or not category.strip():
             raise RuntimeError(f"adapter {name} category must be a non-empty string")
+        native_execution = declaration["native_execution"]
+        if not isinstance(native_execution, list) or any(
+            value not in {"algebra", "transport"}
+            for value in native_execution
+        ):
+            raise RuntimeError(
+                f"adapter {name} native_execution must contain algebra or transport"
+            )
+        if len(native_execution) != len(set(native_execution)):
+            raise RuntimeError(
+                f"adapter {name} native_execution must not contain duplicates"
+            )
         contracts[name] = AdapterContract(
             name=name,
             category=category,
+            native_execution=frozenset(native_execution),
             inputs=_ports(declaration["inputs"], f"{name}.inputs"),
             outputs=_ports(declaration["outputs"], f"{name}.outputs"),
         )

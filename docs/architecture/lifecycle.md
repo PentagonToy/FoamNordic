@@ -1,24 +1,50 @@
 # Execution lifecycle
-A Longship compiles declarations, prepares an isolated case, launches native processes, and returns a non-blocking Run.
 
-```text
-declare -> validate -> copy -> prepare -> launch -> observe -> stop
-                                   |                         |
-                                   +------ fail together ----+
+A Longship workload moves through one explicit lifecycle. Preparation is isolated from the source case, launch is non-blocking and every terminal state produces one durable result.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Declared
+    Declared --> Validated: compile
+    Validated --> Prepared: copy and prepare case
+    Prepared --> Running: launch local or Slurm processes
+    Running --> Succeeded: all required processes exit successfully
+    Running --> Failed: required process fails
+    Running --> Cancelled: forced stop or owner loss
+    Succeeded --> Result
+    Failed --> Result
+    Cancelled --> Result
 ```
 
-## Local and Slurm
+## Lifecycle stages
 
-Without a scheduler, one rank launches directly and multiple ranks use the MPI launcher associated with the case environment. Slurm runs declare solver and model resources separately and place a worker on every solver node.
+| Stage | Operation | Durable output |
+| --- | --- | --- |
+| Declaration | Assemble case, programmes, observations, placement and scheduler | Python declarations |
+| Compilation | Validate contracts and create the deterministic plan digest | Compiled plan |
+| Preparation | Copy the case, render dictionaries and run requested mesh checks | Isolated run directory |
+| Launch | Start the local supervisor or submit one Slurm allocation | `Runtime.Run` |
+| Execution | Coordinate solver ranks, ModelHost processes and observations | Logs and selected observations |
+| Completion | Finalise status, paths, timing and scheduler identity | `Runtime.Result` |
+
+## Local and Slurm execution
+
+| Mode | Solver launch | Model placement |
+| --- | --- | --- |
+| Local, one rank | Direct process | Local ModelHost when required |
+| Local, multiple ranks | MPI launcher from the case environment | Local ModelHost when required |
+| Slurm | Solver step with declared OpenFOAM resources | One ModelHost task per solver node |
+
+Both modes use the same plan, readiness protocol, failure propagation and result contract.
 
 ## Ownership and shutdown
 
-Python owns a workload by default. run.stop waits normally; force=True requests bounded termination. Closing the owner cancels its workload unless run.detach explicitly transfers responsibility. Solver and worker failures tear down the peer, while logs remain in the run directory.
+Python owns a run by default. `run.stop()` waits for normal completion, while `run.stop(force=True)` requests bounded cancellation. If the owning process disappears, the supervisor cancels the workload after `orphan_timeout`; `run.detach()` explicitly transfers responsibility to the scheduler or supervisor. A required solver or ModelHost failure terminates its peers, but the generated logs and case remain available.
 
 ## Runtime generations
 
-Builds publish immutable content-addressed generations and atomically select the current one. A run pins its exact generation. Cleanup preserves current, recent, pinned, incomplete, and damaged generations and removes only old complete unpinned assets.
+`foamnordic build` publishes immutable, content-addressed runtime generations and atomically selects the current generation. A running workload pins its exact generation. Cleanup preserves current, recent, pinned, incomplete and damaged generations and removes only old, complete, unpinned assets.
 
-## Durable result
+## Terminal result
 
-A terminal Result contains status, timing, job identity, logs, isolated case, observations, and plan digest. Postprocessing opens the run-owned case.
+A terminal `Runtime.Result` records lifecycle status, exit code, elapsed time, job identity, plan digest and stable paths to the isolated case, logs, observations and Slurm files. `result.postprocess` opens the run-owned case without copying full fields into the control process.

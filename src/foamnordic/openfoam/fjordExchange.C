@@ -14,6 +14,7 @@
 #include "fieldProgramObservation.H"
 #include "fieldProgramSession.H"
 #include "fieldBridge.H"
+#include "operations/frame.H"
 
 #include "addToRunTimeSelectionTable.H"
 
@@ -21,6 +22,7 @@
 #include "foamnordic/backend/adapter/sequence.hpp"
 #include <chrono>
 #include <utility>
+#include <vector>
 
 namespace Foam::functionObjects {
 
@@ -36,7 +38,9 @@ fjordExchange::fjordExchange(
     sequence_ = std::make_unique<foamnordic::adapter::ExchangeSequence>();
     read(dict);
     observation_ = foamNordic::FieldProgramObservation::create(dict);
-    connectPeer();
+    if (!nativeAlgebra_) {
+        connectPeer();
+    }
 }
 
 fjordExchange::~fjordExchange() {
@@ -55,19 +59,33 @@ fjordExchange::~fjordExchange() {
 
 bool fjordExchange::read(const dictionary& dict) {
     fvMeshFunctionObject::read(dict);
-    dict.readEntry("inputs", inputs_);
     dict.readEntry("outputs", outputs_);
+    nativeAlgebra_ = dict.findEntry("outputExpressions") != nullptr;
+    if (nativeAlgebra_) {
+        const List<string> expressions =
+            dict.get<List<string>>("outputExpressions");
+        outputExpressions_.clear();
+        outputExpressions_.reserve(expressions.size());
+        for (const auto& expression : expressions) {
+            outputExpressions_.push_back(
+                foamNordic::operations::Expression::parse(expression));
+        }
+    } else {
+        dict.readEntry("inputs", inputs_);
+    }
     inputPatches_ = dict.getOrDefault<wordList>(
         "inputPatches", wordList(inputs_.size(), "none"));
     outputPatches_ = dict.getOrDefault<wordList>(
         "outputPatches", wordList(outputs_.size(), "none"));
     inputKeys_ = dict.getOrDefault<wordList>("inputKeys", inputs_);
     outputKeys_ = dict.getOrDefault<wordList>("outputKeys", outputs_);
-    dict.readEntry("address", address_);
-    sharedMemory_ = dict.getOrDefault<bool>("sharedMemory", true);
-    ucx_ = dict.getOrDefault<bool>("ucx", false);
-    sessionId_ = static_cast<std::uint64_t>(
-        dict.getOrDefault<label>("sessionId", 1));
+    if (!nativeAlgebra_) {
+        dict.readEntry("address", address_);
+        sharedMemory_ = dict.getOrDefault<bool>("sharedMemory", true);
+        ucx_ = dict.getOrDefault<bool>("ucx", false);
+        sessionId_ = static_cast<std::uint64_t>(
+            dict.getOrDefault<label>("sessionId", 1));
+    }
     const auto profileEvery = dict.getOrDefault<label>("profileEvery", 0);
     if (profileEvery < 0) {
         FatalIOErrorInFunction(dict)
@@ -101,13 +119,18 @@ bool fjordExchange::read(const dictionary& dict) {
             << "exchangeControl must be timeStep or everyCall"
             << exit(FatalIOError);
     }
-    if (inputs_.empty() || outputs_.empty() || sessionId_ == 0
-        || inputKeys_.size() != inputs_.size()
-        || outputKeys_.size() != outputs_.size()
-        || inputPatches_.size() != inputs_.size()
-        || outputPatches_.size() != outputs_.size()) {
+    const bool invalidNative = nativeAlgebra_
+        && (outputs_.empty() || outputExpressions_.size() != outputs_.size());
+    const bool invalidResident = !nativeAlgebra_
+        && (inputs_.empty() || outputs_.empty() || sessionId_ == 0
+            || inputKeys_.size() != inputs_.size()
+            || outputKeys_.size() != outputs_.size()
+            || inputPatches_.size() != inputs_.size()
+            || outputPatches_.size() != outputs_.size());
+    if (invalidNative || invalidResident) {
         FatalIOErrorInFunction(dict)
-            << "matching non-empty keys/fields and a positive sessionId are required"
+            << "matching non-empty native expressions or resident keys/fields "
+               "and a positive sessionId are required"
             << exit(FatalIOError);
     }
     return true;
@@ -139,6 +162,28 @@ bool fjordExchange::exchange() {
         const auto selected = sequence_->next(
             static_cast<std::uint64_t>(mesh_.time().timeIndex()));
         if (!selected) {
+            return true;
+        }
+        if (nativeAlgebra_) {
+            foamNordic::operations::OperationFrame frame(mesh_);
+            std::vector<std::string> snapshots(outputs_.size());
+            forAll(outputs_, index) {
+                snapshots[index] = frame.snapshot(
+                    outputExpressions_[index],
+                    static_cast<std::size_t>(index));
+            }
+            forAll(outputs_, index) {
+                frame.validateAssignment(
+                    outputs_[index],
+                    Foam::foamNordic::operations::Expression::parse(
+                        snapshots[index]));
+            }
+            forAll(outputs_, index) {
+                frame.assign(
+                    outputs_[index],
+                    Foam::foamNordic::operations::Expression::parse(
+                        snapshots[index]));
+            }
             return true;
         }
         const auto exchangeIndex = *selected;

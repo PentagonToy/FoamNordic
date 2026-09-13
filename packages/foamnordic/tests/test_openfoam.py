@@ -112,6 +112,11 @@ def test_grouped_namespace_naming_is_canonical_and_compatible() -> None:
     assert fno.Runtime is fno.runtime
     assert "Case" in dir(fno.OpenFOAM)
     assert "Toolchain" not in dir(fno.OpenFOAM)
+    assert "openfoam" not in dir(fno)
+    assert "field" not in dir(fno)
+    assert "Result" not in dir(fno)
+    assert "Result" in dir(fno.Runtime)
+    assert "CompiledPlan" in dir(fno.Runtime)
 
 
 def test_module_shorthand_is_lowered_to_internal_environment() -> None:

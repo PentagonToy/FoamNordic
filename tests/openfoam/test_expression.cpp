@@ -67,6 +67,25 @@ int main() {
             == "sqrt(multiply(2,ddot(symm(grad(U)),symm(grad(U)))))",
         "Scalar algebra expression is wrong.");
 
+    const auto dynamic = Expression::parse(
+        "trace(outer(U,U))");
+    require(
+        dynamic.canonical() == "trace(outer(U,U))",
+        "Outer-product expression is wrong.");
+
+    const auto expressionCoefficient = Expression::parse(
+        "laplacian(add(nu,nut),k)");
+    require(
+        expressionCoefficient.canonical() == "laplacian(add(nu,nut),k)",
+        "Expression-valued Laplacian coefficient is wrong.");
+
+    const auto selection = Expression::parse(
+        "where(greater(k,0),sqrt(k),0)");
+    require(
+        selection.arguments.size() == 3
+            && selection.canonical() == "where(greater(k,0),sqrt(k),0)",
+        "Conditional OpenFOAM expression is wrong.");
+
     require_invalid("");
     require_invalid("grad()");
     require_invalid("grad(U");

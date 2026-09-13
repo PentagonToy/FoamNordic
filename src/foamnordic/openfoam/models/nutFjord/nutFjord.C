@@ -18,12 +18,20 @@ namespace Foam::LESModels {
 
 template<class BasicTurbulenceModel>
 void nutFjord<BasicTurbulenceModel>::correctNut() {
-    static_cast<void>(closure_->invoke(
-        this->mesh_,
-        this->runTime_,
-        [this](foamNordic::operations::OperationFrame& frame) {
-            frame.bind("delta", this->delta());
-        }));
+    if (nativeAlgebra_) {
+        tmp<volScalarField> molecularViscosity = this->nu();
+        foamNordic::operations::OperationFrame frame(this->mesh_);
+        frame.bind("delta", this->delta());
+        frame.bind("nu", molecularViscosity());
+        this->nut_ = frame.scalar(nativeNut_);
+    } else {
+        static_cast<void>(closure_->invoke(
+            this->mesh_,
+            this->runTime_,
+            [this](foamNordic::operations::OperationFrame& frame) {
+                frame.bind("delta", this->delta());
+            }));
+    }
 
     this->nut_.correctBoundaryConditions();
     BasicTurbulenceModel::correctNut();
@@ -46,10 +54,26 @@ nutFjord<BasicTurbulenceModel>::nutFjord(
           velocity,
           alphaRhoPhi,
           phi,
-          transport,
-          propertiesName),
-      closure_(std::make_unique<foamNordic::ClosureHook>(
-          this->coeffDict_.subDict("foamNordicClosure"))) {
+      transport,
+      propertiesName),
+      closure_(nullptr),
+      nativeAlgebra_(false) {
+    const dictionary* algebra =
+        this->coeffDict_.findDict("foamNordicAlgebra");
+    if (algebra != nullptr) {
+        nativeAlgebra_ = true;
+        const dictionary& outputs = algebra->subDict("outputs");
+        if (outputs.size() != 1 || !outputs.found("nut")) {
+            FatalIOErrorInFunction(outputs)
+                << "nutFjord native algebra requires exactly one nut output."
+                << exit(FatalIOError);
+        }
+        nativeNut_ = foamNordic::operations::Expression::parse(
+            outputs.get<Foam::string>("nut"));
+    } else {
+        closure_ = std::make_unique<foamNordic::ClosureHook>(
+            this->coeffDict_.subDict("foamNordicClosure"));
+    }
     if (type == typeName) {
         this->printCoeffs(type);
     }

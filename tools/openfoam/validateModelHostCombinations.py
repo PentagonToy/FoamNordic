@@ -5,12 +5,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -79,7 +79,6 @@ def export_artifacts(root: Path) -> dict[str, Path]:
         ),
     }
 
-    import onnx
     from onnx import TensorProto, helper
 
     node = helper.make_node("Identity", ["value"], ["prediction"])
@@ -193,7 +192,7 @@ def run_case(
         name=label,
         case=openfoam_case,
         transforms=transforms,
-        placement=fno.Attached(model_cpus_per_node=4),
+        placement=fno.Runtime.Attached(model_cpus_per_node=4),
     )
     started = time.perf_counter()
     result = longship.launch(start_timeout=120, verbose=False).stop(timeout=180)
@@ -261,7 +260,8 @@ def main() -> int:
                     arguments.of_cmd,
                     arguments.shell,
                 )
-            except Exception as error:
+            # Each combination is independent; retain its diagnostic and continue.
+            except Exception as error:  # noqa: BLE001
                 report[label] = {"error": str(error)}
                 continue
             if reference is None:

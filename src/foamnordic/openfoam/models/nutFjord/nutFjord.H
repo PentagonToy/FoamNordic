@@ -16,6 +16,7 @@
 #include "LESeddyViscosity.H"
 
 #include "closureHook.H"
+#include "operations/expression.H"
 
 #include <memory>
 
@@ -24,6 +25,8 @@ namespace Foam::LESModels {
 template<class BasicTurbulenceModel>
 class nutFjord final : public LESeddyViscosity<BasicTurbulenceModel> {
     std::unique_ptr<foamNordic::ClosureHook> closure_;
+    bool nativeAlgebra_;
+    foamNordic::operations::Expression nativeNut_;
 
     nutFjord(const nutFjord&) = delete;
     void operator=(const nutFjord&) = delete;

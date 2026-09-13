@@ -15,25 +15,33 @@ import pytest
 from foamnordic.core.native_plan import available as native_available
 from foamnordic.execution.case import (
     PreparedProgram,
-    _expression_layout,
     _mesh_commands,
-    _observation_block,
-    _output_width,
-    _package_function,
-    _prepare_decomposition,
-    _scheme_commands,
-    _scheme_requirements,
     _socket_path,
     prepare_case,
-    render_dictionary,
-    render_transform_dictionary,
-    validate_case,
+)
+from foamnordic.execution.case_validation import validate_case
+from foamnordic.execution.function_artifact import (
+    package_function as _package_function,
 )
 from foamnordic.execution.launch import (
     _host_command,
     _host_group_command,
     _multi_node_host_command,
     _node_ready_path,
+)
+from foamnordic.execution.openfoam_layouts import (
+    expression_layout as _expression_layout,
+)
+from foamnordic.execution.openfoam_layouts import output_width as _output_width
+from foamnordic.execution.openfoam_rendering import (
+    _scheme_requirements,
+    observation_block,
+    render_dictionary,
+    render_transform_dictionary,
+    scheme_commands,
+)
+from foamnordic.execution.openfoam_templates import (
+    prepare_decomposition as _prepare_decomposition,
 )
 from foamnordic.execution.resources import resource_values
 
@@ -207,7 +215,7 @@ def test_mesh_preparation_reports_compact_progress(mocker) -> None:
         longship = fno.Longship(case=case)
         output = io.StringIO()
         _mock_patch_2 = mocker.patch(
-            "foamnordic.execution.case.subprocess.run",
+            "foamnordic.execution.case_staging.subprocess.run",
             return_value=mocker.Mock(returncode=0),
         )
         try:
@@ -266,7 +274,7 @@ def test_parallel_preparation_normalizes_incompatible_policy(mocker) -> None:
             return mocker.Mock(returncode=0)
 
         run = mocker.patch(
-            "foamnordic.execution.case.subprocess.run", side_effect=decompose
+            "foamnordic.execution.case_staging.subprocess.run", side_effect=decompose
         )
         try:
             _, copied, _ = prepare_case(longship, longship.compile())
@@ -309,7 +317,7 @@ def test_parallel_preparation_rejects_wrong_processor_count(mocker) -> None:
             return mocker.Mock(returncode=0)
 
         _mock_patch_4 = mocker.patch(
-            "foamnordic.execution.case.subprocess.run", side_effect=incomplete
+            "foamnordic.execution.case_staging.subprocess.run", side_effect=incomplete
         )
         try:
             with (
@@ -342,11 +350,35 @@ def test_slurm_uses_native_scheduler_vocabulary() -> None:
     openfoam = inspect.signature(fno.Slurm.openfoam).parameters
     assert tuple(openfoam) == ("nodes", "ntasks", "cpus_per_task", "mem_per_cpu")
     model = inspect.signature(fno.Slurm.model).parameters
-    assert tuple(model) == ("cpus_per_task", "mem_per_cpu")
+    assert tuple(model) == (
+        "cpus_per_task",
+        "mem_per_cpu",
+        "gres_model",
+        "gres_count",
+    )
     assert "ranks" not in openfoam
     assert "ntasks_per_node" not in fno.Slurm.model(cpus_per_task=2).to_plan()
     assert "openfoam" in dir(fno.Slurm)
     assert "model" in dir(fno.Slurm)
+
+
+def test_slurm_model_gres_requires_a_complete_pair() -> None:
+    with pytest.raises(ValueError, match="declared together"):
+        fno.Slurm.model(gres_model="gh200")
+    with pytest.raises(ValueError, match="declared together"):
+        fno.Slurm.model(gres_count=1)
+    with pytest.raises(ValueError, match="gres_model"):
+        fno.Slurm.model(gres_model="gpu:gh200", gres_count=1)
+
+    assert fno.Slurm.model(
+        gres_model="gh200",
+        gres_count=1,
+    ).to_plan() == {
+        "cpus_per_task": 1,
+        "mem_per_cpu": None,
+        "gres_model": "gh200",
+        "gres_count": 1,
+    }
 
     help_text = pydoc.plain(pydoc.render_doc(fno.Slurm))
     assert "openfoam(" in help_text
@@ -537,9 +569,11 @@ def test_public_help_and_dir_are_discoverable() -> None:
     assert "Longship" in dir(fno)
     assert "Operator" in dir(fno)
     assert "Transform" in dir(fno)
-    assert "Run" in dir(fno)
+    assert "Run" not in dir(fno)
+    assert "Run" in dir(fno.Runtime)
     assert "non-blocking native Longship" in fno.Run.__doc__
-    assert "openfoam" in dir(fno)
+    assert "OpenFOAM" in dir(fno)
+    assert "openfoam" not in dir(fno)
 
 
 def test_launch_verbose_must_be_boolean_before_preparation() -> None:
@@ -907,7 +941,9 @@ def test_prepare_case_allocates_one_endpoint_per_closure_stage(mocker) -> None:
             outputs={"H2": fno.Field("H2")},
         )
         longship = fno.Longship(case=case, closures=(closure,))
-        _mock_patch_10 = mocker.patch("foamnordic.execution.case.subprocess.run")
+        _mock_patch_10 = mocker.patch(
+            "foamnordic.execution.case_staging.subprocess.run"
+        )
         try:
             _, prepared_case, programs = prepare_case(
                 longship,
@@ -958,6 +994,47 @@ def test_function_closure_infers_k_equation_expression_widths(mocker) -> None:
     assert _expression_layout(longship, fno.Field("k")).transport_width == 1
     assert _expression_layout(longship, fno.Field.grad("U")).transport_width == 9
     assert _expression_layout(longship, fno.Field.delta()).transport_width == 1
+    assert _expression_layout(longship, fno.Context.delta_time()).transport_width == 1
+    assert (
+        _expression_layout(
+            longship,
+            fno.Math.outer(fno.Field("U"), fno.Field("U")),
+        ).transport_width
+        == 9
+    )
+    assert (
+        _expression_layout(
+            longship,
+            fno.Math.trace(fno.Math.outer(fno.Field("U"), fno.Field("U"))),
+        ).transport_width
+        == 1
+    )
+    with pytest.raises(ValueError, match="diffusivity expression"):
+        _expression_layout(
+            longship,
+            fno.Field.laplacian(fno.Field("U"), "k"),
+        )
+    with pytest.raises(ValueError, match=r"trace\(\) function input"):
+        _expression_layout(longship, fno.Math.trace(fno.Field("U")))
+    assert (
+        _expression_layout(
+            longship,
+            fno.Field("k") * fno.Field("k"),
+        ).transport_width
+        == 1
+    )
+    assert (
+        _expression_layout(
+            longship,
+            fno.Field("k") * fno.Field("U"),
+        ).transport_width
+        == 3
+    )
+    with pytest.raises(ValueError, match="at least one scalar operand"):
+        _expression_layout(
+            longship,
+            fno.Field("U") * fno.Field("U"),
+        )
     assert (
         _expression_layout(
             longship,
@@ -1041,7 +1118,8 @@ def test_function_closure_packages_derived_input_contract(mocker) -> None:
         packaged_payload = Path(payload).read_bytes()
 
     _mock_patch_11 = mocker.patch(
-        "foamnordic.execution.case.write_bundle", side_effect=capture_bundle
+        "foamnordic.execution.function_artifact.write_bundle",
+        side_effect=capture_bundle,
     )
     try:
         with (
@@ -1531,20 +1609,20 @@ def test_ml_expression_schemes_are_planned_without_overriding_defaults() -> None
         ),
         ("gradSchemes", "curl(U)", "Gauss linear"),
     )
-    commands = "\n".join(_scheme_commands(longship, Path("/runs/case")))
+    commands = "\n".join(scheme_commands(longship, Path("/runs/case")))
     assert "divSchemes/div(phi,U)" in commands
     assert "divSchemes/default" in commands
     assert "foamnordic_default" in commands
     assert "-entry divSchemes/default -set" not in commands
 
     recorded = "\n".join(
-        _scheme_commands(longship, Path("/runs/case"), Path("/runs/work"))
+        scheme_commands(longship, Path("/runs/case"), Path("/runs/work"))
     )
     assert "numerics-changes.tsv" in recorded
 
     strict = fno.Longship(case=example.case, closures=(closure,), numerics="strict")
     strict_commands = "\n".join(
-        _scheme_commands(strict, Path("/runs/case"), Path("/runs/work"))
+        scheme_commands(strict, Path("/runs/case"), Path("/runs/work"))
     )
     assert "strict numerics" in strict_commands
     assert "numerics-changes.tsv" not in strict_commands
@@ -1654,7 +1732,7 @@ def test_transform_dictionary_embeds_general_observation() -> None:
         transform,
         "unix:///tmp/transform.sock",
         True,
-        _observation_block(
+        observation_block(
             observed,
             Path("/runs/cavity/observations.{rank}.jsonl"),
         ),

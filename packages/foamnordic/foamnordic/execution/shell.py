@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shlex
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def quote_command(values: Sequence[object]) -> str:
@@ -11,12 +11,12 @@ def quote_command(values: Sequence[object]) -> str:
 
 
 def toolchain_shell(toolchain: object, command: str) -> tuple[str, ...]:
-    prefix = getattr(toolchain, "command")
+    prefix = toolchain.command
     if getattr(toolchain, "wrapper", False):
         return (
-            str(getattr(toolchain, "shell")),
+            str(toolchain.shell),
             "-lc",
             "exec " + quote_command((*shlex.split(prefix), "-c", command)),
         )
     script = f"{prefix}; {command}" if prefix else command
-    return (str(getattr(toolchain, "shell")), "-lc", script)
+    return (str(toolchain.shell), "-lc", script)

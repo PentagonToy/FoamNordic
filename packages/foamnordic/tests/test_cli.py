@@ -109,7 +109,8 @@ def test_build_discovers_kit_bundled_beside_installed_package(mocker) -> None:
 def test_public_version_and_directory_are_discoverable() -> None:
     assert fno.__version__ == "1.0.7"
     assert "Longship" in dir(fno)
-    assert "export" in dir(fno)
+    assert "Export" in dir(fno)
+    assert "export" not in dir(fno)
 
 
 def test_cli_version_is_discoverable() -> None:
@@ -263,7 +264,7 @@ def test_dir_prints_packaged_templates_without_openfoam() -> None:
     with redirect_stdout(output):
         assert main(["dir", "--templates"]) == 0
     templates = Path(output.getvalue().strip())
-    assert (templates / "openfoam/model-adapter").is_dir()
+    assert (templates / "openfoam/scaffolds/model-adapter").is_dir()
 
 
 def test_dir_prints_scriptable_sdk_paths(mocker) -> None:

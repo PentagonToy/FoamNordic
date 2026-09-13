@@ -14,9 +14,10 @@ def test_k_equation_contract_owns_internal_output_layouts() -> None:
 
     assert contract is not None
     assert contract.category == "les_model"
+    assert contract.native_execution == frozenset({"transport"})
     assert contract.inputs["grad(U)"].kind == "tensor"
     assert contract.inputs["grad(U)"].physical_shape == (3, 3)
-    assert tuple(contract.outputs) == ("nut", "kProduction", "kDissipationCoeff")
+    assert tuple(contract.outputs) == ("k", "nut")
     assert all(layout.kind == "scalar" for layout in contract.outputs.values())
 
 
@@ -29,6 +30,7 @@ def test_contract_mappings_are_immutable() -> None:
     contract = adapter_contract("nutFjord")
 
     assert contract is not None
+    assert contract.native_execution == frozenset({"algebra"})
     with pytest.raises(TypeError):
         contract.outputs["later"] = contract.outputs["nut"]  # type: ignore[index]
 

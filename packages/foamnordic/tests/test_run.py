@@ -9,18 +9,20 @@ from pathlib import Path
 
 import pytest
 from foamnordic.execution.observe import ObservationStream
+from foamnordic.execution.process import (
+    container_private_path,
+    launch_local,
+    launch_process,
+    longship_executable,
+)
 from foamnordic.execution.run import (
     RunStatus,
-    _container_private_path,
-    _launch_local,
-    _launch_process,
-    _longship_executable,
     _normalize_slurm_state,
     _OpenFOAMProgress,
     _query_slurm,
     _query_slurm_estimated_start,
-    _sailing_paths,
 )
+from foamnordic.execution.run_files import sailing_paths
 
 
 def test_incrementally_reports_latest_physical_time_and_clears() -> None:
@@ -106,14 +108,14 @@ def test_progress_requires_a_boolean(mocker) -> None:
 
 def packaged_longship_available() -> bool:
     try:
-        _longship_executable()
+        longship_executable()
     except RuntimeError:
         return False
     return True
 
 
 def test_tykky_build_root_is_container_private() -> None:
-    assert _container_private_path(
+    assert container_private_path(
         Path("/ROIHU_TYKKY_example/miniforge/envs/env1/bin/foamnordic-longship")
     )
 
@@ -130,16 +132,16 @@ def test_longship_prefers_abi_runtime_over_packaged_executable(mocker) -> None:
         package.touch()
         _mock_patch_1 = mocker.patch.dict(os.environ, {}, clear=False)
         _mock_patch_2 = mocker.patch(
-            "foamnordic.execution.run.active_runtime_candidates",
+            "foamnordic.execution.process.active_runtime_candidates",
             return_value=(runtime,),
         )
         _mock_patch_3 = mocker.patch(
-            "foamnordic.execution.run.find_spec",
+            "foamnordic.execution.process.find_spec",
             return_value=mocker.Mock(origin=str(package)),
         )
         try:
             os.environ.pop("FOAMNORDIC_LONGSHIP", None)
-            assert _longship_executable() == executable.resolve()
+            assert longship_executable() == executable.resolve()
         finally:
             mocker.stop(_mock_patch_3)
             mocker.stop(_mock_patch_2)
@@ -156,20 +158,20 @@ def test_longship_resolves_beside_editable_native_module(mocker) -> None:
         native.touch()
         _mock_patch_4 = mocker.patch.dict(os.environ, {}, clear=False)
         _mock_patch_5 = mocker.patch(
-            "foamnordic.execution.run.__file__",
-            str(Path(directory) / "installed/foamnordic/execution/run.py"),
+            "foamnordic.execution.process.__file__",
+            str(Path(directory) / "installed/foamnordic/execution/process.py"),
         )
         _mock_patch_6 = mocker.patch(
-            "foamnordic.execution.run.find_spec",
+            "foamnordic.execution.process.find_spec",
             return_value=mocker.Mock(origin=str(native)),
         )
         _mock_patch_7 = mocker.patch(
-            "foamnordic.execution.run.active_runtime_candidates",
+            "foamnordic.execution.process.active_runtime_candidates",
             return_value=(),
         )
         try:
             os.environ.pop("FOAMNORDIC_LONGSHIP", None)
-            assert _longship_executable() == executable.resolve()
+            assert longship_executable() == executable.resolve()
         finally:
             mocker.stop(_mock_patch_7)
             mocker.stop(_mock_patch_6)
@@ -256,7 +258,7 @@ def launch(directory: str, *, host_script: str, solver_script: str):
     ready = work_dir / "host.ready"
     host = ("/bin/sh", "-c", host_script, "sh", str(ready))
     solver = ("/bin/sh", "-c", solver_script)
-    return _launch_local(
+    return launch_local(
         host=host,
         solver=solver,
         ready_files=(ready,),
@@ -273,7 +275,7 @@ def test_detach_releases_the_submission_owner_pipe() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         output = root / "owner.log"
-        run = _launch_process(
+        run = launch_process(
             (
                 sys.executable,
                 "-c",
@@ -449,7 +451,7 @@ def test_observe_merges_native_rank_shards() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         ready = root / "host.ready"
-        run = _launch_local(
+        run = launch_local(
             host=(
                 "/bin/sh",
                 "-c",
@@ -550,13 +552,13 @@ def test_result_summary_supports_compact_and_expanded_aliases() -> None:
 def test_scheduler_identity_is_added_to_final_log_names() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        sailing, harbor, output = _sailing_paths(root, "NACA4412")
+        sailing, harbor, output = sailing_paths(root, "NACA4412")
         harbor.touch()
         output.touch()
         job_file = root / ".foamnordic/job.id"
         job_file.parent.mkdir()
         job_file.write_text("123456\n", encoding="utf-8")
-        run = _launch_process(
+        run = launch_process(
             ("/bin/sh", "-c", "exit 0"),
             work_dir=root,
             process_log=root / ".foamnordic/submission.log",
@@ -579,13 +581,13 @@ def test_scheduler_identity_is_added_to_final_log_names() -> None:
 def test_wait_for_start_observes_pending_then_running(mocker) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        sailing, harbor, output = _sailing_paths(root, "cavity")
+        sailing, harbor, output = sailing_paths(root, "cavity")
         harbor.touch()
         output.touch()
         job_file = root / ".foamnordic/job.id"
         job_file.parent.mkdir()
         job_file.write_text("654321\n", encoding="utf-8")
-        run = _launch_process(
+        run = launch_process(
             ("/bin/sh", "-c", "exec sleep 30"),
             work_dir=root,
             process_log=root / ".foamnordic/submission.log",

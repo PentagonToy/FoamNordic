@@ -1,26 +1,21 @@
-# OpenFOAM model adapters
+# OpenFOAM equation adapters
 
-This directory contains equation-level OpenFOAM model adapters. An adapter belongs here only when FoamNordic must enter a model's native correction or source-evaluation method. It should select solver-owned fields and invoke the shared `ClosureHook`; FoamNordic retains transport, packing, observation, and lifecycle, while BindNordic retains model loading, scaling, and execution.
+These adapters enter an OpenFOAM model at its native correction or source-evaluation boundary. They select solver-owned fields and invoke the shared `ClosureHook`; OpenFOAM retains equation assembly and field ownership, FoamNordic retains transport and lifecycle, and BindNordic retains model execution.
 
-The current adapters include LES closures:
+> **Fjord model contract:** inputs are freely selectable expressions, while outputs are fixed by the adapter. A mathematical operator and a trained model may use different inputs, but they must return the same adapter-owned outputs.
 
-- `nutFjord` replaces the modelled eddy-viscosity evaluation.
-- `kEqnFjord` replaces the one-equation SGS closure terms.
+| Adapter | Native boundary | Fixed outputs |
+| --- | --- | --- |
+| `nutFjord` | LES eddy-viscosity correction | `nut` |
+| `kEqnFjord` | One-equation SGS correction | `k`, `nut` |
+| `progressRateFjord` | External progress-variable reaction-rate hook | `omega_c` |
 
-`progressRateFjord` is an unregistered equation hook for solver projects that own a transported progress variable. It permits arbitrary declared inputs but fixes one logical output, `omega_c`, mapped to a solver-owned scalar field. A consumer such as FjordFoam remains responsible for registering the hook in its reaction-rate model hierarchy and for deciding how `omega_c` enters its transport equations.
+`nutFjord` and `kEqnFjord` are registered for incompressible and compressible LES models. A fully symbolic `nutFjord` function is compiled once and evaluated directly inside OpenFOAM; model-backed and otherwise unsupported functions retain the resident ModelHost path. `progressRateFjord` is an unregistered hook: a solver project such as FjordFoam registers it in its own model hierarchy and decides how `omega_c` enters its equations.
 
-Domain-specific reaction-rate, heat-release, and transported-scalar models belong to their solver projects. They consume `ClosureHook` from FoamNordic's installed OpenFOAM SDK instead of being registered in this common library.
+`kEqnFjord` accepts either a model that directly updates `k` and `nut`, or a mathematical `Operator.function` containing one `Field.transport()` call. The latter is compiled once into OpenFOAM expressions and a native finite-volume solve; it does not launch a ModelHost or exchange fields during correctors. The earlier `nut`, `kProduction`, and `kDissipationCoeff` resident contract remains accepted for compatibility.
 
-Generic field programs do not require a turbulence-model adapter. `foamNordicExchange` can transform or observe registered fields in laminar, RAS, and LES cases at the supported solver stages. Do not add parallel `laminar`, `RAS`, or `LES` copies merely to host the same field-exchange code.
+Generic field programs do not require a model adapter. `foamNordicExchange` transforms or observes registered fields in laminar, RAS, and LES cases at supported solver stages.
 
-Choose an integration family by the equation entry point, not by the label in `simulationType`:
+## Extension rule
 
-- A time-step boundary field transform remains a generic function object.
-- An algebraic or transported LES closure enters the LES model correction.
-- A RAS closure enters its modelled stress or transport-equation correction; its state (`k`, `epsilon`, `omega`, wall treatment) is not interchangeable with an LES contract.
-- An iLES stress or learned momentum source enters momentum-equation assembly, normally through a dedicated solver hook or an appropriate `fvModel`. A fake laminar turbulence model would put the closure at the wrong boundary.
-- A combustion closure enters the reaction-rate or chemistry boundary owned by a combustion solver project.
-
-Introduce category subdirectories only when their native contracts are real and distinct. A new RAS, momentum-source, or combustion adapter must enter its actual equation boundary; update the registration source and `Make/files` in the same change.
-
-Every adapter must remain thin and must have a solver-integrated acceptance case. A successful generic `Transform` smoke test is evidence for the shared field bridge, not evidence that a new equation-level model adapter is needed. The non-compilable starting scaffold is in `tools/templates/openfoam/model-adapter/`.
+Choose an adapter by its equation entry point, not by `simulationType`. Domain-specific equations, mesh policies, reaction models and transported scalars remain in the solver project. New adapters must remain thin, declare fixed outputs and include a solver-integrated acceptance case. The starting scaffold is in [`tools/templates/openfoam/scaffolds/model-adapter/`](../../../../tools/templates/openfoam/scaffolds/model-adapter/README.md).

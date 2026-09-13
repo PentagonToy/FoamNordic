@@ -2,11 +2,13 @@
 
 from ..execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
 from ..execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
+from ..core.plan import CompiledPlan
 from ..core.spec import Attached, Closure, Longship, Observe, Slurm
 
 __all__ = [
     "Attached",
     "Closure",
+    "CompiledPlan",
     "FieldSummary",
     "Longship",
     "Observe",

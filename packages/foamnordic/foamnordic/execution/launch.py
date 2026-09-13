@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import shlex
 import shutil
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from bindnordic.models.artifact import load as load_artifact
 
-from .case import PreparedProgram, prepare_case, validate_case
+from .case import PreparedProgram, prepare_case
+from .case_validation import validate_case
 from .mpi import discover_mpi_policy
-from .run import Run, _internal_path, _launch_local, _launch_process, _sailing_paths
+from .process import launch_local, launch_process
+from .run import Run
+from .run_files import internal_path, sailing_paths
+from .runtime_paths import active_runtime_candidates, toolchain_runtime_candidates
 from .shell import quote_command, toolchain_shell
 from .slurm import force_cancel, write_batch, write_submission_wrapper
-from .runtime_paths import active_runtime_candidates, toolchain_runtime_candidates
 
 try:
     from .. import _native
@@ -302,8 +305,8 @@ def _host_group_command(
                         )
                     if str(plugin) not in plugins:
                         plugins.append(str(plugin))
-    aggregate = _internal_path(work_dir, "programs.ready")
-    configuration = _internal_path(work_dir, "host-programs.json")
+    aggregate = internal_path(work_dir, "programs.ready")
+    configuration = internal_path(work_dir, "host-programs.json")
     configuration.write_text(
         json.dumps(
             {
@@ -339,7 +342,7 @@ def _multi_node_host_command(
 
     if nodes < 2:
         return host, ready_files
-    configuration = _internal_path(work_dir, "node-host.json")
+    configuration = internal_path(work_dir, "node-host.json")
     configuration.write_text(
         json.dumps(
             {
@@ -397,6 +400,9 @@ def launch(
         verbose=verbose,
         profile_every=profile_every,
     )
+    resident_programs = tuple(
+        item for item in prepared if item.native_program is None
+    )
     def pin_runtime() -> tuple[Path, ...]:
         if integration_library is None:
             return ()
@@ -416,14 +422,14 @@ def launch(
     host, ready_files = (
         _host_group_command(
             longship,
-            prepared,
+            resident_programs,
             work_dir,
             int(runtime["host_cpus_per_task"]),
             int(runtime["solver_tasks_per_node"]),
             profile_every,
             receive_memory_bytes,
         )
-        if prepared
+        if resident_programs
         else (None, ())
     )
     if host is not None and longship.scheduler is not None:
@@ -435,9 +441,9 @@ def launch(
         )
 
     if local and host is None:
-        longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
+        longship_log, host_log, solver_log = sailing_paths(work_dir, longship.name)
         host_log.touch()
-        return _launch_process(
+        return launch_process(
             solver,
             work_dir=work_dir,
             process_log=solver_log,
@@ -451,7 +457,7 @@ def launch(
     if local:
         assert host is not None
         pin_cleanup = pin_runtime()
-        return _launch_local(
+        return launch_local(
             host=host,
             solver=solver,
             ready_files=ready_files,
@@ -479,18 +485,18 @@ def launch(
         termination_grace,
     )
     wrapper = write_submission_wrapper(work_dir, batch)
-    longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
+    longship_log, host_log, solver_log = sailing_paths(work_dir, longship.name)
     assert longship.scheduler is not None
-    return _launch_process(
+    return launch_process(
         (wrapper,),
         work_dir=work_dir,
-        process_log=_internal_path(work_dir, "submission.log"),
+        process_log=internal_path(work_dir, "submission.log"),
         longship_log=longship_log,
         host_log=host_log,
         solver_log=solver_log,
         plan_digest=plan.digest,
         name=longship.name,
-        job_file=_internal_path(work_dir, "job.id"),
+        job_file=internal_path(work_dir, "job.id"),
         partition=longship.scheduler.partition,
         force_cancel=lambda: force_cancel(work_dir),
         observation_sources=longship.case.ranks,

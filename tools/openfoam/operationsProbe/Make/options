@@ -6,6 +6,7 @@ EXE_INC = \
     -I$(FOAMNORDIC_SOURCE)/src \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/openfoam \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/openfoam/operations \
+    -I$(BINDNORDIC_SOURCE_DIR)/include \
     -I$(FOAMNORDIC_SOURCE)/src/foamnordic/backend/communication/include
 
 EXE_LIBS = \

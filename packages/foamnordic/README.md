@@ -4,7 +4,7 @@ The Python package is FoamNordic's declarative control plane. It describes an Op
 
 The authoritative [package boundary](../README.md) states the invariant shared with BindNordic: BindNordic understands the model, while FoamNordic understands how that model is used in a simulation.
 
-## Public API
+## API surface
 
 Grouped namespaces use PascalCase, declarations use PascalCase, and functions use snake_case:
 
@@ -23,9 +23,9 @@ result = run.stop(progress=True)
 post = result.postprocess
 ```
 
-`fno.OpenFOAM`, `fno.Export`, `fno.Models`, `fno.Postprocess`, and `fno.Runtime` are the canonical grouped namespaces. Existing lowercase aliases remain part of the supported API. Filesystem arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
+`fno.OpenFOAM`, `fno.Export`, `fno.Models`, `fno.Postprocess`, and `fno.Runtime` are the canonical grouped namespaces. Core declarations remain directly available as `fno.Closure`, `fno.Transform`, `fno.Observe`, `fno.Longship`, `fno.Operator`, `fno.Field`, `fno.Math`, `fno.Context`, `fno.Slurm`, `fno.Tensor`, and `fno.Random`. Compatibility aliases remain importable but are omitted from interactive discovery. Filesystem arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
 
-See the [API index](../../docs/api/README.md) for closures, transforms, Slurm, observations, model export, and postprocessing.
+See the [API reference](../../docs/api/README.md) for closures, transforms, Slurm, observations, model export and post-processing.
 
 ## Package layout
 
@@ -44,12 +44,13 @@ See the [API index](../../docs/api/README.md) for closures, transforms, Slurm, o
 
 Implementation modules may move between these categories; the exports in `foamnordic.__init__` and the documented grouped namespaces define the public surface.
 
-## Install from a checkout
+## Develop from source
 
 Python 3.11 and 3.12 are supported.
 
 ```console
-python -m pip install -e "./packages/foamnordic[ml]"
+uv sync --all-packages --all-extras
+source .venv/bin/activate
 module load openfoam/2512  # omit when OpenFOAM is already loaded
 foamnordic build
 foamnordic dir
@@ -63,7 +64,7 @@ The same `foamnordic build` command works after PyPI, GitHub, or editable instal
 
 On Apple Silicon, enter the OpenFOAM.app shell before building. On offline systems, provide an unpacked ONNX Runtime through `FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `foamnordic build --without-onnx` when ONNX execution is not required.
 
-The repository helper creates a marked development environment when desired:
+For an isolated environment outside the uv workspace, the repository helper creates a marked virtual environment:
 
 ```console
 bash tools/python/createVirtual.sh
@@ -85,7 +86,7 @@ The `ml` extra uses CPU JAX on Linux and macOS. Replace it with `ml-cuda12` on a
 - Slurm runs cancel after a 30-second ownership grace if their Python or Jupyter process disappears abnormally.
 - Completed fields remain on disk and are independent from live observations.
 
-## Tests
+## Verify
 
 Run the Python suite from the repository root in an installed development environment:
 

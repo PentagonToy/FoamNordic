@@ -3,25 +3,27 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
-from io import BytesIO
 import inspect
 import json
 import os
-from pathlib import Path
 import sys
+from collections.abc import Mapping, Sequence
+from io import BytesIO
+from pathlib import Path
 
 from bindnordic.models.artifact import load as load_artifact
 from bindnordic.models.artifact import payload_region, read_payload
 from bindnordic.models.runtime import EmbeddedPayload as _EmbeddedPayload
-from bindnordic.models.runtime import compiled_evaluator as _compiled_evaluator
-from bindnordic.models.runtime import configure_model_threads as _configure_model_threads
+from bindnordic.models.runtime import (
+    configure_model_threads as _configure_model_threads,
+)
 from bindnordic.models.runtime import equinox_evaluator as _bind_equinox_evaluator
 from bindnordic.models.runtime import joblib_evaluator as _bind_joblib_evaluator
 from bindnordic.models.runtime import packed_result as _packed_result
 
-from ..random import Key, invocation, key as random_key
 from ..core.layout import FieldLayout
+from ..random import Key, invocation
+from ..random import key as random_key
 
 try:
     from .. import _native

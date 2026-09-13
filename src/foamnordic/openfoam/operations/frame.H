@@ -46,6 +46,7 @@ class OperationFrame final {
     [[nodiscard]] FieldValue lookup(const std::string& name) const;
     [[nodiscard]] FieldValue evaluateUnary(const Expression& expression);
     [[nodiscard]] FieldValue evaluateBinary(const Expression& expression);
+    [[nodiscard]] FieldValue evaluateTernary(const Expression& expression);
     [[nodiscard]] FieldValue evaluateContraction(
         const Expression& expression);
     [[nodiscard]] FieldValue evaluateAlgebra(const Expression& expression);
@@ -60,6 +61,13 @@ public:
 
     [[nodiscard]] const FieldValue& evaluate(const Expression& expression);
     [[nodiscard]] const FieldValue& evaluate(const std::string& expression);
+    [[nodiscard]] const volScalarField& scalar(const Expression& expression);
+    [[nodiscard]] const volScalarField& scalar(const std::string& expression);
+    [[nodiscard]] std::string snapshot(
+        const Expression& expression,
+        std::size_t index);
+    void validateAssignment(const word& name, const Expression& expression);
+    void assign(const word& name, const Expression& expression);
 
     void bind(const std::string& name, const volScalarField& value);
     void bind(const std::string& name, const volVectorField& value);

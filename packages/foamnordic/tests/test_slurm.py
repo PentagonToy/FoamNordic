@@ -205,6 +205,58 @@ def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate() -> None:
 @pytest.mark.skipif(
     not native_available(), reason="nanobind extension is not installed"
 )
+def test_model_gres_is_reserved_and_assigned_to_the_host_step() -> None:
+    case = fno.openfoam.Case(
+        case_dir="case",
+        run_dir="workspace",
+        of_cmd="openfoam/2512",
+        ranks=1,
+    )
+    closure = fno.Closure(
+        name="nutFjord",
+        artifact="model.fnom",
+        inputs={"U": fno.field("U")},
+        outputs={"nut": fno.field("nut")},
+    )
+    longship = fno.Longship(
+        case=case,
+        closures=(closure,),
+        scheduler=fno.Slurm(
+            account="project_example",
+            partition="gputest",
+            time="00:15:00",
+            openfoam=fno.Slurm.openfoam(nodes=1, ntasks=1),
+            model=fno.Slurm.model(
+                cpus_per_task=1,
+                gres_model="gh200",
+                gres_count=1,
+            ),
+        ),
+    )
+    runtime = longship.compile().as_dict()["runtime"]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        script = write_batch(
+            longship,
+            runtime,
+            root,
+            ("closure-host",),
+            ("pimpleFoam",),
+            (root / ".foamnordic/closure.ready",),
+            120.0,
+            30.0,
+        ).read_text(encoding="utf-8")
+
+    assert "#SBATCH --gres=gpu:gh200:1" in script
+    assert "--host srun --nodes=1 --ntasks=1" in script
+    assert "--gres=gpu:gh200:1" in script
+    solver = script.split("--solver srun", 1)[1]
+    assert "--gres=" not in solver
+
+
+@pytest.mark.skipif(
+    not native_available(), reason="nanobind extension is not installed"
+)
 def test_multi_node_batch_waits_for_every_attached_host() -> None:
     case = fno.openfoam.Case(
         case_dir="case",

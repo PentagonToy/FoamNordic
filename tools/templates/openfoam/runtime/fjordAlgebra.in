@@ -1,0 +1,13 @@
+{
+    type            foamNordicExchange;
+
+    enabled         true;
+    executeControl  @EXECUTE_CONTROL@;
+    executeInterval @EXECUTE_INTERVAL@;
+    writeControl    @WRITE_CONTROL@;
+
+    exchangeStage   @EXCHANGE_STAGE@;
+    nativeAlgebra   true;
+    outputs         (@OUTPUT_FIELDS@);
+    outputExpressions (@OUTPUT_EXPRESSIONS@);
+}

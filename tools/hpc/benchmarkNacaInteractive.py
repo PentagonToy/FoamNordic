@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Benchmark OpenFOAM via FoamNordic and a coupled kEqn closure."""
+"""Benchmark OpenFOAM via FoamNordic and native kEqnFjord transport."""
 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import re
 import shutil
 import statistics
+from datetime import datetime, timezone
+from pathlib import Path
 from time import perf_counter
 
 import numpy as np
@@ -17,16 +17,21 @@ import numpy as np
 import foamnordic as fno
 
 
-def keqn_function(k, velocity_grad, delta, C_k=0.094, C_e=1.048):
-    k_positive = fno.Math.maximum(k, 0.0)
+def keqn_function(k, velocity_grad, nu, delta, C_k=0.094, C_e=1.048):
+    k_positive = fno.Math.maximum(k, 1.0e-10)
     sqrt_k = fno.Math.sqrt(k_positive)
-    eddy_viscosity = C_k * delta * sqrt_k
-    dev_two_symm_grad = fno.Math.dev(2.0 * fno.Math.symm(velocity_grad))
-    k_production = eddy_viscosity * fno.Math.ddot(
-        velocity_grad, dev_two_symm_grad
+    strain = fno.Math.dev(2.0 * fno.Math.symm(velocity_grad))
+    nut = C_k * delta * sqrt_k
+    production = nut * fno.Math.ddot(velocity_grad, strain)
+    dissipation = C_e * sqrt_k / delta
+    k_new = fno.Field.transport(
+        k,
+        diffusivity=nu + nut,
+        source=production,
+        implicit_sink=dissipation,
+        lower_bound=1.0e-10,
     )
-    k_dissipation_coeff = C_e * sqrt_k / delta
-    return eddy_viscosity, k_production, k_dissipation_coeff
+    return {"k": k_new, "nut": C_k * delta * fno.Math.sqrt(k_new)}
 
 
 def arguments() -> argparse.Namespace:
@@ -73,6 +78,7 @@ def stage_source(source: Path, output: Path, end_time: float) -> Path:
         ("endTime", f"{end_time:.16g}"),
         ("writeControl", "runTime"),
         ("writeInterval", f"{end_time:.16g}"),
+        ("writeFormat", "ascii"),
         ("writePrecision", "16"),
     ):
         rendered = replace_entry(rendered, name, value)
@@ -81,20 +87,23 @@ def stage_source(source: Path, output: Path, end_time: float) -> Path:
 
 
 def closure() -> fno.Closure:
-    return fno.Closure(
+    declared = fno.Closure(
         name="kEqnFjord",
         operator=fno.Operator.function(keqn_function),
         inputs={
             "k": fno.Field("k"),
             "velocity_grad": fno.Field.grad("U"),
+            "nu": fno.Field("nu"),
             "delta": fno.Field.delta(),
         },
         outputs={
-            "eddy_viscosity": fno.Field("nut"),
-            "K_production": fno.Field("kProduction"),
-            "K_dissipation_coeff": fno.Field("kDissipationCoeff"),
+            "k": fno.Field("k"),
+            "nut": fno.Field("nut"),
         },
     )
+    if declared.execution_lane != "native":
+        raise RuntimeError("kEqnFjord benchmark function did not lower natively")
+    return declared
 
 
 def case(name: str, source: Path, output: Path, ranks: int) -> fno.OpenFOAM.Case:
@@ -129,7 +138,7 @@ def launch(
     ranks: int,
     timeout: float,
     coupled: bool,
-) -> tuple[fno.Result, dict[str, object]]:
+) -> tuple[fno.Runtime.Result, dict[str, object]]:
     declared = fno.Longship(
         case=case(label, source, output, ranks),
         closures=(closure(),) if coupled else (),
@@ -144,7 +153,7 @@ def launch(
     execution, clock = solver_timing(result.solver_log)
     return result, {
         "label": label,
-        "mode": "fno-coupled" if coupled else "openfoam-via-foamnordic",
+        "mode": "fno-native" if coupled else "openfoam-via-foamnordic",
         "wall_seconds": wall,
         "result_elapsed_seconds": result.elapsed_seconds,
         "openfoam_execution_seconds": execution,
@@ -154,8 +163,8 @@ def launch(
 
 
 def compare(
-    via_foamnordic: fno.Result,
-    coupled: fno.Result,
+    via_foamnordic: fno.Runtime.Result,
+    coupled: fno.Runtime.Result,
     relative_l2_tolerance: float,
     peak_relative_tolerance: float,
     atol: float,
@@ -187,7 +196,7 @@ def compare(
     print(json.dumps(metrics, indent=2))
     if not passed:
         raise RuntimeError(
-            "OpenFOAM-via-FoamNordic and coupled kEqnFjord fields exceeded "
+            "OpenFOAM-via-FoamNordic and native kEqnFjord fields exceeded "
             "the declared tolerances"
         )
     return metrics
@@ -211,8 +220,8 @@ def main() -> int:
 
     print("[FoamNordic] Warm-up: OpenFOAM via FoamNordic")
     launch("warmup-openfoam-via-foamnordic", source, root, options.ranks, options.timeout, False)
-    print("[FoamNordic] Warm-up: FNO-coupled")
-    launch("warmup-fno-coupled", source, root, options.ranks, options.timeout, True)
+    print("[FoamNordic] Warm-up: FNO-native")
+    launch("warmup-fno-native", source, root, options.ranks, options.timeout, True)
 
     records = []
     comparisons = []
@@ -220,7 +229,7 @@ def main() -> int:
         order = (False, True) if repetition % 2 else (True, False)
         pair = {}
         for coupled in order:
-            mode = "fno-coupled" if coupled else "openfoam-via-foamnordic"
+            mode = "fno-native" if coupled else "openfoam-via-foamnordic"
             label = f"naca-{repetition:02d}-{mode}"
             print(f"[FoamNordic] Measured run {repetition}: {mode}")
             result, record = launch(
@@ -231,7 +240,7 @@ def main() -> int:
         comparisons.append(
             compare(
                 pair["openfoam-via-foamnordic"],
-                pair["fno-coupled"],
+                pair["fno-native"],
                 options.relative_l2_tolerance,
                 options.peak_relative_tolerance,
                 options.atol,
@@ -242,8 +251,8 @@ def main() -> int:
         record for record in records
         if record["mode"] == "openfoam-via-foamnordic"
     ]
-    coupled = [
-        record for record in records if record["mode"] == "fno-coupled"
+    native = [
+        record for record in records if record["mode"] == "fno-native"
     ]
     report = {
         "schema": "foamnordic.naca-keqn-benchmark",
@@ -265,13 +274,13 @@ def main() -> int:
                 via_foamnordic, "openfoam_clock_seconds"
             ),
         },
-        "fno_coupled": {
-            "wall_seconds": reduced(coupled, "wall_seconds"),
+        "fno_native": {
+            "wall_seconds": reduced(native, "wall_seconds"),
             "openfoam_execution_seconds": reduced(
-                coupled, "openfoam_execution_seconds"
+                native, "openfoam_execution_seconds"
             ),
             "openfoam_clock_seconds": reduced(
-                coupled, "openfoam_clock_seconds"
+                native, "openfoam_clock_seconds"
             ),
         },
         "records": records,
@@ -279,14 +288,14 @@ def main() -> int:
         "passed": True,
     }
     report["wall_overhead_ratio"] = (
-        report["fno_coupled"]["wall_seconds"]["median"]
+        report["fno_native"]["wall_seconds"]["median"]
         / report["openfoam_via_foamnordic"]["wall_seconds"]["median"]
     )
     path = root / "benchmark.json"
     path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
     print(f"[FoamNordic] Report: {path}")
-    print("[FoamNordic] NACA4412 exact kEqn benchmark: PASS")
+    print("[FoamNordic] NACA4412 native kEqn benchmark: PASS")
     return 0
 
 

@@ -1,17 +1,29 @@
 # Changelog
 
-This file records user-visible changes. Internal refactors and historical protocol revisions are intentionally omitted; the documentation describes the current FoamNordic contract only.
+This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
 ## [1.0.8] - Unreleased
+
+### Documentation and development
+
+- The Python reference now records public signatures, defaults, accepted values, lifecycle results, observation records, numerical execution lanes, FNOM metadata, post-processing metrics and command-line options in one self-contained documentation set.
+- Architecture and benchmark records now use explicit ownership, lifecycle, measurement and interpretation contracts with consistent terminology and rendered diagrams.
+- Repository guides now use consistent purpose, ownership, usage and verification sections across packages, native components, examples, tutorials, templates and release tooling.
+- Tutorial notebooks now use the current native `kEqnFjord` contract, explicit public API arguments and descriptive shell-safe filenames. The current Extra Trees and Equinox DNN examples train from one downloadable LES dataset, launch through Slurm and display live `Observe` summaries; the basic lid-driven-cavity baseline remains local.
+- The `ml` and `ml-cuda12` authoring extras now include Optax so the Equinox training tutorial does not require an undeclared optimiser dependency.
+- The repository root is a uv workspace containing the FoamNordic package and its virtual BindNordic source component; the published wheel remains one `foamnordic` distribution containing both namespaces.
 
 ### Tables and closure composition
 
 - `fno.Export.table()` writes self-contained, data-only FNOM artefacts containing ordered regular-grid axes and dense output values. BindNordic evaluates them with native multilinear interpolation and explicit clamp or error bounds policies.
 - `fno.Operator.table()` distinguishes lookup tables from executable model artefacts and verifies that distinction against the FNOM manifest before launch.
-- Immutable `Closure.update()` declarations attach solver-mediated field updates to one physical closure without adding another top-level workflow abstraction. Each stage retains an independent artifact, kernel and transport endpoint, while the solver integration owns the call sites and any equations advanced between them.
+- Immutable `Closure.update()` declarations attach solver-mediated field updates to one physical closure without adding another top-level workflow abstraction. Each stage retains an independent artefact, kernel and transport endpoint, while the solver integration owns the call sites and any equations advanced between them.
 
 ### OpenFOAM integration
 
+- `Field.transport()` allows a mathematical `Operator.function` to declare one implicit scalar solve. `kEqnFjord` compiles the graph once, executes its finite-volume equation entirely inside OpenFOAM, and exposes the same fixed `k` and `nut` outputs as a directly learned state update.
+- Fully symbolic `nutFjord` functions are compiled once and evaluated at the native OpenFOAM correction boundary without starting a ModelHost or exchanging fields. Unsupported functions retain the resident execution path.
+- Fully symbolic field `Transform` functions use the same ModelHost-free path at supported time-step boundaries, while model-backed transforms retain their existing resident execution contract.
 - Case validation no longer assumes conventional `U` and `p` initial fields. Solver-only cases validate their common directory and dictionary structure, while transforms, closures and observations validate the fields they actually declare; cases using fields such as `p_rgh` are therefore accepted without aliases.
 - Case paths are canonicalised consistently before validation, including macOS paths that cross the `/tmp` to `/private/tmp` alias.
 - `progressRateFjord` provides a thin native reaction-rate hook whose inputs remain explicitly configurable and whose solver-owned output is `omega_c`.
@@ -29,7 +41,7 @@ This file records user-visible changes. Internal refactors and historical protoc
 - A transactional resident-engine contract supports long-lived state, optional checkpoint and restore, explicit topology-change behaviour and opt-in cost observation without adding domain semantics or mesh redistribution to the runtime.
 - Native runtime builds use the CMake-owned `foamnordic_runtime_bundle` target so every enabled runtime component, including the optional ONNX connector, is built before installation.
 - FNOM execution metadata distinguishes backends that own compute threads from backends that support concurrent independent evaluations.
-- Field programs assigned to the same node now run inside one ModelHost process and borrow the full available execution capacity from one shared pool instead of receiving static CPU partitions, while retaining separate artifacts, endpoints, kernels and backend state.
+- Field programs assigned to the same node now run inside one ModelHost process and borrow the full available execution capacity from one shared pool instead of receiving static CPU partitions, while retaining separate artefacts, endpoints, kernels and backend state.
 - `foamnordic build` installs ONNX support as a versioned runtime connector. A consolidated ModelHost loads it on demand, allowing ONNX and Python or table programs to share one process without linking the wheel extension to the host OpenFOAM toolchain.
 - Native tables use the managed resident path and remain available after `foamnordic build --without-onnx`; the ONNX connector now derives its scheduling capabilities from the same declaration as the underlying BindNordic kernel.
 
@@ -43,7 +55,7 @@ This file records user-visible changes. Internal refactors and historical protoc
 
 ### Packaging and file I/O
 
-- Model compilation, FNOM container handling, fitted-scaler normalization, backend payload serialization, and focused OpenFOAM field decoding are provided by BindNordic behind the existing FoamNordic API.
+- Model compilation, FNOM container handling, fitted-scaler normalisation, backend payload serialisation, and focused OpenFOAM field decoding are provided by BindNordic behind the existing FoamNordic API.
 - FoamNordic no longer depends on foamlib for field discovery or postprocessing. OpenFOAM directive expansion remains tied to the case toolchain and is still handled by FoamNordic.
 - Source-tree templates now live under `tools/templates`; packaged template discovery and the public tutorial API are unchanged.
 - Native FNOM contracts, manifests, affine scaling, compiled and forest execution, and optional ONNX execution now live in BindNordic. FoamNordic keeps compatibility headers and owns transport, field packing, worker lifecycle and atomic publication.
@@ -52,7 +64,7 @@ This file records user-visible changes. Internal refactors and historical protoc
 
 ## [1.0.6] - 2026-09-09
 
-FoamNordic 1.0.6 consolidates the native runtime, lifecycle, artifact, and OpenFOAM integration work completed after the 1.0.5 baseline.
+FoamNordic 1.0.6 consolidates the native runtime, lifecycle, artefact and OpenFOAM integration work completed after the 1.0.5 baseline.
 
 ### Execution and memory
 
@@ -61,7 +73,7 @@ FoamNordic 1.0.6 consolidates the native runtime, lifecycle, artifact, and OpenF
 - Floating-point model outputs are checked before publication. A non-finite or malformed output leaves every OpenFOAM-owned destination unchanged.
 - Runtime generations are immutable. Active runs pin the selected generation; cleanup preserves the current, recent, pinned, incomplete, and damaged generations.
 
-### Reproducibility and artifacts
+### Reproducibility and artefacts
 
 - `Longship(..., numerics="strict")` rejects a missing derived-field scheme. The default convenient mode adds only required schemes and records actual changes in `numerics-changes.tsv` inside the run directory.
 - FNOM inspection identifies data-only and code-bearing payloads without executing them.

@@ -5,18 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import re
 import shlex
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from time import perf_counter
 
 import numpy as np
 
 import foamnordic as fno
-
 
 DEFAULT_FIELDS = ("U", "p", "T", "CH4", "O2", "CO2", "H2O", "Qdot")
 
@@ -66,9 +65,7 @@ def _prepare_source(
             numeric = float(child.name)
         except ValueError:
             numeric = None
-        if child.is_dir() and numeric is not None and numeric != 0.0:
-            shutil.rmtree(child)
-        elif child.is_dir() and (
+        if child.is_dir() and numeric is not None and numeric != 0.0 or child.is_dir() and (
             child.name.startswith("processor")
             or child.name in {"postProcessing", "TDAC"}
         ):
@@ -169,8 +166,8 @@ def _observations(run) -> list[dict[str, object]]:
 
 
 def _comparison(
-    of_fno: fno.Result,
-    coupled: fno.Result,
+    of_fno: fno.Runtime.Result,
+    coupled: fno.Runtime.Result,
     fields: tuple[str, ...],
     rtol: float,
     atol: float,
@@ -257,12 +254,12 @@ def main() -> int:
         name="identityThermochemistry",
         operator=fno.Operator.function(identity_thermochemistry),
         inputs={
-            "temperature": fno.field(arguments.temperature_field),
-            "fuel": fno.field(arguments.fuel_field),
+            "temperature": fno.Field(arguments.temperature_field),
+            "fuel": fno.Field(arguments.fuel_field),
         },
         outputs={
-            "temperature": fno.field(arguments.temperature_field),
-            "fuel": fno.field(arguments.fuel_field),
+            "temperature": fno.Field(arguments.temperature_field),
+            "fuel": fno.Field(arguments.fuel_field),
         },
         at="time_step_start",
     )

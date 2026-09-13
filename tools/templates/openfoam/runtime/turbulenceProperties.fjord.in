@@ -1,0 +1,29 @@
+FoamFile
+{
+    format          ascii;
+    class           dictionary;
+    location        "constant";
+    object          turbulenceProperties;
+}
+
+simulationType  LES;
+
+LES
+{
+    LESModel        @FOAMNORDIC_MODEL@;
+    turbulence      on;
+    printCoeffs     on;
+    delta           cubeRootVol;
+
+    cubeRootVolCoeffs
+    {
+        deltaCoeff      1;
+    }
+
+    @FOAMNORDIC_MODEL@Coeffs
+    {
+        @FOAMNORDIC_MODEL_CONFIGURATION@
+
+        @FOAMNORDIC_MODEL_EXECUTION@
+    }
+}

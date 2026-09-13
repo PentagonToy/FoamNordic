@@ -2,6 +2,20 @@
 
 These measurements cover work outside the CFD equations: field transforms, model-input preparation, inference, artefact handling and resident memory.
 
+## Measurement index
+
+| Measurement | Isolates | Excludes |
+| --- | --- | --- |
+| Field transform | Native in-place field arithmetic | Solver equations and model transport |
+| Model-input packing | Cast and interleave into a packed tensor | Inference and transport |
+| Equinox execution | Cold JAX activation and warm model calls | Python and JAX import |
+| Joblib and ONNX | Backend load and prediction | Fjord and process startup |
+| Compiled estimator | Compilation, cache load and prediction | Solver integration |
+| ModelHost memory | Production SHM exchange and workspace retention | OpenFOAM equations |
+| Generation turnover | Immutable runtime publication and collection | Native compilation |
+
+Throughput is reported as processed rows or source bytes per measured second. Unless a section states otherwise, central values and deviations follow the [benchmark reporting contract](README.md).
+
 ## Field transform
 
 Two hundred in-place fused transforms were applied to one million three-component float64 cells. Seven warm runs were reduced by their median.
@@ -19,8 +33,8 @@ Two hundred packs converted three one-million-cell float64 scalar fields into on
 
 | Platform | Two-pass | FoamNordic pack | Speed ratio | Source throughput |
 |---|---:|---:|---:|---:|
-| MacBook | 0.12257 s | 0.16095 s | 0.762x | 28,442 MiB/s |
-| Roihu CPU | 0.24974 s | 0.25064 s | 0.9996x | 18,264 MiB/s |
+| MacBook | 0.12257 s | 0.16095 s | 0.762× | 28,442 MiB/s |
+| Roihu CPU | 0.24974 s | 0.25064 s | 0.9996× | 18,264 MiB/s |
 
 The MacBook used seven runs. Roihu job `1090004` used one core from a `small` allocation and measured 21 runs after one warm-up. Checksums were identical.
 
@@ -48,10 +62,10 @@ Cold load used 11 repetitions.
 
 | Batch rows | Joblib median | ONNX median | ONNX speedup | Joblib throughput | ONNX throughput |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 5.614e-5 s | 5.720e-6 s | 9.81x | 17,813 rows/s | 174,825 rows/s |
-| 256 | 1.941e-4 s | 9.725e-5 s | 2.00x | 1,319,098 rows/s | 2,632,391 rows/s |
-| 4,096 | 2.217e-3 s | 1.500e-3 s | 1.48x | 1,847,573 rows/s | 2,730,996 rows/s |
-| 262,144 | 1.845e-1 s | 1.538e-1 s | 1.20x | 1,420,869 rows/s | 1,704,270 rows/s |
+| 1 | 5.614e-5 s | 5.720e-6 s | 9.81× | 17,813 rows/s | 174,825 rows/s |
+| 256 | 1.941e-4 s | 9.725e-5 s | 2.00× | 1,319,098 rows/s | 2,632,391 rows/s |
+| 4,096 | 2.217e-3 s | 1.500e-3 s | 1.48× | 1,847,573 rows/s | 2,730,996 rows/s |
+| 262,144 | 1.845e-1 s | 1.538e-1 s | 1.20× | 1,420,869 rows/s | 1,704,270 rows/s |
 
 Warm inference used 21 repetitions per batch. ONNX used single-threaded ONNX Runtime 1.29.0 in Python; the result excludes Fjord transport and process startup.
 
@@ -68,10 +82,10 @@ The compiled initial load includes native compilation: its median compiler time 
 
 | Batch rows | Compiled median | Joblib median | Compiled speedup | Compiled throughput | Joblib throughput |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 5.751e-6 s | 9.277e-4 s | 161.31x | 173,882 rows/s | 1,078 rows/s |
-| 256 | 4.497e-4 s | 1.611e-3 s | 3.58x | 569,263 rows/s | 158,934 rows/s |
-| 4,096 | 7.763e-3 s | 7.416e-3 s | 0.96x | 527,628 rows/s | 552,337 rows/s |
-| 262,144 | 3.641e-1 s | 3.552e-1 s | 0.98x | 720,033 rows/s | 737,962 rows/s |
+| 1 | 5.751e-6 s | 9.277e-4 s | 161.31× | 173,882 rows/s | 1,078 rows/s |
+| 256 | 4.497e-4 s | 1.611e-3 s | 3.58× | 569,263 rows/s | 158,934 rows/s |
+| 4,096 | 7.763e-3 s | 7.416e-3 s | 0.96× | 527,628 rows/s | 552,337 rows/s |
+| 262,144 | 3.641e-1 s | 3.552e-1 s | 0.98× | 720,033 rows/s | 737,962 rows/s |
 
 Warm inference used 21 repetitions per batch. Compiled execution is faster for the two smaller batches; the paths are similar at 4,096 and 262,144 rows.
 

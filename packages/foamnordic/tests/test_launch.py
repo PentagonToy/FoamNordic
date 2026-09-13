@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
 import tempfile
 import threading
 import time
@@ -12,9 +11,9 @@ from pathlib import Path
 import pytest
 from foamnordic.core.managed import generated_kind, mark_generated
 from foamnordic.core.native_plan import available as native_available
-from foamnordic.execution.launch import _openfoam_library, _submission_environment
 from foamnordic.execution.host_group import main as run_host_group
-from foamnordic.execution.run import _launch_process, _longship_executable
+from foamnordic.execution.launch import _openfoam_library, _submission_environment
+from foamnordic.execution.process import launch_process, longship_executable
 
 import foamnordic as fno
 
@@ -23,7 +22,7 @@ def runtime_available() -> bool:
     if not native_available():
         return False
     try:
-        _longship_executable()
+        longship_executable()
     except RuntimeError:
         return False
     return True
@@ -80,7 +79,7 @@ def test_multiple_programs_run_in_one_model_host_process(monkeypatch) -> None:
             "foamnordic.execution.host_group.run_program", serve
         )
         monkeypatch.setattr(
-            "foamnordic.execution.host_group._configure_model_threads",
+            "foamnordic.execution.host_group.configure_model_threads",
             lambda units: units,
         )
         monkeypatch.setattr(
@@ -153,7 +152,7 @@ def test_grouped_program_failure_cleans_all_local_endpoints(
         )
         monkeypatch.setattr("foamnordic.execution.host_group.run_program", serve)
         monkeypatch.setattr(
-            "foamnordic.execution.host_group._configure_model_threads",
+            "foamnordic.execution.host_group.configure_model_threads",
             lambda units: units,
         )
         monkeypatch.setattr(
@@ -190,7 +189,7 @@ def test_slurm_identity_and_timing_are_finalized_after_completion() -> None:
             "-c",
             f"printf 'ExecutionTime = 1.25 s  ClockTime = 2 s\\n' > {solver}",
         )
-        run = _launch_process(
+        run = launch_process(
             command,
             work_dir=work,
             process_log=sailing,

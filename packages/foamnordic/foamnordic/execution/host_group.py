@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import signal
 import sys
 import threading
 import time
+from pathlib import Path
+
+from bindnordic.models.runtime import configure_model_threads
 
 from .. import _native
-from .resident import _configure_model_threads, run_program
+from .resident import run_program
 
 
 def _ready_path(value: str, suffix: str) -> Path:
@@ -58,7 +60,7 @@ def main(path: str) -> int:
         )
     aggregate = _ready_path(configuration["aggregate_ready"], suffix)
     cleanup_paths = (aggregate, *ready_files, *_socket_paths(programs))
-    capacity_units = _configure_model_threads(int(configuration["capacity_units"]))
+    capacity_units = configure_model_threads(int(configuration["capacity_units"]))
     capacity = _native._ExecutionCapacity(capacity_units)
     threads: list[threading.Thread] = []
     failures: list[BaseException] = []
@@ -74,7 +76,9 @@ def main(path: str) -> int:
         nonlocal completed
         try:
             run_program(arguments, capacity, configure_threads=False)
-        except BaseException as error:
+        # A worker thread must report SystemExit and KeyboardInterrupt as well as
+        # ordinary exceptions so that the group can fail together.
+        except BaseException as error:  # noqa: BLE001
             with state:
                 failures.append(error)
             return

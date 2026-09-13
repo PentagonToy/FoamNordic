@@ -15,7 +15,7 @@ import foamnordic as fno
     not native_available(), reason="nanobind extension is not installed"
 )
 def _compiled_prediction(mocker, model, features, root: Path, *, threads: int = 2):
-    from foamnordic.execution.resident import _compiled_evaluator
+    from bindnordic.models.runtime import compiled_evaluator
 
     artifact = fno.export.sklearn(
         model,
@@ -27,7 +27,7 @@ def _compiled_prediction(mocker, model, features, root: Path, *, threads: int = 
         "os.environ", {"BINDNORDIC_COMPILED_CACHE": str(root / "cache")}
     )
     try:
-        evaluator = _compiled_evaluator(
+        evaluator = compiled_evaluator(
             BytesIO(fno._native.read_model_payload(str(artifact))),
             (("prediction", 1),),
             "float64",
@@ -158,7 +158,7 @@ def test_lightgbm_compiled_round_trip(mocker) -> None:
     not native_available(), reason="nanobind extension is not installed"
 )
 def test_sklearn_extra_trees_compiled_round_trip(mocker) -> None:
-    from foamnordic.execution.resident import _compiled_evaluator
+    from bindnordic.models.runtime import compiled_evaluator
     from sklearn.ensemble import ExtraTreesRegressor
 
     rng = np.random.default_rng(42)
@@ -183,13 +183,13 @@ def test_sklearn_extra_trees_compiled_round_trip(mocker) -> None:
             "os.environ", {"BINDNORDIC_COMPILED_CACHE": str(root / "cache")}
         )
         try:
-            first = _compiled_evaluator(
+            first = compiled_evaluator(
                 BytesIO(fno._native.read_model_payload(str(artifact))),
                 (("prediction", 1),),
                 "float64",
                 threads=2,
             )
-            second = _compiled_evaluator(
+            second = compiled_evaluator(
                 BytesIO(fno._native.read_model_payload(str(artifact))),
                 (("prediction", 1),),
                 "float64",
@@ -216,7 +216,7 @@ def test_sklearn_extra_trees_compiled_round_trip(mocker) -> None:
     not native_available(), reason="nanobind extension is not installed"
 )
 def test_sklearn_extra_trees_compiled_large_batch(mocker) -> None:
-    from foamnordic.execution.resident import _compiled_evaluator
+    from bindnordic.models.runtime import compiled_evaluator
     from sklearn.ensemble import ExtraTreesRegressor
 
     rng = np.random.default_rng(43)
@@ -239,7 +239,7 @@ def test_sklearn_extra_trees_compiled_large_batch(mocker) -> None:
             "os.environ", {"BINDNORDIC_COMPILED_CACHE": str(root / "cache")}
         )
         try:
-            evaluator = _compiled_evaluator(
+            evaluator = compiled_evaluator(
                 BytesIO(fno._native.read_model_payload(str(artifact))),
                 (("prediction", 1),),
                 "float64",

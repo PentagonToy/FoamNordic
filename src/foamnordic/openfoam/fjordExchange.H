@@ -17,6 +17,7 @@
 #include "scalarField.H"
 #include "wordList.H"
 #include "fieldProgramSession.H"
+#include "operations/expression.H"
 
 #include <cstdint>
 #include <memory>
@@ -50,6 +51,8 @@ class fjordExchange final : public fvMeshFunctionObject {
     bool ucx_{false};
     std::uint64_t sessionId_{1};
     std::uint64_t profileEvery_{0};
+    bool nativeAlgebra_{false};
+    std::vector<foamNordic::operations::Expression> outputExpressions_;
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::AtomicFieldExchange> exchange_;
     std::unique_ptr<foamnordic::adapter::ExchangeSequence> sequence_;

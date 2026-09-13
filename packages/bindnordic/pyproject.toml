@@ -1,0 +1,13 @@
+[project]
+name = "bindnordic"
+version = "1.0.7"
+description = "Internal model and file-format component of FoamNordic"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "cloudpickle>=3,<4",
+    "joblib>=1.4,<2",
+    "numpy>=1.26,<3",
+]
+
+[tool.uv]
+package = false

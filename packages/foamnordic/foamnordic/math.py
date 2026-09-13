@@ -62,6 +62,8 @@ class Math:
     # Element-wise functions shared by Python scalars, NumPy, and JAX.
     @staticmethod
     def abs(value):
+        if isinstance(value, FieldExpression):
+            return operation("abs", value)
         return _unary("abs", value)
 
     @staticmethod
@@ -108,6 +110,8 @@ class Math:
 
     @staticmethod
     def maximum(left, right):
+        if isinstance(left, FieldExpression) or isinstance(right, FieldExpression):
+            return operation("maximum", left, right)
         namespace = _namespace(left, right)
         if namespace is None:
             return builtins.max(left, right)
@@ -115,6 +119,10 @@ class Math:
 
     @staticmethod
     def minimum(left, right):
+        if isinstance(left, FieldExpression) or isinstance(
+            right, FieldExpression
+        ):
+            return operation("minimum", left, right)
         namespace = _namespace(left, right)
         if namespace is None:
             return builtins.min(left, right)
@@ -122,6 +130,15 @@ class Math:
 
     @staticmethod
     def clip(value, minimum=None, maximum=None):
+        if isinstance(value, FieldExpression):
+            if minimum is None and maximum is None:
+                raise ValueError("symbolic Math.clip requires at least one bound")
+            result = value
+            if minimum is not None:
+                result = operation("maximum", result, minimum)
+            if maximum is not None:
+                result = operation("minimum", result, maximum)
+            return result
         namespace = _namespace(value, minimum, maximum)
         if namespace is None:
             result = value
@@ -134,6 +151,8 @@ class Math:
 
     @staticmethod
     def where(condition, when_true, when_false):
+        if isinstance(condition, FieldExpression):
+            return operation("where", condition, when_true, when_false)
         namespace = _namespace(condition, when_true, when_false)
         if namespace is None:
             return when_true if condition else when_false
@@ -195,6 +214,13 @@ class Math:
 
     @staticmethod
     def einsum(subscripts: str, *operands):
+        if any(isinstance(value, FieldExpression) for value in operands):
+            compact = subscripts.replace(" ", "")
+            if compact == "...ii->..." and len(operands) == 1:
+                return operation("trace", operands[0])
+            if compact == "...ij,...ij->..." and len(operands) == 2:
+                return operation("ddot", operands[0], operands[1])
+            raise TypeError(f"unsupported symbolic einsum pattern: {subscripts}")
         namespace = _namespace(*operands)
         if namespace is None:
             raise TypeError("Math.einsum requires NumPy or JAX arrays")
@@ -204,10 +230,42 @@ class Math:
     def matmul(left, right):
         """Multiply arrays over their final two dimensions."""
 
+        if isinstance(left, FieldExpression) or isinstance(right, FieldExpression):
+            return operation("dot", left, right)
         namespace = _namespace(left, right)
         if namespace is None:
             raise TypeError("Math.matmul requires NumPy or JAX arrays")
         return namespace.matmul(left, right)
+
+    @staticmethod
+    def outer(left, right):
+        """Return the outer product of per-cell vectors."""
+
+        if isinstance(left, (str, FieldExpression)) or isinstance(
+            right, (str, FieldExpression)
+        ):
+            return operation("outer", left, right)
+
+        if getattr(left, "ndim", None) != 2 or getattr(right, "ndim", None) != 2:
+            raise ValueError("Math.outer requires per-cell vector fields")
+        if left.shape[0] != right.shape[0]:
+            raise ValueError("Math.outer requires matching cell dimensions")
+        return left[..., :, None] * right[..., None, :]
+
+    @staticmethod
+    def trace(value):
+        """Return the trace over the final two tensor axes."""
+
+        if isinstance(value, (str, FieldExpression)):
+            return operation("trace", value)
+
+        shape = getattr(value, "shape", ())
+        if len(shape) < 2 or shape[-2] != shape[-1]:
+            raise ValueError("Math.trace requires square final tensor dimensions")
+        namespace = _namespace(value)
+        if namespace is None:
+            raise TypeError("Math.trace requires a NumPy or JAX array")
+        return namespace.trace(value, axis1=-2, axis2=-1)
 
     @staticmethod
     def mag(value):
@@ -249,7 +307,7 @@ class Math:
         if namespace is None:
             raise TypeError("Math.dev requires a NumPy or JAX array")
         dimensions = shape[-1]
-        trace = namespace.trace(value, axis1=-2, axis2=-1)
+        trace = Math.trace(value)
         identity = namespace.eye(dimensions, dtype=value.dtype)
         return value - (trace / dimensions)[..., None, None] * identity
 

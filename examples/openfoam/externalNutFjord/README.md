@@ -15,7 +15,7 @@ foamnordic doctor
 
 On macOS, activate OpenFOAM with the site's normal shell command instead of the module command.
 
-## Build outside FoamNordic
+## Build
 
 Copy this directory into the solver project and run:
 
@@ -66,6 +66,8 @@ externalNutFjordCoeffs
 }
 ```
 
-The external project declares the corresponding FNOM contract. Production projects let Longship start the compatible ModelHost and render the integration library, address, and other lifecycle-owned dictionary values.
+The external project declares the corresponding FNOM contract. Production projects let Longship start the compatible ModelHost and render the integration library, address and other lifecycle-owned dictionary values.
 
-The example duplicates only the thin equation call site so it can demonstrate the extension boundary. The installed FoamNordic library retains transport, packing, failure handling, and lifecycle, and invokes BindNordic for model loading, scaling, and execution.
+## Ownership boundary
+
+The example duplicates only the thin equation call site needed to demonstrate the extension boundary. The installed FoamNordic library retains transport, packing, failure handling and lifecycle, and invokes BindNordic for model loading, scaling and execution.
