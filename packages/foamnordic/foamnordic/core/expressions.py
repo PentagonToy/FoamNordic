@@ -14,16 +14,24 @@ _ARITIES = {
     "subtract": frozenset({2}),
     "multiply": frozenset({2}),
     "divide": frozenset({2}),
+    "maximum": frozenset({2}),
+    "minimum": frozenset({2}),
+    "greater": frozenset({2}),
+    "where": frozenset({3}),
     "sqrt": frozenset({1}),
+    "abs": frozenset({1}),
     "grad": frozenset({1}),
     "div": frozenset({1, 2}),
     "laplacian": frozenset({1, 2}),
     "curl": frozenset({1}),
     "dot": frozenset({2}),
     "ddot": frozenset({2}),
+    "outer": frozenset({2}),
     "mag": frozenset({1}),
+    "trace": frozenset({1}),
     "symm": frozenset({1}),
     "dev": frozenset({1}),
+    "transport": frozenset({5}),
 }
 _FIELD_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:]*$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z_*][A-Za-z0-9_.*:]*$")
@@ -80,6 +88,39 @@ class FieldExpression:
     def __rtruediv__(self, other: object) -> "FieldExpression":
         return operation("divide", other, self)
 
+    def __neg__(self) -> "FieldExpression":
+        return operation("multiply", -1.0, self)
+
+    def __pow__(self, exponent: object) -> "FieldExpression":
+        if not isinstance(exponent, (int, float)) or isinstance(exponent, bool):
+            raise TypeError("symbolic field powers require a finite scalar exponent")
+        value = float(exponent)
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError("symbolic field powers require a positive exponent")
+        scaled = value
+        roots = 0
+        while not scaled.is_integer() and roots < 8:
+            scaled *= 2.0
+            roots += 1
+        if not scaled.is_integer():
+            raise ValueError("symbolic field powers require a dyadic exponent")
+        base = self
+        for _ in range(roots):
+            base = operation("sqrt", base)
+        result = base
+        for _ in range(1, int(scaled)):
+            result = operation("multiply", result, base)
+        return result
+
+    def __gt__(self, other: object) -> "FieldExpression":
+        return operation("greater", self, other)
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            "symbolic field expressions do not define truth values; "
+            "use fno.Math.where(...)"
+        )
+
     def __post_init__(self) -> None:
         operation = require_nonempty(self.operation, "operation")
         object.__setattr__(self, "operation", operation)
@@ -119,6 +160,11 @@ class FieldExpression:
         if operation == "filter_width":
             if self.field_name is not None or self.arguments:
                 raise ValueError("filter_width does not accept arguments")
+            return
+
+        if operation == "delta_time":
+            if self.field_name is not None or self.arguments:
+                raise ValueError("delta_time does not accept arguments")
             return
 
         if operation not in _ARITIES:
@@ -161,6 +207,8 @@ class FieldExpression:
             return self.field_name
         if self.operation == "filter_width":
             return "delta"
+        if self.operation == "delta_time":
+            return "deltaTime"
         if self.field_name is not None:
             return f"{self.operation}({self.field_name})"
         return (
@@ -171,7 +219,20 @@ class FieldExpression:
 
     @property
     def derived(self) -> bool:
-        return self.operation not in {"field", "constant", "filter_width"}
+        return self.operation not in {
+            "field",
+            "constant",
+            "filter_width",
+            "delta_time",
+        }
+
+    @property
+    def contains_transport(self) -> bool:
+        """Return whether this expression contains a solver transport barrier."""
+
+        return self.operation == "transport" or any(
+            argument.contains_transport for argument in self.arguments
+        )
 
     def to_plan(self) -> dict[str, object]:
         value: dict[str, object] = {"operation": self.operation}
@@ -267,6 +328,18 @@ def filter_width() -> FieldExpression:
     return FieldExpression("filter_width")
 
 
+def delta_time() -> FieldExpression:
+    """Request the current solver timestep as a scalar runtime input."""
+
+    return FieldExpression("delta_time")
+
+
+class Context:
+    """Grouped runtime values supplied by the active solver invocation."""
+
+    delta_time = staticmethod(delta_time)
+
+
 class Field:
     """Grouped OpenFOAM field and geometry expression vocabulary.
 
@@ -305,3 +378,27 @@ class Field:
     @staticmethod
     def curl(value: str | FieldExpression) -> FieldExpression:
         return operation("curl", value)
+
+    @staticmethod
+    def transport(
+        value: str | FieldExpression,
+        *,
+        diffusivity: str | FieldExpression,
+        source: str | FieldExpression,
+        implicit_sink: str | FieldExpression,
+        lower_bound: float = 0.0,
+    ) -> FieldExpression:
+        """Request one adapter-owned implicit transport solve."""
+
+        if isinstance(lower_bound, bool) or not isinstance(lower_bound, (int, float)):
+            raise TypeError("transport lower_bound must be a finite scalar")
+        if not math.isfinite(float(lower_bound)):
+            raise ValueError("transport lower_bound must be a finite scalar")
+        return operation(
+            "transport",
+            value,
+            diffusivity,
+            source,
+            implicit_sink,
+            float(lower_bound),
+        )

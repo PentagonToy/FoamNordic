@@ -1,833 +1,38 @@
-"""Isolated OpenFOAM case validation and dictionary rendering."""
+"""Render and stage an isolated OpenFOAM case."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
-import json
 import os
-from pathlib import Path
 import re
-import secrets
-import shutil
-import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from bindnordic.models.artifact import write_bundle
-
-from ..contracts import adapter_contract
-from ..core.expressions import FieldExpression
-from ..core.layout import FieldLayout, field_layout
-from ..core.managed import mark_generated
+from ..core.graph import NativeAlgebraPlan, NativeFieldPlan, NativeTransportPlan
 from ..core.plan import CompiledPlan
-from ..models import load as load_model
-from .run import (
-    _initialize_sailing_log,
-    _internal_path,
-    _sailing_paths,
+from .case_staging import prepare_staged_case, stage_case, verify_decomposition
+from .function_artifact import package_function as _package_function
+from .openfoam_rendering import (
+    observation_block,
+    render_dictionary,
+    render_transform_dictionary,
+    scheme_commands,
 )
-from .shell import quote_command, toolchain_shell
-from .templates import read as read_template
-from .templates import render as render_template
+from .openfoam_templates import prepare_decomposition as _prepare_decomposition
+from .run_files import internal_path
+from .shell import quote_command
 
 if TYPE_CHECKING:
     from ..core.spec import Closure, Longship, Transform
 
 
-def validate_case(longship: Longship) -> None:
-    closures = longship.closure_programs
-    programs = longship.field_programs
-    if len(longship.closures) > 1:
-        raise NotImplementedError(
-            "one solver closure may be active at a time; use multiple Transform "
-            "programs for independent field exchanges"
-        )
-    unsupported = next(
-        (
-            transform
-            for transform in longship.transforms
-            if transform.at in {"outer_corrector", "pressure_corrected"}
-        ),
-        None,
-    )
-    if unsupported is not None:
-        raise NotImplementedError(
-            f"Transform at={unsupported.at!r} requires a "
-            "solver-native FoamNordic hook; standard OpenFOAM applications expose only "
-            "time_step_start and time_step_end"
-        )
-    source = longship.case.case_dir.resolve()
-    # Resolve both paths before reporting a relative location.  On macOS,
-    # /tmp and /private/tmp name the same directory but Path.relative_to()
-    # quite correctly treats their lexical forms as unrelated.
-    initial = longship.case.initial_directory.resolve()
-    required = (
-        initial,
-        source / "system/controlDict",
-        source / "system/fvSchemes",
-        source / "system/fvSolution",
-        source / "constant",
-    )
-    missing = [str(path.relative_to(source)) for path in required if not path.exists()]
-    if missing:
-        raise FileNotFoundError(f"OpenFOAM source case is incomplete: {', '.join(missing)}")
-    if len(longship.observations) > 1:
-        raise NotImplementedError("launch currently supports one observation schedule")
-    _validate_observation_fields(longship)
-    if not programs:
-        if longship.observations:
-            raise NotImplementedError(
-                "pure OpenFOAM observation requires the forthcoming function-object hook"
-            )
-        return
-    for program in programs:
-        if program.artifact is not None and not program.artifact.expanduser().is_file():
-            raise FileNotFoundError(
-                f"field-program artifact does not exist: {program.artifact}"
-            )
-        if program.artifact is not None:
-            _validate_model_contract(longship, program)
-    if (
-        longship.case.integration is None
-        and closures
-        and closures[0].name == "kEqnFjord"
-        and not (initial / "k").is_file()
-    ):
-        raise FileNotFoundError("kEqnFjord requires a source-case 0/k field")
-    if longship.placement.data_path not in {"auto", "shm", "uds"}:
-        raise NotImplementedError(
-            "attached launch currently supports auto, shm, and uds; central UCX "
-            "remains an explicit HPC validation topology"
-        )
-
-
-def _validate_model_contract(longship: Longship, program: Closure | Transform) -> None:
-    """Match FNOM names and packed widths to the selected OpenFOAM bindings."""
-
-    assert program.artifact is not None
-    manifest = load_model(program.artifact)
-    if program.operator.kind == "table" and manifest.format != "table":
-        raise ValueError(
-            f"{program.name} uses Operator.table, but its FNOM format is "
-            f"{manifest.format!r}"
-        )
-    if program.operator.kind == "model" and manifest.format == "table":
-        raise ValueError(
-            f"{program.name} uses Operator.model for an FNOM table; use "
-            "Operator.table instead"
-        )
-    declared = (
-        ("inputs", manifest.inputs, program.inputs),
-        ("outputs", manifest.outputs, program.outputs),
-    )
-    for label, ports, bindings in declared:
-        names = tuple(port.name for port in ports)
-        if set(names) != set(bindings) or len(names) != len(bindings):
-            raise ValueError(
-                f"{program.name} {label} do not match its FNOM contract: "
-                f"{tuple(bindings)!r} != {names!r}"
-            )
-        for port in ports:
-            expression = bindings[port.name]
-            layout = (
-                _input_layout(longship, program, expression)
-                if label == "inputs"
-                else _output_layout(longship, program, expression)
-            )
-            if port.components != layout.transport_width:
-                raise ValueError(
-                    f"{program.name} {label} port {port.name!r} has "
-                    f"{port.components} FNOM component(s), but "
-                    f"{expression.canonical!r} requires "
-                    f"{layout.transport_width}"
-                )
-
-    adapter = adapter_contract(program.name)
-    if adapter is None:
-        return
-    output_fields = tuple(
-        str(value.field_name) for value in program.outputs.values()
-    )
-    if set(output_fields) != set(adapter.outputs):
-        raise ValueError(
-            f"{program.name} requires OpenFOAM outputs {tuple(adapter.outputs)!r}; "
-            f"got {output_fields!r}"
-        )
-
-
-def _input_layout(
-    longship: Longship,
+def _native_program_plan(
     program: Closure | Transform,
-    expression: FieldExpression,
-) -> FieldLayout:
-    """Resolve an input layout, including adapter-owned derived fields."""
+) -> NativeFieldPlan | None:
+    """Return a closure's graph compiled once when it was declared."""
 
-    try:
-        return _expression_layout(longship, expression)
-    except KeyError:
-        contract = adapter_contract(program.name)
-        if contract is not None and expression.canonical in contract.inputs:
-            return contract.inputs[expression.canonical]
-        raise
-
-
-def _validate_observation_fields(longship: Longship) -> None:
-    """Reject unavailable observation fields before launching the workload."""
-
-    if not longship.observations:
-        return
-
-    supported_classes = {
-        "volScalarField",
-        "volVectorField",
-        "volSphericalTensorField",
-        "volSymmTensorField",
-        "volTensorField",
-        "surfaceScalarField",
-        "surfaceVectorField",
-        "surfaceSphericalTensorField",
-        "surfaceSymmTensorField",
-        "surfaceTensorField",
-    }
-    available = {
-        name
-        for name, metadata in longship.case.fields.items()
-        if metadata.field_class in supported_classes
-    }
-    for closure in longship.closure_programs:
-        contract = adapter_contract(closure.name)
-        if contract is not None:
-            available.update(contract.outputs)
-
-    requested = set(longship.observations[0].summaries)
-    missing = sorted(requested - available)
-    if missing:
-        missing_text = ", ".join(missing)
-        available_text = ", ".join(sorted(available)) or "none"
-        raise ValueError(
-            f"Observe requested unavailable OpenFOAM field(s): {missing_text}. "
-            f"Available observable fields: {available_text}"
-        )
-
-
-def _default_template() -> str:
-    return read_template(
-        "openfoam/turbulenceProperties.fjord.in",
-        kind="OpenFOAM dictionary",
-    )
-
-
-def _observation_template() -> str:
-    return read_template(
-        "openfoam/observation.in",
-        kind="OpenFOAM observation",
-    )
-
-
-def _transform_template() -> str:
-    return read_template(
-        "openfoam/fjordExchange.in",
-        kind="OpenFOAM transform",
-    )
-
-
-def _decomposition_template() -> str:
-    return read_template(
-        "openfoam/decomposeParDict.in",
-        kind="OpenFOAM decomposition",
-    )
-
-
-def _decomposition_subdomains(path: Path) -> int | None:
-    """Read a literal numberOfSubdomains from a conventional OpenFOAM dict."""
-
-    if not path.is_file():
-        return None
-    text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
-    text = re.sub(r"//.*$", "", text, flags=re.M)
-    match = re.search(r"\bnumberOfSubdomains\s+([0-9]+)\s*;", text)
-    return int(match.group(1)) if match is not None else None
-
-
-def _prepare_decomposition(path: Path, ranks: int) -> bool:
-    """Keep a compatible user policy or install a portable run-local policy.
-
-    Method-specific coefficients (for example hierarchical ``n``) are coupled
-    to ``numberOfSubdomains``.  Mutating only the latter produces an invalid
-    dictionary, so a rank mismatch is normalized to ``scotch`` in the copied
-    run case.  The source case is never modified.
-    """
-
-    if _decomposition_subdomains(path) == ranks:
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        render_template(
-            _decomposition_template(),
-            {
-                "NUMBER_OF_SUBDOMAINS": ranks,
-                "DECOMPOSITION_METHOD": "scotch",
-                "METHOD_COEFFICIENTS": "",
-            },
-            kind="OpenFOAM decomposition",
-        ),
-        encoding="utf-8",
-    )
-    return True
-
-
-def _derived_scheme_defaults() -> dict[str, dict[str, str]]:
-    value = json.loads(
-        read_template(
-            "openfoam/derivedSchemes.json",
-            kind="OpenFOAM derived-scheme",
-        )
-    )
-    if not isinstance(value, dict):
-        raise ValueError("derived-scheme template must contain a mapping")
-    return value
-
-
-def _walk_expression(value: FieldExpression):
-    yield value
-    for argument in value.arguments:
-        yield from _walk_expression(argument)
-
-
-def _scheme_requirements(longship: Longship) -> tuple[tuple[str, str, str], ...]:
-    """Return missing-scheme candidates without inspecting a concrete case."""
-
-    defaults = _derived_scheme_defaults()
-    requirements: dict[tuple[str, str], str] = {}
-    for program in longship.field_programs:
-        for expression in program.inputs.values():
-            for node in _walk_expression(expression):
-                configuration = defaults.get(node.operation)
-                if configuration is None:
-                    continue
-                section = configuration["section"]
-                requirements[(section, node.canonical)] = configuration["scheme"]
-    return tuple(
-        (section, expression, scheme)
-        for (section, expression), scheme in requirements.items()
-    )
-
-
-def _scheme_commands(
-    longship: Longship, case_dir: Path, work_dir: Path | None = None
-) -> list[str]:
-    """Validate or add required schemes and record every actual mutation."""
-
-    schemes = case_dir / "system/fvSchemes"
-    path = quote_command((schemes,))
-    commands = []
-    changes = None if work_dir is None else quote_command(
-        (work_dir / "numerics-changes.tsv",)
-    )
-    for section, expression, scheme in _scheme_requirements(longship):
-        exact = quote_command((f"{section}/{expression}",))
-        default = quote_command((f"{section}/default",))
-        selected = quote_command((scheme,))
-        message = quote_command(
-            (f"[FoamNordic] Added ML feature scheme: {expression} -> {scheme}",)
-        )
-        missing = (
-            f"if ! foamDictionary {path} -entry {exact} >/dev/null 2>&1; then "
-            f"foamnordic_default=$(foamDictionary {path} -entry {default} "
-            f"-value 2>/dev/null || true); "
-            f"if [[ -z \"$foamnordic_default\" "
-            f"|| \"$foamnordic_default\" == none ]]; then "
-        )
-        if longship.numerics == "strict":
-            error = quote_command((
-                f"FoamNordic strict numerics: missing {section}/{expression}",
-            ))
-            commands.append(missing + f"printf '%s\\n' {error} >&2; exit 2; fi; fi")
-        else:
-            record = ""
-            if changes is not None:
-                section_value = quote_command((section,))
-                expression_value = quote_command((expression,))
-                scheme_value = quote_command((scheme,))
-                record = (
-                    f"printf '%s\\t%s\\t%s\\n' {section_value} "
-                    f"{expression_value} {scheme_value} >> {changes}; "
-                )
-            commands.append(
-                missing
-                + f"foamDictionary {path} -entry {exact} -set {selected}; "
-                + record
-                + f"printf '%s\\n' {message}; fi; fi"
-            )
-    return commands
-
-
-def _observation_block(longship: Longship, path: Path) -> str:
-    if not longship.observations:
-        return ""
-    observation = longship.observations[0]
-    values = {
-        "FOAMNORDIC_OBSERVATION_PATH": str(path),
-        "FOAMNORDIC_OBSERVATION_FIELDS": " ".join(observation.summaries),
-        "FOAMNORDIC_OBSERVATION_EVERY": observation.interval,
-        "FOAMNORDIC_OBSERVATION_OFFSET": 0,
-        "FOAMNORDIC_OBSERVATION_MAX_RECORDS": 64,
-        "FOAMNORDIC_OBSERVATION_MAX_BYTES": 256 * 1024,
-        "FOAMNORDIC_OBSERVATION_OVERFLOW": "dropOldest",
-    }
-    return render_template(
-        _observation_template(), values, kind="OpenFOAM observation"
-    ).strip()
-
-
-def _expression(value: object) -> str:
-    expression = str(getattr(value, "canonical"))
-    if getattr(value, "derived"):
-        return f'"{expression}"'
-    return expression
-
-
-def _closure_values(
-    closure: Closure,
-    address: str,
-    shared: bool,
-    observation: str,
-    profile_every: int = 0,
-) -> dict[str, str]:
-    return {
-        "FOAMNORDIC_ADDRESS": address,
-        "FOAMNORDIC_SHARED_MEMORY": str(shared).lower(),
-        "FOAMNORDIC_PROFILE_EVERY": profile_every,
-        "FOAMNORDIC_PROFILE_PROGRAM": closure.name,
-        "FOAMNORDIC_INPUT_KEYS": "\n                ".join(closure.inputs),
-        "FOAMNORDIC_INPUT_EXPRESSIONS": "\n                ".join(
-            _expression(value) for value in closure.inputs.values()
-        ),
-        "FOAMNORDIC_INPUT_PATCHES": "\n                ".join(
-            value.patch_name or "none" for value in closure.inputs.values()
-        ),
-        "FOAMNORDIC_OUTPUT_FIELDS": "\n                ".join(
-            str(value.field_name) for value in closure.outputs.values()
-        ),
-        "FOAMNORDIC_OUTPUT_KEYS": "\n                ".join(closure.outputs),
-        "FOAMNORDIC_OUTPUT_PATCHES": "\n                ".join(
-            value.patch_name or "none" for value in closure.outputs.values()
-        ),
-        "FOAMNORDIC_OBSERVATION_BLOCK": observation,
-    }
-
-
-def _closure_body(
-    closure: Closure,
-    address: str,
-    shared: bool,
-    observation: str = "",
-    profile_every: int = 0,
-) -> str:
-    return render_template(
-        read_template("openfoam/closureBody.in", kind="OpenFOAM closure-body"),
-        _closure_values(
-            closure, address, shared, observation, profile_every
-        ),
-        kind="OpenFOAM closure body",
-    ).strip()
-
-
-def _closure_update_variables(
-    template: str,
-    updates: tuple[tuple[Closure, str], ...],
-    shared: bool,
-    profile_every: int = 0,
-) -> dict[str, str]:
-    """Render named solver-mediated stages without interpreting their physics."""
-
-    variables: dict[str, str] = {}
-    for index, (update, address) in enumerate(updates):
-        body = f"FOAMNORDIC_UPDATE_{index}_BODY"
-        marker = f"@{body}@"
-        if marker not in template:
-            raise ValueError(
-                f"custom integration template must place {marker} for "
-                f"closure update {update.name!r}"
-            )
-        variables[body] = _closure_body(
-            update, address, shared, profile_every=profile_every
-        )
-        variables[f"FOAMNORDIC_UPDATE_{index}_NAME"] = update.name
-    return variables
-
-
-def render_dictionary(
-    longship: Longship,
-    closure: Closure,
-    address: str,
-    shared: bool,
-    observation_path: Path | None = None,
-    updates: tuple[tuple[Closure, str], ...] = (),
-    profile_every: int = 0,
-) -> tuple[Path, str]:
-    integration = longship.case.integration
-    if integration is None:
-        if updates:
-            raise ValueError(
-                "closure updates require a custom OpenFOAM integration template"
-            )
-        template = _default_template()
-        destination = Path("constant/turbulenceProperties")
-        model_configuration = (
-            "Ck 0.094;\n        Ce 1.048;"
-            if closure.name == "kEqnFjord"
-            else ""
-        )
-        custom: dict[str, str] = {}
-    else:
-        template = integration.source.read_text(encoding="utf-8")
-        destination = integration.destination
-        model_configuration = ""
-        custom = dict(integration.variables)
-    if longship.observations and "@FOAMNORDIC_OBSERVATION_BLOCK@" not in template:
-        raise ValueError(
-            "custom integration template must place "
-            "@FOAMNORDIC_OBSERVATION_BLOCK@ inside its closure dictionary"
-        )
-    mapped_outputs = any(
-        logical_name != expression.field_name
-        for logical_name, expression in closure.outputs.items()
-    )
-    if mapped_outputs and "@FOAMNORDIC_OUTPUT_KEYS@" not in template:
-        raise ValueError(
-            "an integration template with logical output names must place "
-            "@FOAMNORDIC_OUTPUT_KEYS@ beside @FOAMNORDIC_OUTPUT_FIELDS@"
-        )
-    selected_patches = any(
-        value.patch_name is not None
-        for value in (*closure.inputs.values(), *closure.outputs.values())
-    )
-    if selected_patches and (
-        "@FOAMNORDIC_INPUT_PATCHES@" not in template
-        or "@FOAMNORDIC_OUTPUT_PATCHES@" not in template
-    ):
-        raise ValueError(
-            "an integration template with patch fields must place both "
-            "@FOAMNORDIC_INPUT_PATCHES@ and @FOAMNORDIC_OUTPUT_PATCHES@"
-        )
-    update_variables = _closure_update_variables(
-        template, updates, shared, profile_every
-    )
-    variables = {
-        "FOAMNORDIC_MODEL": closure.name,
-        "FOAMNORDIC_MODEL_CONFIGURATION": model_configuration,
-        **_closure_values(
-            closure,
-            address,
-            shared,
-            ""
-            if observation_path is None
-            else _observation_block(longship, observation_path),
-            profile_every,
-        ),
-        **custom,
-        **update_variables,
-    }
-    rendered = render_template(template, variables, kind="OpenFOAM")
-    return destination, rendered
-
-
-def render_transform_dictionary(
-    transform: Transform,
-    address: str,
-    shared: bool,
-    observation_block: str = "",
-    profile_every: int = 0,
-) -> str:
-    """Render a generic field exchange at the supported solver boundary."""
-
-    values = {
-        "FJORD_ADDRESS": address,
-        "SESSION_ID": 1,
-        "SHARED_MEMORY": str(shared).lower(),
-        "UCX": "false",
-        "PROFILE_EVERY": profile_every,
-        "EXECUTE_INTERVAL": 1,
-        "EXCHANGE_STAGE": {
-            "time_step_start": "timeStepStart",
-            "outer_corrector": "outerCorrector",
-            "pressure_corrected": "pressureCorrected",
-            "time_step_end": "timeStepEnd",
-        }[transform.at],
-        "EXECUTE_CONTROL": (
-            "timeStep" if transform.at == "time_step_start" else "none"
-        ),
-        "WRITE_CONTROL": (
-            "timeStep" if transform.at == "time_step_end" else "none"
-        ),
-        "INPUT_KEYS": " ".join(transform.inputs),
-        "INPUT_FIELDS": " ".join(
-            str(value.field_name) for value in transform.inputs.values()
-        ),
-        "INPUT_PATCHES": " ".join(
-            value.patch_name or "none" for value in transform.inputs.values()
-        ),
-        "OUTPUT_KEYS": " ".join(transform.outputs),
-        "OUTPUT_FIELDS": " ".join(
-            str(value.field_name) for value in transform.outputs.values()
-        ),
-        "OUTPUT_PATCHES": " ".join(
-            value.patch_name or "none" for value in transform.outputs.values()
-        ),
-        "FOAMNORDIC_OBSERVATION_BLOCK": observation_block,
-    }
-    return render_template(
-        _transform_template(), values, kind="OpenFOAM transform"
-    ).strip()
-
-
-_FIELD_LAYOUTS = {
-    "volScalarField": "scalar",
-    "volVectorField": "vector",
-    "volSphericalTensorField": "spherical_tensor",
-    "volSymmTensorField": "symm_tensor",
-    "volTensorField": "tensor",
-    "surfaceScalarField": "scalar",
-    "surfaceVectorField": "vector",
-    "surfaceSphericalTensorField": "spherical_tensor",
-    "surfaceSymmTensorField": "symm_tensor",
-    "surfaceTensorField": "tensor",
-}
-
-
-def _field_layout(longship: Longship, expression: FieldExpression) -> FieldLayout:
-    """Resolve a stored field layout from the source-case header."""
-
-    assert expression.field_name is not None
-    name = expression.field_name
-    if name in {"x", "y", "z"}:
-        return field_layout("scalar")
-    base, separator, component = name.partition(".")
-    metadata = longship.case.field(base)
-    try:
-        layout = field_layout(_FIELD_LAYOUTS[metadata.field_class])
-    except KeyError:
-        raise ValueError(
-            f"unsupported OpenFOAM field class for {base!r}: "
-            f"{metadata.field_class}"
-        ) from None
-    if separator:
-        if metadata.field_class != "volVectorField" or component not in {
-            "x", "y", "z"
-        }:
-            raise ValueError(
-                f"component selector {name!r} requires U.x/U.y/U.z-style "
-                "access to a volVectorField"
-            )
-        return field_layout("scalar")
-    return layout
-
-
-def _expression_layout(
-    longship: Longship, expression: FieldExpression
-) -> FieldLayout:
-    """Infer the physical and packed layout of an OpenFOAM expression."""
-
-    if expression.operation == "field":
-        return _field_layout(longship, expression)
-    if expression.operation == "filter_width":
-        return field_layout("scalar")
-    if expression.operation == "constant":
-        return field_layout("scalar")
-
-    if expression.field_name is not None:
-        arguments = (FieldExpression("field", expression.field_name),)
-    else:
-        arguments = expression.arguments
-    layouts = tuple(_expression_layout(longship, value) for value in arguments)
-    kinds = tuple(value.kind for value in layouts)
-    operation = expression.operation
-
-    if operation == "grad":
-        if kinds == ("scalar",):
-            return field_layout("vector")
-        if kinds == ("vector",):
-            return field_layout("tensor")
-        raise ValueError("grad() function inputs support scalar or vector fields")
-    if operation == "div":
-        if len(layouts) == 2:
-            return layouts[1]
-        if kinds == ("vector",):
-            return field_layout("scalar")
-        if kinds in {("symm_tensor",), ("tensor",)}:
-            return field_layout("vector")
-        raise ValueError("div() function input has an unsupported field shape")
-    if operation == "laplacian":
-        return layouts[-1]
-    if operation == "curl":
-        if kinds != ("vector",):
-            raise ValueError("curl() function input requires a vector field")
-        return field_layout("vector")
-    if operation in {"mag", "ddot"}:
-        return field_layout("scalar")
-    if operation == "sqrt":
-        if kinds != ("scalar",):
-            raise ValueError("sqrt() function input requires a scalar field")
-        return field_layout("scalar")
-    if operation in {"add", "subtract"}:
-        if any(value.operation == "constant" for value in arguments):
-            raise ValueError(
-                f"{operation}() does not accept dimensionless scalar constants"
-            )
-        if kinds[0] != kinds[1]:
-            raise ValueError(
-                f"{operation}() function inputs require matching field shapes"
-            )
-        return layouts[0]
-    if operation in {"multiply", "divide"}:
-        constant = tuple(value.operation == "constant" for value in arguments)
-        if operation == "divide" and constant[0]:
-            raise ValueError("divide() does not support a constant numerator")
-        if constant == (True, False):
-            return layouts[1]
-        if constant == (False, True):
-            return layouts[0]
-        raise ValueError(
-            f"{operation}() currently requires exactly one scalar constant"
-        )
-    if operation == "symm":
-        if kinds != ("tensor",):
-            raise ValueError("symm() function input requires a tensor field")
-        return field_layout("symm_tensor")
-    if operation == "dev":
-        if kinds not in {("scalar",), ("symm_tensor",), ("tensor",)}:
-            raise ValueError("dev() function input requires a scalar or tensor field")
-        return layouts[0]
-    if operation == "dot":
-        dot_kinds = {
-            ("vector", "vector"): "scalar",
-            ("tensor", "vector"): "vector",
-            ("symm_tensor", "vector"): "vector",
-            ("vector", "tensor"): "vector",
-            ("vector", "symm_tensor"): "vector",
-            ("tensor", "tensor"): "tensor",
-            ("tensor", "symm_tensor"): "tensor",
-            ("symm_tensor", "tensor"): "tensor",
-            ("symm_tensor", "symm_tensor"): "tensor",
-        }
-        try:
-            return field_layout(dot_kinds[kinds])
-        except KeyError:
-            raise ValueError(
-                "dot() function inputs have unsupported field shapes"
-            ) from None
-    raise ValueError(
-        f"cannot infer function input width for OpenFOAM operation {operation!r}"
-    )
-
-
-def _output_layout(
-    longship: Longship,
-    program: Closure | Transform,
-    expression: FieldExpression,
-) -> FieldLayout:
-    """Resolve a mutable output from its case or built-in adapter contract."""
-
-    try:
-        return _expression_layout(longship, expression)
-    except KeyError:
-        if expression.operation != "field" or expression.field_name is None:
-            raise
-        contract = adapter_contract(program.name)
-        if contract is not None:
-            try:
-                return contract.outputs[expression.field_name]
-            except KeyError:
-                pass
-        raise KeyError(
-            f"cannot infer output field {expression.field_name!r} for "
-            f"case-sensitive adapter {program.name!r}; add the field to "
-            "the source case, declare a built-in adapter contract, or use "
-            "a model artifact with an explicit contract"
-        ) from None
-
-
-def _output_width(
-    longship: Longship,
-    program: Closure | Transform,
-    expression: FieldExpression,
-) -> int:
-    """Return the packed width of a mutable output field."""
-
-    return _output_layout(longship, program, expression).transport_width
-
-
-def _package_function(
-    longship: Longship,
-    program: Closure | Transform,
-    work_dir: Path,
-) -> Path | None:
-    """Serialize one direct function and its inferred native tensor contract."""
-
-    if program.operator.kind != "function":
-        return None
-    try:
-        import cloudpickle
-        from .. import _native
-    except ImportError as error:
-        raise RuntimeError(
-            "Operator.function requires cloudpickle and a FoamNordic binary wheel"
-        ) from error
-    internal = _internal_path(work_dir, "function")
-    internal.mkdir(parents=True, exist_ok=True)
-    payload = internal / f"{program.name}.function"
-    manifest = internal / f"{program.name}.fnom"
-    with payload.open("wb") as stream:
-        input_layouts = tuple(
-            _expression_layout(longship, expression)
-            for expression in program.inputs.values()
-        )
-        output_layouts = tuple(
-            _output_layout(longship, program, expression)
-            for expression in program.outputs.values()
-        )
-        cloudpickle.dump(
-            {
-                "schema": "foamnordic.function",
-                "function": program.operator.source,
-                "inputs": tuple(program.inputs),
-                "input_widths": tuple(
-                    layout.transport_width for layout in input_layouts
-                ),
-                "input_layouts": tuple(
-                    layout.to_plan() for layout in input_layouts
-                ),
-                "outputs": tuple(program.outputs),
-                "output_layouts": tuple(
-                    layout.to_plan() for layout in output_layouts
-                ),
-                "program": program.name,
-                "key": program.key.to_plan(),
-            },
-            stream,
-            protocol=5,
-        )
-    inputs = [
-        (name, layout.transport_width)
-        for name, layout in zip(program.inputs, input_layouts, strict=True)
-    ]
-    outputs = [
-        (name, _output_width(longship, program, expression))
-        for name, expression in program.outputs.items()
-    ]
-    write_bundle(
-        str(manifest),
-        str(payload),
-        program.name,
-        "joblib",
-        inputs,
-        outputs,
-        "float64",
-        [],
-    )
-    payload.unlink()
-    return manifest
+    return program.native_program
 
 
 @dataclass(frozen=True, slots=True)
@@ -838,6 +43,7 @@ class PreparedProgram:
     ready: Path
     socket: Path
     artifact: Path | None
+    native_program: NativeFieldPlan | None = None
 
 
 def _program_slug(name: str, index: int) -> str:
@@ -902,45 +108,55 @@ def prepare_case(
     verbose: bool = False,
     profile_every: int = 0,
 ) -> tuple[Path, Path, tuple[PreparedProgram, ...]]:
-    workspace = longship.case.run_dir.expanduser().resolve()
-    runs = workspace / "runs"
-    runs.mkdir(parents=True, exist_ok=True)
-    run_name = (
-        re.sub(r"[^A-Za-z0-9-]+", "-", longship.name).strip("-")
-        or "FoamNordic"
-    )
-    for _ in range(100):
-        work_dir = runs / f"{run_name}-preparing-{secrets.token_hex(4)}"
-        try:
-            work_dir.mkdir(mode=0o700)
-            break
-        except FileExistsError:
-            continue
-    else:
-        raise RuntimeError("Cannot allocate a unique FoamNordic run directory")
-    mark_generated(
-        work_dir,
-        kind="run",
-        metadata={"plan": plan.as_dict(), "plan_digest": plan.digest},
-    )
-    case_dir = work_dir / "case"
-    shutil.copytree(longship.case.case_dir.expanduser().resolve(), case_dir)
-    if not (case_dir / "0").exists() and (case_dir / "0.orig").is_dir():
-        shutil.copytree(case_dir / "0.orig", case_dir / "0")
+    work_dir, case_dir = stage_case(longship, plan)
     prepared: list[PreparedProgram] = []
     closures = longship.closure_programs
     for index, program in enumerate(closures):
         slug = _program_slug(program.name, index)
-        ready = _internal_path(work_dir, f"{slug}.ready")
+        ready = internal_path(work_dir, f"{slug}.ready")
         socket = _socket_path(work_dir, index)
-        artifact = _package_function(longship, program, work_dir)
-        prepared.append(PreparedProgram(program, ready, socket, artifact))
+        native_program = _native_program_plan(program)
+        if isinstance(native_program, NativeTransportPlan) and index != 0:
+            raise ValueError(
+                "Field.transport cannot be used by a solver-mediated update stage"
+            )
+        artifact = (
+            None
+            if native_program is not None
+            else _package_function(longship, program, work_dir)
+        )
+        prepared.append(
+            PreparedProgram(program, ready, socket, artifact, native_program)
+        )
+        if native_program is not None and verbose:
+            print(
+                f"[FoamNordic] {program.name} execution lane: native OpenFOAM."
+            )
     for offset, transform in enumerate(longship.transforms, len(prepared)):
         slug = _program_slug(transform.name, offset)
-        ready = _internal_path(work_dir, f"{slug}.ready")
+        ready = internal_path(work_dir, f"{slug}.ready")
         socket = _socket_path(work_dir, offset)
-        artifact = _package_function(longship, transform, work_dir)
-        prepared.append(PreparedProgram(transform, ready, socket, artifact))
+        native_program = _native_program_plan(transform)
+        if native_program is not None and longship.observations:
+            raise NotImplementedError(
+                "Observe is not yet available for native algebra transforms"
+            )
+        if native_program is not None and profile_every:
+            raise NotImplementedError(
+                "profile_every is not yet available for native algebra transforms"
+            )
+        artifact = (
+            None
+            if native_program is not None
+            else _package_function(longship, transform, work_dir)
+        )
+        prepared.append(
+            PreparedProgram(transform, ready, socket, artifact, native_program)
+        )
+        if native_program is not None and verbose:
+            print(
+                f"[FoamNordic] {transform.name} execution lane: native OpenFOAM."
+            )
     observations = work_dir / "observations"
     if longship.observations:
         observations.mkdir(parents=True, exist_ok=True)
@@ -958,6 +174,7 @@ def prepare_case(
             observations / "observations.{rank}.jsonl",
             update_runtimes,
             profile_every,
+            closure_runtime.native_program,
         )
         output = case_dir / destination
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -979,9 +196,9 @@ def prepare_case(
         )
     for index, transform in enumerate(longship.transforms):
         runtime = prepared[closure_offset + index]
-        observation_block = ""
+        observation_contents = ""
         if index == observation_transform:
-            observation_block = _observation_block(
+            observation_contents = observation_block(
                 longship,
                 observations / "observations.{rank}.jsonl",
             )
@@ -992,8 +209,11 @@ def prepare_case(
                     transform,
                     f"unix://{runtime.socket}",
                     longship.placement.data_path != "uds",
-                    observation_block,
+                    observation_contents,
                     profile_every,
+                    runtime.native_program
+                    if isinstance(runtime.native_program, NativeAlgebraPlan)
+                    else None,
                 ),
             )
         )
@@ -1019,7 +239,7 @@ def prepare_case(
             f"-entry {function_name} -set {dictionary}; else foamDictionary "
             f"{control_path} -entry {function_name} -add {dictionary}; fi"
         )
-    commands.extend(_scheme_commands(longship, case_dir, work_dir))
+    commands.extend(scheme_commands(longship, case_dir, work_dir))
     if longship.field_programs:
         if openfoam_library is None:
             raise RuntimeError(
@@ -1047,44 +267,12 @@ def prepare_case(
             f"-entry numberOfSubdomains -set {longship.case.ranks}"
         )
         commands.append(f"decomposePar -case {quote_command((case_dir,))} -force")
-    if verbose and mesh_commands:
-        if longship.case._mesh == "blockMesh":
-            print(
-                f"[FoamNordic] Preparing mesh with blockMesh: {longship.name}"
-            )
-        else:
-            print(
-                "[FoamNordic] Validating existing mesh with checkMesh: "
-                f"{longship.name}"
-            )
-    sailing_log, _, _ = _sailing_paths(work_dir, longship.name)
-    _initialize_sailing_log(sailing_log, longship.name)
-    with sailing_log.open("a", encoding="utf-8") as stream:
-        stream.write("[FoamNordic] Preparing isolated OpenFOAM case\n")
-    try:
-        with sailing_log.open("ab") as stream:
-            subprocess.run(
-                toolchain_shell(longship.case._toolchain, " && ".join(commands)),
-                check=True,
-                stdout=stream,
-                stderr=subprocess.STDOUT,
-            )
-    except subprocess.CalledProcessError as error:
-        raise RuntimeError(
-            f"OpenFOAM case preparation failed; inspect {sailing_log}"
-        ) from error
-    if verbose and mesh_commands:
-        print(f"[FoamNordic] Mesh is ready: {longship.name}")
-    if longship.case.ranks > 1:
-        expected = {f"processor{rank}" for rank in range(longship.case.ranks)}
-        actual = {
-            path.name
-            for path in case_dir.iterdir()
-            if path.is_dir() and re.fullmatch(r"processor\d+", path.name)
-        }
-        if actual != expected:
-            raise RuntimeError(
-                "OpenFOAM decomposition does not match Case.ranks: "
-                f"expected {sorted(expected)}, found {sorted(actual)}"
-            )
+    prepare_staged_case(
+        longship,
+        work_dir,
+        commands,
+        verbose=verbose,
+        mesh_commands=bool(mesh_commands),
+    )
+    verify_decomposition(case_dir, longship.case.ranks)
     return work_dir, case_dir, tuple(prepared)

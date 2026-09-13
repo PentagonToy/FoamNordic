@@ -1,10 +1,13 @@
 """Declarative control plane for native FoamNordic workloads."""
 
+# Compatibility names remain importable without cluttering interactive discovery.
+# ruff: noqa: F401
+
 __version__ = "1.0.7"
 
 from . import export, math, models, openfoam, postprocess, random, runtime
-from .export import Tensor
 from .core.expressions import (
+    Context,
     Field,
     FieldExpression,
     FieldSelection,
@@ -15,8 +18,6 @@ from .core.expressions import (
     patch,
 )
 from .core.plan import CompiledPlan
-from .execution.observe import FieldSummary, ObservationRecord, ObservationStream, ObservationTiming
-from .execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
 from .core.spec import (
     Attached,
     Closure,
@@ -26,6 +27,14 @@ from .core.spec import (
     Slurm,
     Transform,
 )
+from .execution.observe import (
+    FieldSummary,
+    ObservationRecord,
+    ObservationStream,
+    ObservationTiming,
+)
+from .execution.run import Result, ResultArtifacts, Run, RunStatus, RunSummary
+from .export import Tensor
 from .math import Math
 from .random import Random
 
@@ -36,46 +45,23 @@ Runtime = runtime
 Postprocess = postprocess
 
 __all__ = [
-    "Attached",
     "Closure",
-    "CompiledPlan",
-    "FieldExpression",
-    "FieldSelection",
-    "FieldSummary",
+    "Context",
+    "Export",
+    "Field",
     "Longship",
     "Math",
     "Models",
-    "OpenFOAM",
     "Observe",
+    "OpenFOAM",
     "Operator",
-    "ObservationRecord",
-    "ObservationStream",
-    "ObservationTiming",
-    "Result",
-    "ResultArtifacts",
-    "Run",
-    "RunStatus",
-    "RunSummary",
-    "Runtime",
     "Postprocess",
     "Random",
+    "Runtime",
     "Slurm",
     "Tensor",
     "Transform",
-    "Export",
-    "Field",
     "__version__",
-    "export",
-    "field",
-    "fields",
-    "filter_width",
-    "grad",
-    "models",
-    "openfoam",
-    "patch",
-    "postprocess",
-    "random",
-    "runtime",
 ]
 
 

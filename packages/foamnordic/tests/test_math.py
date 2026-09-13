@@ -12,6 +12,7 @@ def test_grouped_field_vocabulary_is_compact_and_strict() -> None:
     assert fno.Field.field("U") == fno.field("U")
     assert fno.Field.grad("U").canonical == "grad(U)"
     assert fno.Field.delta().canonical == "delta"
+    assert fno.Context.delta_time().canonical == "deltaTime"
     assert fno.Field.coordinate("x").canonical == "x"
     assert fno.Field.div("phi", "U").canonical == "div(phi,U)"
     with pytest.raises(ValueError, match="x, y, or z"):
@@ -43,6 +44,16 @@ def test_openfoam_scalar_algebra_builds_a_safe_expression_tree() -> None:
         _ = strain_rate * float("inf")
 
 
+def test_field_algebra_builds_explicit_scalar_coefficient_expressions() -> None:
+    scalar_product = fno.Field("rho") * fno.Field("k")
+    scaled_vector = fno.Field("rho") * fno.Field("U")
+    scalar_division = fno.Field("k") / fno.Field("rho")
+
+    assert scalar_product.canonical == "multiply(rho,k)"
+    assert scaled_vector.canonical == "multiply(rho,U)"
+    assert scalar_division.canonical == "divide(k,rho)"
+
+
 def test_openfoam_flux_and_coefficient_operations_are_unambiguous() -> None:
     assert fno.Field.div("U").canonical == "div(U)"
     assert fno.Field.div("phi", "U").canonical == "div(phi,U)"
@@ -52,6 +63,20 @@ def test_openfoam_flux_and_coefficient_operations_are_unambiguous() -> None:
         fno.Math.dot(fno.Field.grad("T"), fno.Field.grad("c")).canonical
         == "dot(grad(T),grad(c))"
     )
+    assert (
+        fno.Field.laplacian(
+            fno.Field("nu") + fno.Field("nut"),
+            "k",
+        ).canonical
+        == "laplacian(add(nu,nut),k)"
+    )
+
+
+def test_openfoam_outer_and_trace_build_explicit_tensor_operations() -> None:
+    reynolds = fno.Math.outer(fno.Field("U"), fno.Field("U"))
+
+    assert reynolds.canonical == "outer(U,U)"
+    assert fno.Math.trace(reynolds).canonical == "trace(outer(U,U))"
 
 
 def test_openfoam_operation_arity_is_checked_before_launch() -> None:
@@ -107,6 +132,50 @@ def test_numpy_matmul() -> None:
         fno.Math.matmul(left, right),
         np.matmul(left, right),
     )
+
+
+def test_numpy_outer_and_trace() -> None:
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip("NumPy is optional")
+
+    left = np.array([[1.0, 2.0, 3.0], [2.0, 0.0, 1.0]])
+    right = np.array([[4.0, 5.0, 6.0], [1.0, 3.0, 2.0]])
+    result = fno.Math.outer(left, right)
+
+    np.testing.assert_allclose(result, np.einsum("...i,...j->...ij", left, right))
+    np.testing.assert_allclose(fno.Math.trace(result), np.sum(left * right, axis=-1))
+
+
+def test_math_maximum_and_transport_build_symbolic_graph() -> None:
+    k = fno.Field("k")
+    bounded = fno.Math.maximum(k, 1.0e-10)
+    transported = fno.Field.transport(
+        k,
+        diffusivity=fno.Field("nu") + fno.Field("nut"),
+        source=fno.Field("production"),
+        implicit_sink=fno.Field("dissipation"),
+        lower_bound=1.0e-10,
+    )
+
+    assert bounded.canonical == "maximum(k,1e-10)"
+    assert transported.contains_transport
+    assert transported.arguments[0] == k
+
+
+def test_symbolic_abs_minimum_and_clip_build_native_graphs() -> None:
+    value = fno.Field("k")
+
+    assert fno.Math.abs(value).canonical == "abs(k)"
+    assert fno.Math.minimum(value, 1.0).canonical == "minimum(k,1)"
+    assert fno.Math.clip(value, 0.0, 1.0).canonical == (
+        "minimum(maximum(k,0),1)"
+    )
+    assert fno.Math.clip(value, minimum=0.0).canonical == "maximum(k,0)"
+    assert fno.Math.clip(value, maximum=1.0).canonical == "minimum(k,1)"
+    with pytest.raises(ValueError, match="at least one bound"):
+        fno.Math.clip(value)
 
 
 def test_jax_namespace_survives_jit() -> None:

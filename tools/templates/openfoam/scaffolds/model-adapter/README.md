@@ -1,8 +1,10 @@
-# Model-adapter scaffold
+# OpenFOAM model-adapter scaffold
 
 This directory is a copyable scaffold for a new equation-level OpenFOAM ML closure. It is intentionally not part of the OpenFOAM build and cannot be compiled as shipped. The files contain unresolved `@UPPER_SNAKE_CASE@` tokens and `#error` guards so that a placeholder can never become an accidental physical model.
 
 After installing FoamNordic, locate this directory without a source checkout using `foamnordic dir --templates`. Generic field `Transform` programs do not need a solver adapter; this scaffold is only for a solver-owned equation or correction point.
+
+## Procedure
 
 Use the scaffold only after identifying the native equation entry point:
 
@@ -14,5 +16,7 @@ Use the scaffold only after identifying the native equation entry point:
 6. Copy `closureCoeffs.in` for the case-side field contract.
 7. Add its field kinds to `packages/foamnordic/foamnordic/contracts/openfoam_adapters.yaml`; do not hard-code adapter widths in Python orchestration code.
 8. Register the concrete type in `makeClosureModels.C`, add its source to `Make/files`, and add a solver-integrated acceptance case.
+
+## Scope
 
 Do not start from this scaffold for a time-step boundary `Transform`; that is already served by `foamNordicExchange`. Do not use a turbulence model as a surrogate hook for iLES momentum closure. An iLES stress or source belongs at the momentum-equation assembly point, normally through a dedicated solver or an appropriate `fvModel` integration.

@@ -1,32 +1,36 @@
 .DS_Store
-# Generated distribution artifacts (keep packages/foamnordic/foamnordic/build/ tracked).
-/dist/
-/packages/*/dist/
-/packages/*/build/
-/wheelhouse/
-/build/
-wheelhouse-*/
-*.whl
-*.egg-info/
-/release-notes.md
-/SHA256SUMS
-/docs/benchmarks-legacy/
-# Local installation checks and Python caches.
+
+# Python environments and caches
 .venv/
 venv/
-/test-install/
-/test-wheelhouse/
-.ipynb_checkpoints/
+__pycache__/
+.pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.ipynb_checkpoints/
+*.py[cod]
 .coverage
 .coverage.*
 htmlcov/
-# Local credentials; ignore rules do not replace secret scanning.
+
+# Python distributions and release validation
+/dist/
+/packages/*/dist/
+/packages/*/build/
+wheelhouse-*/
+*.whl
+*.egg-info/
+/test-install/
+/test-wheelhouse/
+
+# Local credentials
 .pypirc
 .env
 .env.*
 !.env.example
+
+# Native builds
+/build/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
@@ -36,12 +40,11 @@ Testing/
 *.so
 *.dylib
 *.log
+
+# Generated OpenFOAM and tutorial data
 tutorials/openfoam_tutorials/**/constant/polyMesh/
 tutorials/openfoam_tutorials/**/processor*/
 tutorials/openfoam_tutorials/**/postProcessing/
 tutorials/openfoam_tutorials/**/[1-9]*/
 tutorials/foamnordic_tutorials/**/model/
 tutorials/foamnordic_tutorials/**/output/
-__pycache__/
-.pytest_cache/
-*.py[cod]

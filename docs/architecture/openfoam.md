@@ -1,7 +1,18 @@
 # OpenFOAM integration
-FoamNordic integrates through a small ABI-specific library built against the active OpenFOAM environment. The wheel supplies the SDK and native runtime; foamnordic build compiles the integration for the selected ABI.
 
-## Field programs
+FoamNordic integrates through a small ABI-specific library built against the active OpenFOAM environment. The wheel supplies the SDK and native runtime; `foamnordic build` compiles the integration for the selected ABI.
+
+## Integration boundaries
+
+| Boundary | FoamNordic responsibility | Solver responsibility |
+| --- | --- | --- |
+| Field access | Resolve current registered storage and validate layout | Create and own fields |
+| Derived inputs | Evaluate declared expressions through OpenFOAM | Supply schemes and dimensions |
+| Closure hook | Invoke a validated programme and stage outputs | Define equation and correction position |
+| Topology change | Carry and verify a monotonic generation | Signal storage or topology replacement |
+| Publication | Validate and commit all outputs atomically | Apply boundary correction when required |
+
+## Field programmes
 
 A Transform reads and writes registered fields at a declared solver stage. A Closure enters an equation-level adapter owned by the solver. Both use the same transport, FNOM, resource, and failure contracts.
 
@@ -20,6 +31,12 @@ Supported stored-field layouts include scalar, vector, symmetric tensor, tensor,
 
 Closure adapters fix the solver-owned outputs and equation semantics. Their model inputs remain explicit and may use any compatible stored or derived field expression.
 
+| Adapter | Fixed outputs | Input policy | Solver-owned operation |
+| --- | --- | --- | --- |
+| `nutFjord` | `nut` | Any compatible stored or derived inputs | Eddy-viscosity field coupling |
+| `kEqnFjord` | `k`, `nut` | Any compatible inputs; current `k` is conventional | State update or one implicit scalar transport solve |
+| `progressRateFjord` | `omega_c` | Any compatible stored or derived inputs | Progress-variable source integration |
+
 ### nutFjord
 
 `nutFjord` is the algebraic eddy-viscosity adapter. It publishes one solver-owned field,
@@ -32,13 +49,13 @@ where the model inputs $\mathbf{x}$ are declared by the user. The default bindin
 
 ### kEqnFjord
 
-`kEqnFjord` retains the OpenFOAM transport equation for subgrid kinetic energy and delegates three closure terms:
+`kEqnFjord` fixes the public state outputs as `k` and `nut`:
 
 $$
-(\nu_t, P_k, C_\varepsilon) = \mathcal{M}(\mathbf{x}).
+(k^{n+1}, \nu_t^{n+1}) = \mathcal{M}(\mathbf{x}).
 $$
 
-These outputs are fixed as `nut`, `kProduction`, and `kDissipationCoeff`. The declared inputs remain selectable, although a model representing a conventional one-equation closure normally includes the current `k` field. `k` is read from solver-owned storage at every closure invocation, including repeated correctors at the same physical time; it is not a detached value from the preceding time step.
+The declared inputs remain selectable, although a learned one-equation closure normally includes the current `k` field. A resident model may update `k` and `nut` directly. A mathematical `Operator.function` may instead place one `Field.transport()` barrier in the graph; FoamNordic lowers its coefficient expressions once and the adapter assembles the implicit OpenFOAM equation at each correction. Both forms retain the same public output contract.
 
 The resulting source and sink terms enter the solver-owned equation as
 
@@ -52,7 +69,7 @@ $$
 + S_k.
 $$
 
-The adapter solves and bounds `k`, then invokes the closure again with the updated field. Model inputs may therefore change without changing the equation adapter, while the output names, layouts, dimensions, and equation semantics remain fixed.
+The native transport path solves and bounds `k`, then evaluates the declared post-solve `nut` expression from the updated field. It reserves no ModelHost resources and performs no Python or inter-process exchange in the corrector loop. The earlier resident term contract, `nut`, `kProduction`, and `kDissipationCoeff`, remains available for compatibility.
 
 ### progressRateFjord
 
@@ -66,9 +83,9 @@ The consumer may bind `progress`, `variance`, `temperature`, arbitrary stored fi
 
 Model input names remain logical contract keys. A model exported with `c`, `c_var`, and `T`, for example, can map those keys to the hook's `progress`, `variance`, and `temperature` bindings through `inputExpressions`; no input vocabulary is imposed by `progressRateFjord`.
 
-## Numerics
+## Numerics policy
 
-Derived operations require entries in fvSchemes. The default convenient policy keeps an exact user entry or a usable default and inserts only a missing requirement. Every insertion is recorded in numerics-changes.tsv. Strict numerics rejects the missing requirement instead.
+Derived operations require entries in `fvSchemes`. The default convenient policy keeps an exact user entry or a usable default and inserts only a missing requirement. Every insertion is recorded in `numerics-changes.tsv`. Strict numerics rejects the missing requirement instead.
 
 ## Atomic publication
 
@@ -78,7 +95,9 @@ All outputs are staged and validated before commit. A bad shape, conversion, non
 
 An external solver can include the installed headers, link the ABI-matched integration library, and register its equation hook without a FoamNordic source checkout. Directory discovery is available through:
 
-    foamnordic dir --include
-    foamnordic dir --openfoam-library
+```console
+foamnordic dir --include
+foamnordic dir --openfoam-library
+```
 
-See the externalNutFjord example for the minimal build and registration shape.
+See [`examples/openfoam/externalNutFjord`](../../examples/openfoam/externalNutFjord/README.md) for the minimal out-of-tree build and registration contract.

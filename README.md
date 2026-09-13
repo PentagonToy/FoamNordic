@@ -3,14 +3,14 @@
 </p>
 
 # FoamNordic
+
 **FOAM Native Orchestration Runtime for Distributed Inference Coupling**
 
 FoamNordic couples OpenFOAM fields to mathematical and machine-learning operators without making Python part of the solver loop. The same `Longship` interface runs an unchanged OpenFOAM case, a field transform, or an equation-level closure supplied by any compatible solver adapter.
 
 FNOM is the self-contained model artefact used by **FoamNordic** and implemented by **BindNordic**. It stores the executable payload together with tensor contracts, scaling, runtime requirements, and compatibility metadata. Fjord moves fields over shared memory, Unix sockets, UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
 
-Python 3.11 and 3.12 are supported. See [CHANGELOG.md](CHANGELOG.md) for release notes and upgrade guidance.
-
+Python 3.11 and 3.12 are supported. See the [changelog](CHANGELOG.md) for release notes and upgrade guidance.
 
 ## Architecture
 
@@ -27,16 +27,26 @@ The diagrams separate workload setup and launch from the field exchange and infe
   </tr>
 </table>
 
+## Requirements
+
+| Component | Requirement |
+| --- | --- |
+| Python | CPython 3.11 or 3.12 |
+| OpenFOAM | A supported installation with its compiler and MPI environment for solver execution |
+| Operating system | Linux `x86_64`, Linux `aarch64`, or Apple Silicon |
+| ONNX Runtime | Downloaded by `foamnordic build`, or supplied through `FOAMNORDIC_ONNX_RUNTIME_ROOT` |
+
+Linux with OpenFOAM v2512 is the primary HPC target. OpenFOAM.app supplies the native macOS environment.
+
 ## Install
 
 ```console
-python3 -m venv .venv
+uv venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "foamnordic[ml]"
+uv pip install "foamnordic[ml]"
 ```
 
-The `ml` extra installs scikit-learn, ONNX, Equinox, and CPU JAX on Linux or macOS. On a Linux CUDA 12 system, including Roihu GPU nodes, install `foamnordic[ml-cuda12]` instead. The explicit CUDA choice avoids treating CPU architecture as evidence that a GPU is available. Use plain `foamnordic` for ordinary OpenFOAM runs, mathematical functions, or existing model artifacts that do not require those authoring libraries.
+The `ml` extra installs scikit-learn, ONNX, Equinox, Optax and CPU JAX on Linux or macOS. On a Linux CUDA 12 system, including Roihu GPU nodes, install `foamnordic[ml-cuda12]` instead. The explicit CUDA choice avoids treating CPU architecture as evidence that a GPU is available. Use plain `foamnordic` for ordinary OpenFOAM runs, mathematical functions or existing model artefacts that do not require those authoring libraries.
 
 Wheels include the Python API and native control runtime. Build the small OpenFOAM integration for each compiler/ABI used on the machine:
 
@@ -63,14 +73,15 @@ To use the current source directly:
 ```console
 git clone https://github.com/PentagonToy/FoamNordic.git
 cd FoamNordic
-python -m pip install -e "./packages/foamnordic[ml]"  # use ml-cuda12 on a Linux CUDA 12 host
+uv sync --all-packages --all-extras
+source .venv/bin/activate
 module load openfoam/2512
 foamnordic build
 ```
 
-On macOS, replace the module command with `openfoam`. Offline ONNX builds may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive; workflows that do not need native ONNX can use `foamnordic build --without-onnx`.
+The uv workspace declares FoamNordic and its internal BindNordic source component explicitly while preserving one published `foamnordic` distribution. To install only the library from a checkout, use `uv pip install -e "./packages/foamnordic[ml]"`; replace `ml` with `ml-cuda12` on a Linux CUDA 12 host. On macOS, replace the module command with `openfoam`. Offline ONNX builds may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive; workflows that do not need native ONNX can use `foamnordic build --without-onnx`.
 
-## Run an OpenFOAM case
+## Quick start
 
 ```python
 from pathlib import Path
@@ -81,7 +92,7 @@ case = fno.OpenFOAM.Case(
     case_dir=Path("cases/lidDrivenCavity"),
     run_dir=Path("output"),
     of_cmd="module load openfoam/2512",
-    shell="bash", # HPC: bash | macOS: zsh
+    shell="bash",  # HPC: bash | macOS: zsh
     application="pimpleFoam",
 )
 case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
@@ -145,16 +156,18 @@ run = fno.Longship(case=case, scheduler=scheduler, transforms=(transform,)).laun
 
 Same-node bulk exchange uses shared memory; multi-node runs place a resident worker beside each node's solver ranks.
 
-## Development
+## Develop from source
 
 ```console
+uv sync --all-packages --all-extras
+source .venv/bin/activate
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFOAMNORDIC_TESTS=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 python -m pytest
 ```
 
-Supported build targets are Linux `x86_64`, Linux `aarch64`, and Apple Silicon. Linux/OpenFOAM v2512 is the primary HPC target; OpenFOAM.app provides the native macOS environment.
+Native tests that compile the OpenFOAM integration require the target OpenFOAM environment to be active.
 
 ## Documentation
 

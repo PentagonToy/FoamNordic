@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import time
-from typing import Mapping, Sequence, TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .run import _internal_path, _longship_executable, _sailing_paths
+from .process import longship_executable
 from .resources import SHM_MIB_PER_RANK_PROGRAM, memory_bytes, slurm_memory
+from .run_files import internal_path, sailing_paths
 from .shell import quote_command
 from .templates import read as read_template
 from .templates import render as render_template
@@ -42,6 +44,15 @@ def write_batch(
         for character in longship.name
     )[:128]
     model = scheduler.model_resources
+    model_gres = (
+        f"gpu:{model.gres_model}:{model.gres_count}"
+        if host is not None and model.gres_model is not None
+        else None
+    )
+    gres_directive = (
+        "" if model_gres is None else f"#SBATCH --gres={model_gres}\n"
+    )
+    host_gres = "" if model_gres is None else f"    --gres={model_gres} \\\n"
     if not (
         host is not None
         and scheduler.has_model_resources
@@ -83,7 +94,7 @@ def write_batch(
     memory_sanitizer = (
         "unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE"
     )
-    longship_log, host_log, solver_log = _sailing_paths(work_dir, longship.name)
+    longship_log, host_log, solver_log = sailing_paths(work_dir, longship.name)
     if host is None:
         launch_body = f""": >> {quote_command((host_log,))}
 exec srun \\
@@ -102,7 +113,7 @@ exec srun \\
         ready_arguments = " \\\n".join(
             f"  --ready {quote_command((path,))}" for path in ready
         )
-        launch_body = f"""exec {quote_command((_longship_executable(),))} \\
+        launch_body = f"""exec {quote_command((longship_executable(),))} \\
 {ready_arguments} \\
   --host-output {quote_command((host_log,))} \\
   --solver-output {quote_command((solver_log,))} \\
@@ -111,7 +122,7 @@ exec srun \\
   --host srun --nodes={scheduler.nodes} --ntasks={runtime['host_tasks']} \\
     --ntasks-per-node=1 \\
     --cpus-per-task={runtime['host_cpus_per_task']} --cpu-bind=none \\
-    --exact --exclusive \\
+{host_gres}    --exact --exclusive \\
     {quote_command(host)} \\
   --solver srun --nodes={scheduler.nodes} --ntasks={scheduler.ntasks} \\
     --ntasks-per-node={runtime['solver_tasks_per_node']} \\
@@ -135,6 +146,7 @@ exec srun \\
                 ),
                 "ALLOCATION_CPUS_PER_TASK": 1,
                 "MEMORY_DIRECTIVE": memory,
+                "GRES_DIRECTIVE": gres_directive,
                 "MEMORY_SANITIZER": memory_sanitizer,
                 "SAILING_LOG": longship_log,
                 "LAUNCH_BODY": launch_body,
@@ -154,7 +166,7 @@ def write_submission_wrapper(work_dir: Path, batch: Path) -> Path:
             "submit.sh.in",
             {
                 "BATCH_PATH": quote_command((batch,)),
-                "JOB_FILE": quote_command((_internal_path(work_dir, "job.id"),)),
+                "JOB_FILE": quote_command((internal_path(work_dir, "job.id"),)),
             },
         ),
         encoding="utf-8",
@@ -164,7 +176,7 @@ def write_submission_wrapper(work_dir: Path, batch: Path) -> Path:
 
 
 def force_cancel(work_dir: Path) -> None:
-    job_file = _internal_path(work_dir, "job.id")
+    job_file = internal_path(work_dir, "job.id")
     identity_deadline = time.monotonic() + 5.0
     job_id = ""
     while time.monotonic() < identity_deadline:

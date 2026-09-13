@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import re
 import shlex
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from time import perf_counter
 
 import equinox as eqx
@@ -19,7 +19,6 @@ import jax.numpy as jnp
 import numpy as np
 
 import foamnordic as fno
-
 
 jax.config.update("jax_enable_x64", True)
 
@@ -168,7 +167,7 @@ def _prepare_sources(root: Path, source: Path, end_time: float) -> dict[str, Pat
         )
         if model == "kEqn":
             shutil.copyfile(
-                repository / "tools/templates/openfoam/k.cavity.in",
+                repository / "tools/templates/openfoam/examples/k.cavity.in",
                 destination / "0/k",
             )
             _foam_set(
@@ -184,7 +183,7 @@ def _prepare_sources(root: Path, source: Path, end_time: float) -> dict[str, Pat
 def _export_models(root: Path) -> dict[str, Path]:
     models = root / "models"
     models.mkdir()
-    smagorinsky = fno.export.equinox(
+    smagorinsky = fno.Export.equinox(
         ExactSmagorinsky(),
         path=models / "exact-smagorinsky.fnom",
         inputs={
@@ -193,7 +192,7 @@ def _export_models(root: Path) -> dict[str, Path]:
         },
         outputs={"nut": fno.Tensor.scalar()},
     )
-    k_equation = fno.export.equinox(
+    k_equation = fno.Export.equinox(
         ExactKEqn(),
         path=models / "exact-keqn.fnom",
         inputs={
@@ -229,27 +228,30 @@ def _closure(model: str, artifact: Path) -> fno.Closure:
             artifact=artifact,
             inputs={
                 "velocity_grad": fno.Math.grad("U"),
-                "filter_width": fno.filter_width(),
+                "filter_width": fno.Field.delta(),
             },
-            outputs={"nut": fno.field("nut")},
+            outputs={"nut": fno.Field("nut")},
         )
     return fno.Closure(
         name="kEqnFjord",
         artifact=artifact,
         inputs={
-            "k": fno.field("k"),
+            "k": fno.Field("k"),
             "velocity_grad": fno.Math.grad("U"),
-            "filter_width": fno.filter_width(),
+            "filter_width": fno.Field.delta(),
         },
         outputs={
-            "nut": fno.field("nut"),
-            "kProduction": fno.field("kProduction"),
-            "kDissipationCoeff": fno.field("kDissipationCoeff"),
+            "nut": fno.Field("nut"),
+            "kProduction": fno.Field("kProduction"),
+            "kDissipationCoeff": fno.Field("kDissipationCoeff"),
         },
     )
 
 
-def _launch(longship: fno.Longship, timeout: float) -> tuple[fno.Result, float]:
+def _launch(
+    longship: fno.Longship,
+    timeout: float,
+) -> tuple[fno.Runtime.Result, float]:
     started = perf_counter()
     result = longship.launch(start_timeout=timeout, verbose=False).stop(
         timeout=timeout
@@ -272,7 +274,7 @@ def _solver_timing(path: Path) -> tuple[float, float]:
     return float(execution), float(clock)
 
 
-def _reference_scale(result: fno.Result, field: str) -> float:
+def _reference_scale(result: fno.Runtime.Result, field: str) -> float:
     values = np.asarray(result.postprocess.field(field, time_idx=-1), dtype=np.float64)
     return float(np.max(np.abs(values)))
 

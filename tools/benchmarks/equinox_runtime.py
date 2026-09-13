@@ -4,22 +4,21 @@
 from __future__ import annotations
 
 import argparse
-from io import BytesIO
 import json
-from pathlib import Path
 import statistics
 import subprocess
 import sys
 import tempfile
 import time
+from io import BytesIO
+from pathlib import Path
 
 import equinox as eqx
 import jax
 import numpy as np
-
-import foamnordic as fno
 from foamnordic.execution.resident import _equinox_evaluator
 
+import foamnordic as fno
 
 ROWS = 262_144
 INPUTS = 10
@@ -66,7 +65,7 @@ def benchmark() -> None:
             depth=3,
             key=jax.random.PRNGKey(42),
         )
-        fno.export.equinox(
+        fno.Export.equinox(
             model,
             path=manifest,
             inputs={

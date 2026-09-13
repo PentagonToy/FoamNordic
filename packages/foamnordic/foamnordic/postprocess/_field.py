@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
-from pathlib import Path
 import math
 import re
+from hashlib import sha256
+from pathlib import Path
 
 import numpy as np
-
 from bindnordic.openfoam import read_field as read_openfoam_field
-
 
 MESH_FILES = ("points", "faces", "owner", "neighbour")
 
@@ -124,34 +122,6 @@ def _field_paths(case_dir: Path, physical_time: float, field_name: str) -> tuple
             )
         paths.append(path)
     return tuple(paths)
-
-
-def _read_ascii_internal_field(path: Path) -> np.ndarray:
-    payload = path.read_bytes()
-    format_match = re.search(rb"\bformat\s+(ascii|binary)\s*;", payload)
-    if format_match is not None and format_match.group(1) != b"ascii":
-        raise ValueError(f"Cannot use the ASCII fallback for binary field {path}")
-    uniform = re.search(rb"\binternalField\s+uniform\s+([^;]+);", payload, re.DOTALL)
-    if uniform is not None:
-        values = np.fromstring(
-            uniform.group(1).replace(b"(", b" ").replace(b")", b" "), sep=" "
-        )
-        return values[0] if values.size == 1 else values
-    nonuniform = re.search(
-        rb"\binternalField\s+nonuniform\s+List<[^>]+>\s+(\d+)\s*\((.*?)\)\s*;",
-        payload,
-        re.DOTALL,
-    )
-    if nonuniform is None:
-        raise ValueError(f"Cannot locate a supported internalField in {path}")
-    count = int(nonuniform.group(1))
-    values = np.fromstring(
-        nonuniform.group(2).replace(b"(", b" ").replace(b")", b" "), sep=" "
-    )
-    if count == 0 or values.size % count:
-        raise ValueError(f"Cannot reshape internalField values from {path}")
-    components = values.size // count
-    return values if components == 1 else values.reshape(count, components)
 
 
 def _cell_count(field_path: Path) -> int:

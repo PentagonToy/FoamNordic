@@ -25,7 +25,7 @@ foamnordic build
 foamnordic doctor
 ```
 
-Replace the wheel placeholders with its actual filename. Use `ml-cuda12` instead of `ml` for Linux CUDA 12 validation. Confirm version `1.0.7`, verify that `foamnordic` and `bindnordic` both come from the fresh installation, and build from the bundled kit without `--source`. Run a small OpenFOAM case to successful completion and record the platform, Python and OpenFOAM versions, and result. Remove only test-owned artifacts after validation.
+Replace the wheel placeholders with its actual filename. Use `ml-cuda12` instead of `ml` for Linux CUDA 12 validation. Confirm version `1.0.7`, verify that `foamnordic` and `bindnordic` both come from the fresh installation, and build from the bundled kit without `--source`. Run a small OpenFOAM case to successful completion and record the platform, Python and OpenFOAM versions and result. Remove only test-owned artefacts after validation.
 
 If source or package metadata changes, rebuild and validate the resulting wheels again. Never rename a wheel to change its version.
 
@@ -45,7 +45,7 @@ TestPyPI does not mirror every runtime dependency. When installing FoamNordic fr
 
 This helper uploads to **production PyPI** and prompts for the API token through Twine. Do not store credentials in the repository. PyPI files are immutable; check that the intended version is available before publication.
 
-Tag pushes also trigger wheel CI. Do not replace already validated artifacts with newly rebuilt ones merely because their filenames match.
+Tag pushes also trigger wheel CI. Do not replace already validated artefacts with newly rebuilt ones merely because their filenames match.
 
 ## GitHub release notes
 

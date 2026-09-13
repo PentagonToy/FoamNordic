@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
-import re
-
 
 _TOKEN = re.compile(r"@[A-Z][A-Z0-9_]*@")
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -19,9 +18,12 @@ def read(path: str, *, kind: str, default: str | None = None) -> str:
     if relative.is_absolute() or ".." in relative.parts or not relative.parts:
         raise ValueError("template path must stay inside the template directory")
     packaged = files("foamnordic").joinpath("templates", *relative.parts)
+    source = _REPOSITORY_ROOT.joinpath("tools/templates", *relative.parts)
+    in_source_checkout = Path(__file__).resolve().is_relative_to(_REPOSITORY_ROOT)
+    if in_source_checkout and source.is_file():
+        return source.read_text(encoding="utf-8")
     if packaged.is_file():
         return packaged.read_text(encoding="utf-8")
-    source = _REPOSITORY_ROOT.joinpath("tools/templates", *relative.parts)
     if source.is_file():
         return source.read_text(encoding="utf-8")
     if default is not None:

@@ -1,0 +1,14 @@
+[project]
+name = "foamnordic-workspace"
+version = "0.0.0"
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "packages/bindnordic",
+    "packages/foamnordic",
+]

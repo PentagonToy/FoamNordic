@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field
 import hashlib
+import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Callable, Literal, Mapping
 
 from .. import openfoam
-from ..contracts import infer_model_bindings, infer_transform_bindings
+from ..contracts import adapter_contract, infer_model_bindings, infer_transform_bindings
 from .expressions import FieldExpression
+from .graph import (
+    NativeAlgebraPlan,
+    NativeFieldPlan,
+    NativeTransportPlan,
+    compile_native_program,
+    requires_native_transport,
+)
 from .native_plan import compile_runtime_plan
 from .paths import PathInput, path_from
 from .plan import CompiledPlan
@@ -133,6 +141,7 @@ class Closure:
     outputs: Mapping[str, FieldExpression]
     key: Key
     _updates: tuple["Closure", ...]
+    _native_program: NativeFieldPlan | None
 
     def __init__(
         self,
@@ -184,6 +193,38 @@ class Closure:
             raise TypeError("closure updates must be Closure declarations")
         if any(update._updates for update in self._updates):
             raise ValueError("closure updates must not contain nested updates")
+        native_program = None
+        if self.operator.kind == "function":
+            native_program = compile_native_program(
+                self.operator.source,
+                self.inputs,
+                self.outputs,
+            )
+        contract = adapter_contract(self.name)
+        native_execution = (
+            frozenset() if contract is None else contract.native_execution
+        )
+        if (
+            isinstance(native_program, NativeTransportPlan)
+            and "transport" not in native_execution
+        ):
+            raise ValueError(
+                f"Field.transport is not supported by the {self.name} adapter"
+            )
+        if isinstance(native_program, NativeAlgebraPlan):
+            output_fields = {
+                expression.field_name for expression in self.outputs.values()
+            }
+            supported = (
+                contract is not None
+                and "algebra" in native_execution
+                and output_fields == set(contract.outputs)
+            )
+            if not supported:
+                native_program = None
+        if self._updates:
+            native_program = None
+        object.__setattr__(self, "_native_program", native_program)
 
     @property
     def artifact(self):
@@ -194,6 +235,28 @@ class Closure:
         """Return the immutable solver-mediated field updates."""
 
         return self._updates
+
+    @property
+    def native_transport(self) -> NativeTransportPlan | None:
+        """Return the immutable solver-native graph, when one was declared."""
+
+        return (
+            self._native_program
+            if isinstance(self._native_program, NativeTransportPlan)
+            else None
+        )
+
+    @property
+    def native_program(self) -> NativeFieldPlan | None:
+        """Return the immutable solver-native field program, when available."""
+
+        return self._native_program
+
+    @property
+    def execution_lane(self) -> str:
+        """Return the execution boundary selected during declaration."""
+
+        return "native" if self._native_program is not None else "resident"
 
     def update(
         self,
@@ -233,6 +296,10 @@ class Closure:
         }
         if self._updates:
             plan["updates"] = [update.to_plan() for update in self._updates]
+        if self._native_program is not None:
+            plan["native_program"] = self._native_program.to_plan()
+            if isinstance(self._native_program, NativeTransportPlan):
+                plan["native_transport"] = self._native_program.to_plan()
         return plan
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -245,6 +312,7 @@ class Transform:
     outputs: Mapping[str, FieldExpression]
     at: str = "time_step_start"
     key: Key
+    _native_program: NativeAlgebraPlan | None
 
     def __init__(
         self,
@@ -273,6 +341,7 @@ class Transform:
         object.__setattr__(self, "outputs", outputs)
         object.__setattr__(self, "at", at)
         object.__setattr__(self, "key", _program_key(key, "transform"))
+        object.__setattr__(self, "_native_program", None)
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -281,13 +350,32 @@ class Transform:
             raise ValueError("transform name must be an OpenFOAM word")
         if not isinstance(self.operator, Operator):
             raise TypeError("transform operator must be an Operator")
+        if self.operator.kind == "function" and requires_native_transport(
+            self.operator.source
+        ):
+            raise ValueError("Field.transport is only valid in a Closure")
         object.__setattr__(self, "inputs", _frozen_mapping(self.inputs, "inputs"))
         object.__setattr__(self, "outputs", _frozen_mapping(self.outputs, "outputs"))
+        native_program = None
+        if self.operator.kind == "function":
+            compiled = compile_native_program(
+                self.operator.source,
+                self.inputs,
+                self.outputs,
+            )
+            if isinstance(compiled, NativeAlgebraPlan) and all(
+                expression.field_name is not None
+                and "." not in expression.field_name
+                for expression in self.outputs.values()
+            ):
+                native_program = compiled
+        object.__setattr__(self, "_native_program", native_program)
         for logical_name, expression in self.inputs.items():
-            if expression.operation != "field":
+            if native_program is None and expression.operation != "field":
                 raise NotImplementedError(
-                    f"transform input {logical_name!r} currently requires "
-                    "a stored field"
+                    f"resident transform input {logical_name!r} currently requires "
+                    "a stored field; a fully symbolic function may use native "
+                    "OpenFOAM expressions"
                 )
         for logical_name, expression in self.outputs.items():
             if expression.operation != "field":
@@ -310,8 +398,20 @@ class Transform:
     def artifact(self):
         return self.operator.artifact
 
+    @property
+    def native_program(self) -> NativeAlgebraPlan | None:
+        """Return a solver-native algebra programme, when available."""
+
+        return self._native_program
+
+    @property
+    def execution_lane(self) -> str:
+        """Return the execution boundary selected during declaration."""
+
+        return "native" if self._native_program is not None else "resident"
+
     def to_plan(self) -> dict[str, object]:
-        return {
+        plan = {
             "name": self.name,
             "operator": self.operator.to_plan(),
             "inputs": {name: value.to_plan() for name, value in self.inputs.items()},
@@ -319,6 +419,9 @@ class Transform:
             "at": self.at,
             "key": self.key.to_plan(),
         }
+        if self._native_program is not None:
+            plan["native_program"] = self._native_program.to_plan()
+        return plan
 
 @dataclass(frozen=True, slots=True)
 class Observe:
@@ -418,6 +521,8 @@ class SlurmModel:
 
     cpus_per_task: int = 1
     mem_per_cpu: str | None = None
+    gres_model: str | None = None
+    gres_count: int | None = None
 
     def __post_init__(self) -> None:
         require_positive(self.cpus_per_task, "cpus_per_task")
@@ -425,11 +530,23 @@ class SlurmModel:
             require_nonempty(self.mem_per_cpu, "mem_per_cpu")
             if any(character.isspace() for character in self.mem_per_cpu):
                 raise ValueError("mem_per_cpu must not contain whitespace")
+        if (self.gres_model is None) != (self.gres_count is None):
+            raise ValueError("gres_model and gres_count must be declared together")
+        if self.gres_model is not None:
+            require_nonempty(self.gres_model, "gres_model")
+            if re.fullmatch(r"[A-Za-z0-9_.-]+", self.gres_model) is None:
+                raise ValueError(
+                    "gres_model must contain only letters, digits, dot, "
+                    "underscore, or hyphen"
+                )
+            require_positive(self.gres_count, "gres_count")
 
     def to_plan(self) -> dict[str, object]:
         return {
             "cpus_per_task": self.cpus_per_task,
             "mem_per_cpu": self.mem_per_cpu,
+            "gres_model": self.gres_model,
+            "gres_count": self.gres_count,
         }
 
 
@@ -497,10 +614,17 @@ class Slurm:
         *,
         cpus_per_task: int = 1,
         mem_per_cpu: str | None = None,
+        gres_model: str | None = None,
+        gres_count: int | None = None,
     ) -> SlurmModel:
         """Declare resources for exactly one ModelHost task per node."""
 
-        return SlurmModel(cpus_per_task, mem_per_cpu)
+        return SlurmModel(
+            cpus_per_task,
+            mem_per_cpu,
+            gres_model,
+            gres_count,
+        )
 
     @property
     def openfoam_resources(self) -> SlurmOpenFOAM:

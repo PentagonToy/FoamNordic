@@ -1,4 +1,4 @@
-# FoamNordic native source
+# Native runtime
 
 Native code is grouped by ownership rather than by a particular OpenFOAM solver or model framework.
 
@@ -10,6 +10,8 @@ Native code is grouped by ownership rather than by a particular OpenFOAM solver 
 | `backend/inference/` | resident-worker orchestration and BindNordic kernel integration |
 | `backend/connectors/` | native backend adapters to BindNordic kernels |
 | `openfoam/` | field bridge, function object, equation adapters, and expressions |
+
+## Dependency direction
 
 The dependency direction is deliberate:
 
@@ -23,7 +25,7 @@ adapter  inference
 OpenFOAM
 ```
 
-Communication does not know OpenFOAM or model backends. Inference does not own solver fields or model formats; BindNordic owns FNOM parsing, scaling, and backend kernels. OpenFOAM adapters do not load models or schedule processes. Templates are build/runtime assets rather than a second implementation.
+Communication does not know OpenFOAM or model backends. Inference does not own solver fields or model formats; BindNordic owns FNOM parsing, scaling and backend kernels. OpenFOAM adapters do not load models or schedule processes. Templates are build and runtime assets rather than a second implementation.
 
 ## OpenFOAM adapters
 

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import math
-from pathlib import Path
 import sys
-from types import MappingProxyType
 import time
-from typing import Iterator, Mapping, TextIO, TYPE_CHECKING
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType
+from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
     from .run import Run
@@ -48,10 +49,10 @@ class ObservationRecord:
         summaries = {}
         raw_summaries = value.get("summary", {})
         if not isinstance(raw_summaries, Mapping):
-            raise ValueError("observation summary must be a mapping")
+            raise TypeError("observation summary must be a mapping")
         for name, reductions in raw_summaries.items():
             if not isinstance(reductions, Mapping):
-                raise ValueError("field reductions must be a mapping")
+                raise TypeError("field reductions must be a mapping")
             summaries[str(name)] = FieldSummary(
                 minimum=_optional_float(reductions.get("minimum", reductions.get("min"))),
                 maximum=_optional_float(reductions.get("maximum", reductions.get("max"))),
@@ -61,7 +62,7 @@ class ObservationRecord:
             )
         raw_timing = value.get("timing", {})
         if not isinstance(raw_timing, Mapping):
-            raise ValueError("observation timing must be a mapping")
+            raise TypeError("observation timing must be a mapping")
         return cls(
             exchange_index=int(value["exchange_index"]),
             time=float(value["time"]),

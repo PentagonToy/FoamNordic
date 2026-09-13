@@ -15,17 +15,18 @@ install(FILES ${PROJECT_SOURCE_DIR}/src/foamnordic/runtime/executor.hpp
     DESTINATION foamnordic/templates/compiled COMPONENT Python)
 install(
     FILES
-        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/observation.in
-        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/derivedSchemes.json
-        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/decomposeParDict.in
-        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/fjordExchange.in
-        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/closureBody.in
-        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/turbulenceProperties.fjord.in
-    DESTINATION foamnordic/templates/openfoam
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/observation.in
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/derivedSchemes.json
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/decomposeParDict.in
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/fjordExchange.in
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/fjordAlgebra.in
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/closureBody.in
+        ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/runtime/turbulenceProperties.fjord.in
+    DESTINATION foamnordic/templates/openfoam/runtime
     COMPONENT Python)
 install(
-    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/model-adapter
-    DESTINATION foamnordic/templates/openfoam
+    DIRECTORY ${PROJECT_SOURCE_DIR}/tools/templates/openfoam/scaffolds/model-adapter
+    DESTINATION foamnordic/templates/openfoam/scaffolds
     COMPONENT Python)
 install(
     FILES ${PROJECT_SOURCE_DIR}/tools/templates/large_banner.txt

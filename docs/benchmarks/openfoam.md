@@ -1,12 +1,38 @@
 # OpenFOAM
 
-## pitzDaily nutFjord closure
+This record compares solver-native FoamNordic functions with their standard OpenFOAM reference models. It isolates framework overhead and numerical parity; it does not assess the predictive quality of a learned closure.
 
-Roihu interactive allocation `1095041` compared OF/FNO with FNO-coupled `nutFjord` on the incompressible pitzDaily case using OpenFOAM v2512, 16 MPI ranks and deterministic `simple (16 1 1)` decomposition. Smagorinsky and WALE were each restarted from identical initial conditions and run independently for 1, 10, 100 and 400 steps with `deltaT=1e-5`. These single-run timings are diagnostic and are not treated as a performance benchmark.
+## Metrics
+
+For a reference field $\mathbf{r}$ and FoamNordic field $\mathbf{f}$, the relative $L_2$ error is
+
+$$
+E_{L_2}=\frac{\lVert\mathbf{f}-\mathbf{r}\rVert_2}{\lVert\mathbf{r}\rVert_2},
+$$
+
+and the reported peak-relative error is
+
+$$
+E_{\infty}=\frac{\lVert\mathbf{f}-\mathbf{r}\rVert_\infty}{\max(\lVert\mathbf{r}\rVert_\infty,s_{\min})}.
+$$
+
+The scale floor $s_{\min}$ is the smallest positive float for the pitzDaily comparisons and $10^{-12}$ for NACA4412. Performance tables report the median and maximum absolute deviation defined in the [benchmark reporting contract](README.md). Ratios use FoamNordic divided by the corresponding OF/FNO value; a ratio of $1$ denotes equal elapsed time.
+
+## Validation matrix
+
+| Case | Reference | FoamNordic path | Cells | MPI ranks | Steps |
+| --- | --- | --- | ---: | ---: | ---: |
+| pitzDaily | Smagorinsky | FNO-native `nutFjord` | Case-defined | 16 | 1, 10, 100, 400 |
+| pitzDaily | WALE | FNO-native `nutFjord` | Case-defined | 16 | 1, 10, 100, 400 |
+| NACA4412 | kEqn | FNO-native `kEqnFjord` | 89,728 | 16 | 1, 10, 100, 400 |
+
+## pitzDaily `nutFjord`
+
+Roihu compared OF/FNO with FNO-native `nutFjord` on the incompressible pitzDaily case using OpenFOAM v2512, 16 MPI ranks and deterministic `simple (16 1 1)` decomposition. Smagorinsky and WALE were each restarted from identical initial conditions and run independently for 1, 10, 100 and 400 steps with `deltaT=1e-5`.
 
 ### Smagorinsky
 
-The standard OpenFOAM Smagorinsky model used `Ck=0.0265463553` and `Ce=1.048`; FNO-coupled evaluated the same float64 algebra through `nutFjord`.
+The standard OpenFOAM Smagorinsky model used `Ck=0.0265463553` and `Ce=1.048`; FNO-native evaluated the same float64 algebra through `nutFjord` without a ModelHost or field exchange.
 
 #### Performance
 
@@ -14,26 +40,26 @@ Each path received one warm-up followed by seven measured 400-step runs in alter
 
 | Path | End-to-end wall | OpenFOAM execution | OpenFOAM clock |
 |---|---:|---:|---:|
-| OF/FNO `Smagorinsky` | 7.568 ± 0.282 s | 4.270 ± 0.150 s | 4 ± 1 s |
-| FNO-coupled `nutFjord` | 12.675 ± 0.236 s | 7.600 ± 0.300 s | 8 ± 1 s |
+| OF/FNO `Smagorinsky` | 7.309 ± 0.147 s | 4.140 ± 0.100 s | 4 ± 0 s |
+| FNO-native `nutFjord` | 7.847 ± 0.227 s | 4.160 ± 0.250 s | 4 ± 0 s |
 
-The end-to-end wall ratio was `1.675`; the OpenFOAM execution-time ratio was `1.780`.
+The end-to-end wall ratio was `1.074`; the OpenFOAM execution-time ratio was `1.005`. All seven measured pairs produced identical final fields.
 
 #### Relative L2 error
 
 | Field | 1 step | 10 steps | 100 steps | 400 steps |
 |---|---:|---:|---:|---:|
-| `U` | 0 | 7.910e-8 | 2.546e-7 | 1.083e-7 |
-| `p` | 0 | 1.754e-8 | 1.798e-8 | 4.306e-8 |
-| `nut` | 1.041e-16 | 1.861e-7 | 3.245e-7 | 1.835e-7 |
+| `U` | 0 | 0 | 0 | 0 |
+| `p` | 0 | 0 | 0 | 0 |
+| `nut` | 0 | 0 | 0 | 0 |
 
 #### Peak-relative error
 
 | Field | 1 step | 10 steps | 100 steps | 400 steps |
 |---|---:|---:|---:|---:|
-| `U` | 0 | 1.312e-6 | 2.313e-6 | 5.652e-7 |
-| `p` | 0 | 7.394e-7 | 3.188e-7 | 2.974e-7 |
-| `nut` | 4.320e-16 | 3.069e-7 | 7.808e-7 | 1.458e-7 |
+| `U` | 0 | 0 | 0 | 0 |
+| `p` | 0 | 0 | 0 | 0 |
+| `nut` | 0 | 0 | 0 | 0 |
 
 ### WALE
 
@@ -45,10 +71,10 @@ Each path received one warm-up followed by seven measured 400-step runs in alter
 
 | Path | End-to-end wall | OpenFOAM execution | OpenFOAM clock |
 |---|---:|---:|---:|
-| OF/FNO `WALE` | 5.684 ± 0.051 s | 2.770 ± 0.020 s | 3 ± 0 s |
-| FNO-coupled `nutFjord` | 9.480 ± 0.841 s | 4.370 ± 0.820 s | 5 ± 1 s |
+| OF/FNO `WALE` | 7.229 ± 0.185 s | 4.060 ± 0.150 s | 4 ± 0 s |
+| FNO-native `nutFjord` | 7.934 ± 0.263 s | 4.200 ± 0.220 s | 4 ± 1 s |
 
-The end-to-end wall ratio was `1.668`; the OpenFOAM execution-time ratio was `1.578`. All seven measured pairs produced identical final-field metrics.
+The end-to-end wall ratio was `1.097`; the OpenFOAM execution-time ratio was `1.034`. All seven measured pairs produced identical final-field metrics.
 
 #### Relative L2 error
 
@@ -68,54 +94,37 @@ The end-to-end wall ratio was `1.668`; the OpenFOAM execution-time ratio was `1.
 
 The columns correspond to physical times `1e-5`, `1e-4`, `1e-3` and `4e-3`. All values were finite and the direct float64 functions remained nonnegative. The runnable scripts are `tools/hpc/benchmarkSmagorinskyInteractive.sh`, `tools/hpc/benchmarkWaleInteractive.sh` and `tools/hpc/validateNutClosure.sh`.
 
-## NACA4412 kEqnFjord closure
+## NACA4412 `kEqnFjord`
 
-### k Equation
+### k-equation configuration
 
-Roihu interactive allocation `1095041` ran the 89,728-cell incompressible NACA4412 LES to physical time `1` with OpenFOAM v2512, 16 MPI ranks, `deltaT=0.0025` and 400 time steps. OpenFOAM via FoamNordic, abbreviated OF/FNO, used Longship to run the standard OpenFOAM `kEqn` model without an external closure. FNO-coupled used `kEqnFjord` with the same `Ck=0.094` and `Ce=1.048` equations evaluated as a resident float64 function over node-local SHM. Both paths received one warm-up followed by seven measured runs in alternating order on `rc5183` at commit `89cf240`. The unqualified name OpenFOAM is reserved for a direct OpenFOAM execution that does not pass through FoamNordic; the documentation index defines the abbreviations used here.
+Roihu ran the 89,728-cell incompressible NACA4412 LES to physical time `1` with OpenFOAM v2512, 16 MPI ranks, `deltaT=0.0025` and 400 time steps. OpenFOAM via FoamNordic, abbreviated OF/FNO, used Longship to run the standard OpenFOAM `kEqn` model. FNO-native used the same `Ck=0.094` and `Ce=1.048` algebra declared with `Operator.function` and the implicit k-equation declared by `Field.transport`. The symbolic graph was lowered into `kEqnFjord` and executed at the OpenFOAM correction boundary without a ModelHost or field exchange. Both paths received one warm-up followed by seven measured runs in alternating order.
 
 #### Performance
 
 | Path | End-to-end wall | OpenFOAM execution | OpenFOAM clock |
 |---|---:|---:|---:|
-| OF/FNO `kEqn` | 34.891 ± 0.587 s | 30.350 ± 0.480 s | 30 ± 1 s |
-| FNO-coupled `kEqnFjord` | 58.271 ± 0.793 s | 43.530 ± 0.830 s | 52 ± 1 s |
+| OF/FNO `kEqn` | 37.002 ± 1.868 s | 31.670 ± 1.850 s | 32 ± 2 s |
+| FNO-native `kEqnFjord` | 39.919 ± 2.915 s | 33.920 ± 3.010 s | 34 ± 3 s |
 
-The end-to-end wall ratio was `1.670`; the OpenFOAM execution-time ratio was `1.434`. End-to-end wall includes Longship startup, readiness, solver execution and shutdown.
-
-#### Final-field agreement
-
-| Field | Relative L2 error | Peak-relative error |
-|---|---:|---:|
-| `U` | 1.103e-3 | 1.978e-2 |
-| `p` | 5.309e-3 | 4.968e-3 |
-| `nut` | 6.966e-4 | 4.603e-3 |
-| `k` | 6.785e-5 | 6.463e-5 |
-
-Every measured pair produced the same final-field metrics. A deterministic float64 algebra check over 4,096 rows matched `nut` and `kDissipationCoeff` exactly; `kProduction` had relative L2 error `1.172e-16`.
-
-#### Trajectory separation
-
-The companion validation repeated OF/FNO and FNO-coupled runs from identical initial conditions at four independently restarted checkpoints. The values below are not successive samples from one run: each row represents a complete run from time zero to the stated step.
+The end-to-end wall ratio was `1.079`; the OpenFOAM execution-time ratio was `1.071`. End-to-end wall includes Longship preparation, solver execution and shutdown.
 
 #### Relative L2 error
 
 | Field | 1 step | 10 steps | 100 steps | 400 steps |
 |---|---:|---:|---:|---:|
-| `U` | 8.315e-5 | 2.176e-3 | 1.133e-3 | 1.103e-3 |
-| `p` | 4.743e-4 | 1.462e-3 | 1.524e-2 | 5.309e-3 |
-| `nut` | 1.573e-4 | 8.306e-4 | 1.138e-3 | 6.966e-4 |
-| `k` | 2.880e-5 | 2.599e-4 | 5.479e-5 | 6.785e-5 |
+| `U` | 6.673e-6 | 1.522e-3 | 1.470e-3 | 1.726e-3 |
+| `p` | 3.745e-4 | 2.692e-3 | 3.693e-3 | 7.803e-3 |
+| `nut` | 2.831e-6 | 2.919e-4 | 1.090e-3 | 9.401e-4 |
+| `k` | 2.123e-6 | 4.664e-5 | 4.526e-5 | 2.307e-4 |
 
 #### Peak-relative error
 
 | Field | 1 step | 10 steps | 100 steps | 400 steps |
 |---|---:|---:|---:|---:|
-| `U` | 9.169e-4 | 2.264e-2 | 1.821e-2 | 1.978e-2 |
-| `p` | 2.564e-3 | 9.299e-3 | 2.535e-2 | 4.968e-3 |
-| `nut` | 2.178e-3 | 6.289e-3 | 1.599e-2 | 4.603e-3 |
-| `k` | 1.704e-4 | 1.622e-3 | 1.388e-4 | 6.463e-5 |
+| `U` | 5.632e-5 | 1.699e-2 | 3.376e-2 | 2.356e-2 |
+| `p` | 1.426e-3 | 2.047e-2 | 2.613e-2 | 8.056e-3 |
+| `nut` | 3.377e-5 | 1.372e-3 | 2.177e-2 | 7.042e-3 |
+| `k` | 1.512e-5 | 1.275e-4 | 1.282e-4 | 1.716e-4 |
 
-The columns correspond to physical times `0.0025`, `0.025`, `0.25` and `1`, respectively.
-
-The separation is not monotonic: pressure relative L2 is `1.524e-2` at 100 steps and `5.309e-3` at 400 steps. The runnable scripts are `tools/hpc/benchmarkNacaInteractive.sh` and `tools/hpc/validateNacaClosure.sh`.
+The columns correspond to physical times `0.0025`, `0.025`, `0.25` and `1`. Every measured pair produced the same final-field metrics and passed the declared relative L2 tolerance of `1e-2` and peak-relative tolerance of `5e-2`. The runnable benchmark is `tools/hpc/benchmarkNacaInteractive.sh`.

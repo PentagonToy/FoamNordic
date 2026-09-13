@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Smagorinsky and WALE through the nutFjord adapter."""
+"""Validate native Smagorinsky and WALE through the nutFjord adapter."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def deterministic_decomposition(source: Path, ranks: int) -> None:
 
 
 def closure(function) -> fno.Closure:
-    return fno.Closure(
+    declared = fno.Closure(
         name="nutFjord",
         operator=fno.Operator.function(function),
         inputs={
@@ -88,6 +88,9 @@ def closure(function) -> fno.Closure:
         },
         outputs={"nut": fno.Field("nut")},
     )
+    if declared.execution_lane != "native":
+        raise RuntimeError("nutFjord benchmark function did not lower natively")
+    return declared
 
 
 def launch(label, source, output, ranks, timeout, function=None):
@@ -144,7 +147,7 @@ def write_outputs(root: Path, report: dict[str, object]) -> None:
     lines = [
         "# nutFjord numerical validation",
         "",
-        "OpenFOAM via FoamNordic (OF/FNO) uses the standard OpenFOAM LES model. FNO-coupled replaces its eddy-viscosity evaluation with the corresponding float64 function through nutFjord.",
+        "OpenFOAM via FoamNordic (OF/FNO) uses the standard OpenFOAM LES model. FNO-native evaluates the corresponding float64 expression directly inside OpenFOAM through nutFjord.",
     ]
     for model, record in report["models"].items():
         trajectory = record["trajectory"]
@@ -188,9 +191,9 @@ def main() -> int:
             deterministic_decomposition(source, options.ranks)
             print(f"[FoamNordic] {model}, step {steps}: OpenFOAM via FoamNordic")
             reference, reference_timing = launch(f"{model.lower()}-{steps:04d}-openfoam-via-foamnordic", source, checkpoint, options.ranks, options.timeout)
-            print(f"[FoamNordic] {model}, step {steps}: FNO-coupled")
-            candidate, candidate_timing = launch(f"{model.lower()}-{steps:04d}-fno-coupled", source, checkpoint, options.ranks, options.timeout, function)
-            point = {"steps": steps, "physical_time": steps * options.delta_t, "openfoam_via_foamnordic_timing": reference_timing, "fno_coupled_timing": candidate_timing, "fields": compare(reference, candidate)}
+            print(f"[FoamNordic] {model}, step {steps}: FNO-native")
+            candidate, candidate_timing = launch(f"{model.lower()}-{steps:04d}-fno-native", source, checkpoint, options.ranks, options.timeout, function)
+            point = {"steps": steps, "physical_time": steps * options.delta_t, "openfoam_via_foamnordic_timing": reference_timing, "fno_native_timing": candidate_timing, "fields": compare(reference, candidate)}
             record["trajectory"].append(point)
             write_outputs(root, report)
             print(json.dumps(point["fields"], indent=2))

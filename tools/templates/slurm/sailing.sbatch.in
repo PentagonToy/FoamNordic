@@ -6,7 +6,7 @@
 #SBATCH --nodes=@NODES@                     # Number of allocated nodes
 #SBATCH --ntasks=@ALLOCATION_TASKS@         # OpenFOAM and model CPU slots
 #SBATCH --cpus-per-task=@ALLOCATION_CPUS_PER_TASK@ # Allocation accounting unit
-@MEMORY_DIRECTIVE@#SBATCH --output=@SAILING_LOG@ # Standard output and error
+@MEMORY_DIRECTIVE@@GRES_DIRECTIVE@#SBATCH --output=@SAILING_LOG@ # Standard output and error
 #SBATCH --open-mode=append                       # Preserve preparation output
 ##SBATCH --mail-type=BEGIN                  # Uncomment to enable mail
 

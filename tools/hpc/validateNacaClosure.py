@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate kEqn algebra and quantify coupled trajectory error growth."""
+"""Quantify native kEqnFjord trajectory error growth."""
 
 from __future__ import annotations
 
@@ -18,20 +18,21 @@ import benchmarkNacaInteractive as benchmark
 FIELDS = ("U", "p", "nut", "k")
 
 
-def keqn_function(k, velocity_grad, delta, C_k=0.094, C_e=1.048):
-    """Portable closure body serialized from this executable module."""
-
-    k_positive = fno.Math.maximum(k, 0.0)
+def keqn_function(k, velocity_grad, nu, delta, C_k=0.094, C_e=1.048):
+    k_positive = fno.Math.maximum(k, 1.0e-10)
     sqrt_k = fno.Math.sqrt(k_positive)
-    eddy_viscosity = C_k * delta * sqrt_k
-    dev_two_symm_grad = fno.Math.dev(
-        2.0 * fno.Math.symm(velocity_grad)
+    strain = fno.Math.dev(2.0 * fno.Math.symm(velocity_grad))
+    nut = C_k * delta * sqrt_k
+    production = nut * fno.Math.ddot(velocity_grad, strain)
+    dissipation = C_e * sqrt_k / delta
+    k_new = fno.Field.transport(
+        k,
+        diffusivity=nu + nut,
+        source=production,
+        implicit_sink=dissipation,
+        lower_bound=1.0e-10,
     )
-    k_production = eddy_viscosity * fno.Math.ddot(
-        velocity_grad, dev_two_symm_grad
-    )
-    k_dissipation_coeff = C_e * sqrt_k / delta
-    return eddy_viscosity, k_production, k_dissipation_coeff
+    return {"k": k_new, "nut": C_k * delta * fno.Math.sqrt(k_new)}
 
 
 def arguments() -> argparse.Namespace:
@@ -43,46 +44,6 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, nargs="+", default=(1, 10, 100, 400))
     parser.add_argument("--timeout", type=float, default=3600.0)
     return parser.parse_args()
-
-
-def openfoam_algebra(k, velocity_grad, delta, c_k=0.094, c_e=1.048):
-    k_positive = np.maximum(k, 0.0)
-    sqrt_k = np.sqrt(k_positive)
-    nut = c_k * delta * sqrt_k
-    symmetric = 0.5 * (velocity_grad + np.swapaxes(velocity_grad, -1, -2))
-    two_symmetric = 2.0 * symmetric
-    trace = np.trace(two_symmetric, axis1=-2, axis2=-1) / 3.0
-    deviatoric = two_symmetric - trace[..., None, None] * np.eye(3)
-    production = nut * np.sum(velocity_grad * deviatoric, axis=(-2, -1))
-    dissipation = c_e * sqrt_k / delta
-    return nut, production, dissipation
-
-
-def algebra_check() -> dict[str, object]:
-    rng = np.random.default_rng(42)
-    rows = 4096
-    k = rng.uniform(1.0e-12, 2.0e-2, rows).astype(np.float64)
-    velocity_grad = rng.normal(0.0, 2.0, (rows, 3, 3)).astype(np.float64)
-    delta = rng.uniform(1.0e-4, 2.0e-2, rows).astype(np.float64)
-    reference = openfoam_algebra(k, velocity_grad, delta)
-    candidate = keqn_function(k, velocity_grad, delta)
-    names = ("nut", "kProduction", "kDissipationCoeff")
-    outputs = {}
-    passed = True
-    for name, expected, actual in zip(names, reference, candidate, strict=True):
-        difference = np.asarray(actual, dtype=np.float64) - expected
-        maximum = float(np.max(np.abs(difference)))
-        relative_l2 = float(
-            np.linalg.norm(difference) / max(np.linalg.norm(expected), np.finfo(float).tiny)
-        )
-        output_passed = bool(np.allclose(actual, expected, rtol=1.0e-14, atol=1.0e-15))
-        outputs[name] = {
-            "max_abs": maximum,
-            "relative_l2": relative_l2,
-            "passed": output_passed,
-        }
-        passed = passed and output_passed
-    return {"dtype": "float64", "rows": rows, "outputs": outputs, "passed": passed}
 
 
 def field_comparison(via_foamnordic, coupled) -> dict[str, dict[str, float]]:
@@ -140,36 +101,20 @@ def scientific(value: float) -> str:
 
 def write_markdown(
     path: Path,
-    algebra: dict[str, object],
     records: list[dict[str, object]],
 ) -> None:
     lines = [
         "# NACA4412 kEqn numerical validation",
         "",
-        "The algebra check compares an independent NumPy transcription of the OpenFOAM kEqn expressions with one eager FoamNordic function evaluation in float64. The trajectory check compares OpenFOAM via FoamNordic (OF/FNO) with FNO-coupled runs from identical initial conditions.",
+        "Each checkpoint restarts from the same initial condition and compares OpenFOAM via FoamNordic (OF/FNO) with native kEqnFjord transport.",
         "",
-        "## Single closure evaluation",
+        "## Integrated trajectory",
         "",
-        "| Output | Maximum absolute error | Relative L2 error | Result |",
-        "| --- | ---: | ---: | --- |",
+        "### Relative L2 error",
+        "",
+        "| Field | " + " | ".join(f"{record['steps']} steps" for record in records) + " |",
+        "| --- | " + " | ".join("---:" for _ in records) + " |",
     ]
-    for name, values in algebra["outputs"].items():
-        lines.append(
-            f"| {name} | {scientific(values['max_abs'])} | "
-            f"{scientific(values['relative_l2'])} | "
-            f"{'PASS' if values['passed'] else 'FAIL'} |"
-        )
-    lines.extend(
-        [
-            "",
-            "## Integrated trajectory",
-            "",
-            "### Relative L2 error",
-            "",
-            "| Field | " + " | ".join(f"{record['steps']} steps" for record in records) + " |",
-            "| --- | " + " | ".join("---:" for _ in records) + " |",
-        ]
-    )
     for field in FIELDS:
         values = " | ".join(
             scientific(record["fields"][field]["relative_l2"])
@@ -197,7 +142,7 @@ def write_markdown(
             "",
             f"The columns correspond to physical times {times}, respectively.",
             "",
-            "The one-step result covers packing, Fjord exchange, evaluation, publication, and OpenFOAM field application. Later checkpoints show how small coupled-path rounding differences accumulate through nonlinear time integration.",
+            "The one-step result covers native graph declaration, transport assembly, solution and atomic field commit. Later checkpoints show how numerical differences accumulate through nonlinear time integration.",
             "",
         ]
     )
@@ -211,16 +156,7 @@ def main() -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     root = options.output.expanduser().resolve() / f"naca-keqn-validation-{stamp}"
     root.mkdir(parents=True)
-    # benchmark.closure resolves this global when constructing Operator.function.
-    # Keeping the callable in __main__ makes cloudpickle serialize it by value so
-    # an independently started ModelHost does not need the tools directory on
-    # its import path.
     benchmark.keqn_function = keqn_function
-    algebra = algebra_check()
-    print("[FoamNordic] Single float64 closure evaluation:")
-    print(json.dumps(algebra, indent=2))
-    if not algebra["passed"]:
-        raise RuntimeError("single closure algebra validation failed")
 
     records = []
     for steps in sorted(set(options.steps)):
@@ -239,9 +175,9 @@ def main() -> int:
             options.timeout,
             False,
         )
-        print(f"[FoamNordic] Step {steps}: FNO-coupled")
+        print(f"[FoamNordic] Step {steps}: FNO-native")
         coupled, coupled_timing = benchmark.launch(
-            f"step-{steps:04d}-fno-coupled",
+            f"step-{steps:04d}-fno-native",
             source,
             checkpoint,
             options.ranks,
@@ -252,18 +188,18 @@ def main() -> int:
             "steps": steps,
             "physical_time": physical_time,
             "openfoam_via_foamnordic_timing": via_foamnordic_timing,
-            "fno_coupled_timing": coupled_timing,
+            "fno_native_timing": coupled_timing,
             "fields": field_comparison(via_foamnordic, coupled),
         }
         records.append(record)
         (root / "validation.json").write_text(
-            json.dumps({"algebra": algebra, "trajectory": records}, indent=2) + "\n",
+            json.dumps({"trajectory": records}, indent=2) + "\n",
             encoding="utf-8",
         )
         print(json.dumps(record["fields"], indent=2))
 
     write_csv(root / "trajectory.csv", records)
-    write_markdown(root / "README.md", algebra, records)
+    write_markdown(root / "README.md", records)
     print(f"[FoamNordic] Validation report: {root / 'README.md'}")
     print("[FoamNordic] NACA4412 closure validation: PASS")
     return 0

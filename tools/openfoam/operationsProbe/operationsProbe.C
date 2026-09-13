@@ -119,6 +119,13 @@ int main(int argc, char* argv[]) {
         {"mag_grad_p", "mag(grad(p))"},
         {"deviatoric_strain", "dev(symm(grad(U)))"},
         {"strain_contraction", "ddot(grad(U),dev(symm(grad(U))))"},
+        {"velocity_outer", "outer(U,U)"},
+        {"velocity_outer_trace", "trace(outer(U,U))"},
+        {"pressure_velocity", "multiply(p,U)"},
+        {"expression_laplacian", "laplacian(add(p,p),p)"},
+        {"absolute_pressure", "abs(p)"},
+        {"bounded_pressure", "minimum(maximum(p,0),1)"},
+        {"delta_time", "deltaTime"},
     };
 
     Foam::Info

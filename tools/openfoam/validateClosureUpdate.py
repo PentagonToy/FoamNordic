@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 import numpy as np
 
@@ -95,7 +95,7 @@ def launch(
     return fno.Longship(
         case=case,
         closures=(program,),
-        placement=fno.Attached(model_cpus_per_node=4),
+        placement=fno.Runtime.Attached(model_cpus_per_node=4),
     ).launch(start_timeout=120, verbose=False).stop(timeout=180)
 
 

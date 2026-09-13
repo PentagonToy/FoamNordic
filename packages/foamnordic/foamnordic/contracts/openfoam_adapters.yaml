@@ -3,23 +3,27 @@ schema: foamnordic.openfoam-adapters
 adapters:
   kEqnFjord:
     category: les_model
+    native_execution:
+      - transport
     inputs:
       k:
         kind: scalar
       grad(U):
         kind: tensor
+      nu:
+        kind: scalar
       delta:
         kind: scalar
     outputs:
+      k:
+        kind: scalar
       nut:
-        kind: scalar
-      kProduction:
-        kind: scalar
-      kDissipationCoeff:
         kind: scalar
 
   nutFjord:
     category: les_model
+    native_execution:
+      - algebra
     inputs:
       grad(U):
         kind: tensor

@@ -1,6 +1,6 @@
 # BindNordic
 
-BindNordic is FoamNordic's internal model and file-format package. It owns FNOM containers, tensor contracts, scaler execution, model loading and evaluation, compiled kernels, and focused OpenFOAM field decoding.
+BindNordic is FoamNordic's internal model and file-format package. It owns FNOM containers, tensor contracts, scaler execution, model loading and evaluation, compiled kernels, and focused OpenFOAM field decoding. The repository's `uv` workspace records BindNordic as a virtual source component, while the published FoamNordic wheel continues to distribute its namespace as one product.
 
 The authoritative [package boundary](../README.md) defines its scope: BindNordic understands the model, while FoamNordic understands how that model is used in a simulation. BindNordic must remain independently testable without importing FoamNordic, but it is developed, documented, versioned, and distributed as part of the FoamNordic repository.
 
@@ -11,12 +11,12 @@ The authoritative [package boundary](../README.md) defines its scope: BindNordic
 | `src/bindnordic/models/` | FNOM, payloads, model contracts, runtimes, and compilation |
 | `src/bindnordic/native/` | Native scaler and model kernels |
 | `src/bindnordic/openfoam/` | Stored OpenFOAM field decoding only |
-| `src/bindnordic/scalers.py` | Fitted-scaler normalization |
+| `src/bindnordic/scalers.py` | Fitted-scaler normalisation |
 | `tests/` | Package-boundary and model-runtime verification |
 
-## Development
+## Develop
 
-Install FoamNordic from the repository root; the resulting FoamNordic distribution includes BindNordic. Run the Python package tests with:
+Run `uv sync --all-packages --all-extras` from the repository root to create the shared development environment. The resulting FoamNordic distribution includes BindNordic. Run the package tests with:
 
 ```console
 python -m pytest
