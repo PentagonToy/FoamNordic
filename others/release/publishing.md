@@ -8,7 +8,7 @@ For a future release whose changelog heading is `## [VERSION] - Unreleased`, run
 
 Commit and push the FoamNordic release source, then run `./others/release/wheel-maker` from a clean checkout. It builds and tests six wheels containing the `foamnordic` package and its internal `bindnordic` namespace: CPython 3.11 and 3.12 on Linux x86_64, Linux aarch64, and macOS arm64. It checks metadata, records SHA256 sums, and extracts the release body from `CHANGELOG.md`. It does not publish anything.
 
-Wheel CI tests the installed Python and native packages and compiles the installed build kit, including Longship. This is not a substitute for running OpenFOAM on the release target environments.
+Release CI runs the complete Python suite once on each supported platform with Python 3.12. Each CPython wheel is then installed separately, imports its native packages, reports its CLI version and compiles the installed build kit, including Longship. This is not a substitute for running OpenFOAM on the release target environments.
 
 ## Clean-install gate
 
