@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from bindnordic.models.artifact import write_bundle
+from bindnordic.models.artifact import _write_bundle
 
 from .openfoam_layouts import expression_layout, output_layout, output_width
 from .run_files import internal_path
@@ -73,7 +73,7 @@ def package_function(
         (name, output_width(longship, program, expression))
         for name, expression in program.outputs.items()
     ]
-    write_bundle(
+    _write_bundle(
         str(manifest),
         str(payload),
         program.name,

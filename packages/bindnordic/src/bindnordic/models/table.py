@@ -10,8 +10,8 @@ import numpy as np
 
 
 _HEADER = struct.Struct("<8sBBHQ")
-_AXIS = struct.Struct("<BQ")
-_MAGIC = b"FNOTAB1\0"
+_AXIS = struct.Struct("<BBHQ")
+_MAGIC = b"FNOTAB2\0"
 
 
 def write_table(
@@ -73,8 +73,21 @@ def write_table(
             )
         )
         for axis, policy in zip(points, policies, strict=True):
-            stream.write(_AXIS.pack(0 if policy == "clamp" else 1, axis.size))
-            stream.write(axis.astype("<f8", copy=False).tobytes())
+            step = float(axis[1] - axis[0])
+            reconstructed = float(axis[0]) + step * np.arange(axis.size)
+            uniform = np.array_equal(axis, reconstructed)
+            stream.write(
+                _AXIS.pack(
+                    0 if policy == "clamp" else 1,
+                    1 if uniform else 0,
+                    0,
+                    axis.size,
+                )
+            )
+            if uniform:
+                stream.write(struct.pack("<dd", float(axis[0]), step))
+            else:
+                stream.write(axis.astype("<f8", copy=False).tobytes())
         stream.write(table.tobytes())
     return destination.stat().st_size
 

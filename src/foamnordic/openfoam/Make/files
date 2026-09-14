@@ -4,6 +4,7 @@ closureHook.C
 models/progressRateFjord/progressRateFjord.C
 fieldProgramObservation.C
 fieldProgramSession.C
+nativeAlgebraMonitor.C
 fieldBridge.C
 fjordExchange.C
 models/makeClosureModels.C

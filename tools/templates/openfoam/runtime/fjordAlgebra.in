@@ -8,6 +8,8 @@
 
     exchangeStage   @EXCHANGE_STAGE@;
     nativeAlgebra   true;
+    profileEvery    @PROFILE_EVERY@;
     outputs         (@OUTPUT_FIELDS@);
     outputExpressions (@OUTPUT_EXPRESSIONS@);
+    @OBSERVATION_BLOCK@
 }

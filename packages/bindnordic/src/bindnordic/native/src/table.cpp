@@ -56,7 +56,7 @@ double input_value(TensorView input, std::uint64_t index) {
 template<class Value>
 Tensor interpolate(
     TensorView features,
-    const std::vector<std::vector<double>>& axes,
+    const std::vector<TableAxis>& axes,
     const std::vector<bool>& clamp,
     const std::vector<double>& table,
     std::uint64_t output_features) {
@@ -73,7 +73,7 @@ Tensor interpolate(
     std::size_t stride = output_features;
     for (std::size_t axis = dimensions; axis-- > 0;) {
         strides[axis] = stride;
-        stride *= axes[axis].size();
+        stride *= axes[axis].count;
     }
 
     for (std::uint64_t row = 0; row < rows; ++row) {
@@ -82,19 +82,42 @@ Tensor interpolate(
             if (!std::isfinite(coordinate)) {
                 throw std::invalid_argument("Table coordinate must be finite.");
             }
-            const auto& points = axes[axis];
-            if (coordinate < points.front() || coordinate > points.back()) {
+            const auto& descriptor = axes[axis];
+            const auto first = descriptor.uniform
+                ? descriptor.start : descriptor.points.front();
+            const auto last = descriptor.uniform
+                ? descriptor.start + descriptor.step * (descriptor.count - 1)
+                : descriptor.points.back();
+            if (coordinate < first || coordinate > last) {
                 if (!clamp[axis]) {
                     throw std::out_of_range("Table coordinate is outside its axis.");
                 }
-                coordinate = std::clamp(coordinate, points.front(), points.back());
+                coordinate = std::clamp(coordinate, first, last);
             }
-            const auto upper = std::upper_bound(points.begin(), points.end(), coordinate);
-            const auto lo = upper == points.begin() ? 0
-                : upper == points.end() ? points.size() - 2
-                                        : static_cast<std::size_t>(upper - points.begin() - 1);
+            std::size_t lo = 0;
+            if (descriptor.uniform) {
+                lo = std::min(
+                    descriptor.count - 2,
+                    static_cast<std::size_t>(
+                        std::max(0.0, std::floor(
+                            (coordinate - descriptor.start) / descriptor.step))));
+            } else {
+                const auto upper = std::upper_bound(
+                    descriptor.points.begin(), descriptor.points.end(), coordinate);
+                lo = upper == descriptor.points.begin() ? 0
+                    : upper == descriptor.points.end() ? descriptor.count - 2
+                    : static_cast<std::size_t>(
+                          upper - descriptor.points.begin() - 1);
+            }
+            const auto lower_point = descriptor.uniform
+                ? descriptor.start + descriptor.step * lo
+                : descriptor.points[lo];
+            const auto upper_point = descriptor.uniform
+                ? lower_point + descriptor.step
+                : descriptor.points[lo + 1];
             lower[axis] = lo;
-            fraction[axis] = (coordinate - points[lo]) / (points[lo + 1] - points[lo]);
+            fraction[axis] =
+                (coordinate - lower_point) / (upper_point - lower_point);
         }
 
         const auto corners = std::size_t{1} << dimensions;
@@ -129,11 +152,13 @@ TableKernel::TableKernel(
     Element element)
     : element_(element), output_features_(output_features) {
     Reader reader(payload);
-    constexpr std::array<char, 8> magic{'F', 'N', 'O', 'T', 'A', 'B', '1', '\0'};
-    for (const auto expected : magic) {
-        if (reader.take<char>() != expected) {
-            throw std::invalid_argument("Table payload magic is invalid.");
-        }
+    std::array<char, 8> magic{};
+    for (auto& value : magic) value = reader.take<char>();
+    const auto revision = magic == std::array<char, 8>{'F', 'N', 'O', 'T', 'A', 'B', '1', '\0'} ? 1
+        : magic == std::array<char, 8>{'F', 'N', 'O', 'T', 'A', 'B', '2', '\0'} ? 2
+        : 0;
+    if (revision == 0) {
+        throw std::invalid_argument("Table payload magic is invalid.");
     }
     const auto dtype = reader.take<std::uint8_t>();
     const auto dimensions = reader.take<std::uint8_t>();
@@ -149,21 +174,43 @@ TableKernel::TableKernel(
     clamp_.reserve(dimensions);
     for (std::uint8_t axis = 0; axis < dimensions; ++axis) {
         const auto policy = reader.take<std::uint8_t>();
+        const auto kind = revision == 1 ? std::uint8_t{0} : reader.take<std::uint8_t>();
+        const auto axis_reserved = revision == 1 ? std::uint16_t{0}
+                                                  : reader.take<std::uint16_t>();
         const auto count = reader.take<std::uint64_t>();
-        if (policy > 1 || count < 2
+        if (policy > 1 || kind > 1 || axis_reserved != 0 || count < 2
             || entries > std::numeric_limits<std::size_t>::max() / count) {
             throw std::invalid_argument("Table axis metadata is invalid.");
         }
         entries *= count;
         clamp_.push_back(policy == 0);
-        auto& points = axes_.emplace_back();
-        points.reserve(count);
+        auto& descriptor = axes_.emplace_back();
+        descriptor.count = count;
+        descriptor.uniform = kind == 1;
+        if (descriptor.uniform) {
+            descriptor.start = reader.take<double>();
+            descriptor.step = reader.take<double>();
+            const auto last = descriptor.start + descriptor.step * (count - 1);
+            const auto penultimate =
+                descriptor.start + descriptor.step * (count - 2);
+            const auto interval_end = penultimate + descriptor.step;
+            if (!std::isfinite(descriptor.start) || !std::isfinite(descriptor.step)
+                || descriptor.step <= 0.0 || !std::isfinite(last)
+                || !std::isfinite(penultimate) || !std::isfinite(interval_end)
+                || interval_end <= penultimate) {
+                throw std::invalid_argument("Uniform table axis is invalid.");
+            }
+            continue;
+        }
+        descriptor.points.reserve(count);
         for (std::uint64_t index = 0; index < count; ++index) {
             const auto point = reader.take<double>();
-            if (!std::isfinite(point) || (!points.empty() && point <= points.back())) {
+            if (!std::isfinite(point)
+                || (!descriptor.points.empty()
+                    && point <= descriptor.points.back())) {
                 throw std::invalid_argument("Table axes must be finite and strictly increasing.");
             }
-            points.push_back(point);
+            descriptor.points.push_back(point);
         }
     }
     const auto value_bytes = element_size(element_);

@@ -175,7 +175,7 @@ class RunSummary:
         import onsaemiro as osm
 
         if self.style == "expanded":
-            table = osm.TableMaker(
+            table = osm.Table(
                 title=f"{self.name} Result",
                 columns=["Property", "Value"],
                 mode="static",
@@ -196,9 +196,9 @@ class RunSummary:
             )
             for row in rows:
                 table.add_row(row)
-            table.display()
+            table.show()
             return
-        table = osm.TableMaker(
+        table = osm.Table(
             title=f"{self.name} Summary",
             columns=["Job ID", "Name", "Status", "Partition", "Node", "Elapsed"],
             mode="static",
@@ -211,7 +211,7 @@ class RunSummary:
             self.node,
             self.elapsed,
         )
-        table.display()
+        table.show()
 
 
 def _summary_style(value: str) -> str:

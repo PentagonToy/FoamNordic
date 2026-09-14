@@ -14,24 +14,35 @@
 
 #include "operations/frame.H"
 
+#include <chrono>
+
 namespace Foam::LESModels {
 
 template<class BasicTurbulenceModel>
 void nutFjord<BasicTurbulenceModel>::correctNut() {
     if (nativeAlgebra_) {
+        const auto started = std::chrono::steady_clock::now();
         tmp<volScalarField> molecularViscosity = this->nu();
         foamNordic::operations::OperationFrame frame(this->mesh_);
         frame.bind("delta", this->delta());
         frame.bind("nu", molecularViscosity());
         this->nut_ = frame.scalar(nativeNut_);
-    } else {
-        static_cast<void>(closure_->invoke(
-            this->mesh_,
-            this->runTime_,
-            [this](foamNordic::operations::OperationFrame& frame) {
-                frame.bind("delta", this->delta());
-            }));
+        this->nut_.correctBoundaryConditions();
+        BasicTurbulenceModel::correctNut();
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - started);
+        nativeMonitor_->record(
+            this->mesh_, this->runTime_, nativeInvocationIndex_++,
+            static_cast<std::uint64_t>(elapsed.count()));
+        return;
     }
+
+    static_cast<void>(closure_->invoke(
+        this->mesh_,
+        this->runTime_,
+        [this](foamNordic::operations::OperationFrame& frame) {
+            frame.bind("delta", this->delta());
+        }));
 
     this->nut_.correctBoundaryConditions();
     BasicTurbulenceModel::correctNut();
@@ -57,7 +68,8 @@ nutFjord<BasicTurbulenceModel>::nutFjord(
       transport,
       propertiesName),
       closure_(nullptr),
-      nativeAlgebra_(false) {
+      nativeAlgebra_(false),
+      nativeMonitor_(nullptr) {
     const dictionary* algebra =
         this->coeffDict_.findDict("foamNordicAlgebra");
     if (algebra != nullptr) {
@@ -70,12 +82,21 @@ nutFjord<BasicTurbulenceModel>::nutFjord(
         }
         nativeNut_ = foamNordic::operations::Expression::parse(
             outputs.get<Foam::string>("nut"));
+        nativeMonitor_ =
+            std::make_unique<foamNordic::NativeAlgebraMonitor>(*algebra);
     } else {
         closure_ = std::make_unique<foamNordic::ClosureHook>(
             this->coeffDict_.subDict("foamNordicClosure"));
     }
     if (type == typeName) {
         this->printCoeffs(type);
+    }
+}
+
+template<class BasicTurbulenceModel>
+nutFjord<BasicTurbulenceModel>::~nutFjord() {
+    if (nativeMonitor_) {
+        nativeMonitor_->shutdown();
     }
 }
 

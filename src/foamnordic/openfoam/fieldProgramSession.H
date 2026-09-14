@@ -42,6 +42,11 @@ void writeSolverTelemetry(
     const word& program,
     const foamnordic::adapter::SolverExchangeSnapshot& snapshot);
 
+void writeNativeAlgebraTelemetry(
+    const word& program,
+    std::uint64_t samples,
+    std::uint64_t evaluateAndCommitNanoseconds);
+
 class MeshTopologySequence final {
     string facesInstance_;
     label cells_{-1};

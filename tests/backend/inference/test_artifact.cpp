@@ -18,8 +18,10 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <iostream>
 #include <memory>
 #include <random>
+#include <sstream>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -824,6 +826,9 @@ void test_artifact_kernel_owns_a_narrow_backend_lock() {
     require(
         packed_kernel.peak() == 1,
         "Artifact kernel allowed concurrent access to a serialized backend.");
+    require(
+        kernel.execution_snapshot().peak_active_contexts == 1,
+        "Artifact kernel admitted concurrent work for a serialized backend.");
 }
 
 void test_reentrant_backend_uses_bounded_execution_contexts() {
@@ -908,6 +913,55 @@ void test_artifact_kernel_samples_stage_costs_on_request() {
     require(
         kernel.execution_snapshot().profile_samples == 2,
         "Artifact kernel did not honour its profiling sample interval.");
+}
+
+void test_artifact_kernel_profiles_matching_exchanges_for_every_rank() {
+    ConcurrentProbeKernel packed_kernel(true);
+    foamnordic::inference::ArtifactModelKernel kernel(
+        {
+            foamnordic::inference::ModelFormat::compiled,
+            "artifact/model.cpp",
+            contract(),
+            {},
+            std::nullopt,
+            std::nullopt,
+            "compiled",
+        },
+        packed_kernel,
+        {1, 4096, 2});
+    std::ostringstream logs;
+    auto* previous = std::clog.rdbuf(logs.rdbuf());
+    for (std::uint64_t exchange_index = 40; exchange_index < 42; ++exchange_index) {
+        for (std::uint32_t rank = 0; rank < 2; ++rank) {
+            foamnordic::inference::TensorMap inputs;
+            inputs.emplace("c_tilde", scalar_tensor("c_tilde", {0.1, 0.2}));
+            inputs.emplace("c_var", scalar_tensor("c_var", {0.01, 0.02}));
+            inputs.emplace("T_tilde", scalar_tensor("T_tilde", {300.0, 400.0}));
+            static_cast<void>(
+                kernel.evaluate(inputs, {0, 1}, exchange_index, 0.25, rank));
+        }
+    }
+    std::clog.rdbuf(previous);
+
+    const auto output = logs.str();
+    require(
+        kernel.execution_snapshot().profile_samples == 2,
+        "Artifact kernel did not sample every rank at the selected exchange.");
+    require(
+        output.find("\"rank\":0,\"exchange_index\":40") != std::string::npos
+            && output.find("\"rank\":1,\"exchange_index\":40")
+                   != std::string::npos,
+        "Model-work telemetry did not identify both sampled ranks.");
+    require(
+        output.find("\"rows\":2,\"active_cells\":2,\"arrived_ns\":")
+                != std::string::npos
+            && output.find("\"admitted_ns\":") != std::string::npos
+            && output.find("\"execution_started_ns\":") != std::string::npos
+            && output.find("\"completed_ns\":") != std::string::npos,
+        "Model-work telemetry omitted scheduling timestamps or workload size.");
+    require(
+        output.find("\"exchange_index\":41") == std::string::npos,
+        "Model-work telemetry sampled an exchange outside the interval.");
 }
 
 void test_artifact_kernel_records_completed_workload() {
@@ -1388,6 +1442,7 @@ int main() {
     test_artifact_kernel_rejects_unsupported_memory_boundaries();
     test_artifact_kernel_rejects_an_oversized_working_set();
     test_artifact_kernel_samples_stage_costs_on_request();
+    test_artifact_kernel_profiles_matching_exchanges_for_every_rank();
     test_artifact_kernel_records_completed_workload();
     test_artifact_kernel_disables_workload_telemetry_by_default();
     test_loaded_artifact_preserves_backend_synchronization_ownership();

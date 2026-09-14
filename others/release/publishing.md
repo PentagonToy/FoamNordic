@@ -1,6 +1,8 @@
 # Publishing FoamNordic wheels
 
-Version 1.0.7 is the current release candidate. FoamNordic publishes native wheels, not an sdist: the monorepo keeps the shared C++ project above `packages/foamnordic/`. Source remains available through the release Git tag.
+Version 1.0.8 is the current release candidate. FoamNordic publishes native wheels, not an sdist: the monorepo keeps the shared C++ project above `packages/foamnordic/`. Source remains available through the release Git tag.
+
+For a future release whose changelog heading is `## [VERSION] - Unreleased`, run `others/release/prepare-release VERSION --push` from a clean `main` branch. It applies the release date, synchronises package and native versions, refreshes `uv.lock`, runs the release metadata tests, amends the current commit, aligns `dev`, and updates both remote branches with lease protection.
 
 ## Build
 
@@ -16,7 +18,7 @@ Use a fresh virtual environment outside the source checkout. Select the exact wh
 python3 -m venv test-install
 source test-install/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "foamnordic[ml] @ file:///absolute/path/to/wheelhouse/foamnordic-1.0.7-<python>-<abi>-<platform>.whl"
+python -m pip install "foamnordic[ml] @ file:///absolute/path/to/wheelhouse/foamnordic-1.0.8-<python>-<abi>-<platform>.whl"
 python -m pip check
 foamnordic --version
 foamnordic dir
@@ -25,7 +27,7 @@ foamnordic build
 foamnordic doctor
 ```
 
-Replace the wheel placeholders with its actual filename. Use `ml-cuda12` instead of `ml` for Linux CUDA 12 validation. Confirm version `1.0.7`, verify that `foamnordic` and `bindnordic` both come from the fresh installation, and build from the bundled kit without `--source`. Run a small OpenFOAM case to successful completion and record the platform, Python and OpenFOAM versions and result. Remove only test-owned artefacts after validation.
+Replace the wheel placeholders with its actual filename. Use `ml-cuda12` instead of `ml` for Linux CUDA 12 validation. Confirm version `1.0.8`, verify that `foamnordic` and `bindnordic` both come from the fresh installation, and build from the bundled kit without `--source`. Run a small OpenFOAM case to successful completion and record the platform, Python and OpenFOAM versions and result. Remove only test-owned artefacts after validation.
 
 If source or package metadata changes, rebuild and validate the resulting wheels again. Never rename a wheel to change its version.
 
@@ -34,13 +36,13 @@ If source or package metadata changes, rebuild and validate the resulting wheels
 After the local release gates pass, upload the same checked wheels to TestPyPI and validate a clean installation:
 
 ```console
-./wheelhouse-1.0.7-<run-id>/upload-test-pypi
+./wheelhouse-1.0.8-<run-id>/upload-test-pypi
 ```
 
-TestPyPI does not mirror every runtime dependency. When installing FoamNordic from it, keep production PyPI available for dependencies and request the exact FoamNordic version. After that gate passes, tag the exact validated commit as `v1.0.7` and publish the same wheel files:
+TestPyPI does not mirror every runtime dependency. When installing FoamNordic from it, keep production PyPI available for dependencies and request the exact FoamNordic version. After that gate passes, tag the exact validated commit as `v1.0.8` and publish the same wheel files:
 
 ```console
-./wheelhouse-1.0.7-<run-id>/upload-pypi
+./wheelhouse-1.0.8-<run-id>/upload-pypi
 ```
 
 This helper uploads to **production PyPI** and prompts for the API token through Twine. Do not store credentials in the repository. PyPI files are immutable; check that the intended version is available before publication.
@@ -52,7 +54,7 @@ Tag pushes also trigger wheel CI. Do not replace already validated artefacts wit
 `CHANGELOG.md` is the single source of release bodies. Add one section per release and synchronize `packages/foamnordic/pyproject.toml`, `packages/foamnordic/foamnordic/__init__.py`, `CMakeLists.txt`, `packages/foamnordic/buildkit/CMakeLists.txt`, and CLI version assertions.
 
 ```console
-python3 others/release/release_notes.py --tag v1.0.7
+python3 others/release/release_notes.py --tag v1.0.8
 python3 -m pytest others/release/tests
 ```
 

@@ -135,6 +135,19 @@ public:
         initialize();
     }
 
+    Implementation(std::span<const std::byte> model_bytes, OnnxOptions options)
+        : model_bytes_view_(model_bytes),
+          environment_(ORT_LOGGING_LEVEL_WARNING, "BindNordic"),
+          options_(make_options(options)),
+          session_(std::make_unique<Ort::Session>(
+              environment_, model_bytes_view_.data(), model_bytes_view_.size(), options_)),
+          memory_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
+        if (model_bytes_view_.empty()) {
+            throw std::invalid_argument("Embedded ONNX payload must not be empty.");
+        }
+        initialize();
+    }
+
     void initialize() {
         const std::string runtime_version = OrtGetApiBase()->GetVersionString();
         if (runtime_version != "1.28.0") {
@@ -267,6 +280,7 @@ private:
     }
 
     std::vector<std::byte> model_bytes_;
+    std::span<const std::byte> model_bytes_view_;
     Ort::Env environment_;
     Ort::SessionOptions options_;
     std::unique_ptr<Ort::Session> session_;
@@ -289,6 +303,11 @@ OnnxPackedKernel::OnnxPackedKernel(
     OnnxOptions options)
     : implementation_(
           std::make_unique<Implementation>(std::move(model_bytes), options)) {}
+
+OnnxPackedKernel::OnnxPackedKernel(
+    std::span<const std::byte> model_bytes,
+    OnnxOptions options)
+    : implementation_(std::make_unique<Implementation>(model_bytes, options)) {}
 
 OnnxPackedKernel::~OnnxPackedKernel() = default;
 OnnxPackedKernel::OnnxPackedKernel(OnnxPackedKernel&&) noexcept = default;

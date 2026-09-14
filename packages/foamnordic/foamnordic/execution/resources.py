@@ -43,7 +43,9 @@ def resource_values(longship: Longship) -> dict[str, object]:
     scheduler = longship.scheduler
     if scheduler is None:
         raise ValueError("scheduled resource estimates require a Slurm declaration")
-    programs = len(longship.field_programs)
+    programs = sum(
+        program.native_program is None for program in longship.field_programs
+    )
     model = scheduler.model_resources
     model_active = programs > 0
     solver_cpus = scheduler.ntasks * scheduler.cpus_per_task
@@ -62,7 +64,9 @@ def resource_values(longship: Longship) -> dict[str, object]:
         None if memory_per_cpu is None else memory_per_cpu * solver_cpus
     )
     model_memory = (
-        None
+        0
+        if not model_active
+        else None
         if memory_per_cpu is None
         else (
             model_memory_per_cpu * model_cpus
@@ -103,7 +107,7 @@ def display_resources(longship: Longship) -> None:
     assert scheduler is not None
     values = resource_values(longship)
     programs = int(values["programs"])
-    table = osm.TableMaker(
+    table = osm.Table(
         title=f"{longship.name} Resource Plan",
         columns=["Resource", "OpenFOAM", "Model", "Allocation"],
         mode="static",
@@ -142,4 +146,4 @@ def display_resources(longship: Longship) -> None:
     )
     for row in rows:
         table.add_row(row)
-    table.display()
+    table.show()

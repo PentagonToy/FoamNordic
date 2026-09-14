@@ -10,7 +10,6 @@ from .artifact import (
     payload_region,
     read_payload,
     register_scaler_adapter,
-    write_bundle,
 )
 from .compiled import generate_source, supports
 from .payloads import write_equinox, write_joblib, write_onnx
@@ -46,7 +45,6 @@ __all__ = [
     "read_payload",
     "register_scaler_adapter",
     "supports",
-    "write_bundle",
     "write_equinox",
     "write_joblib",
     "write_onnx",

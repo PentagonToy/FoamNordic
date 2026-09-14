@@ -13,6 +13,16 @@ These rules define the stable architectural boundary of FoamNordic. Convenience 
 | Child processes | Longship | Owned until completion, cancellation or explicit detachment |
 | Terminal files | `Runtime.Result` | Durable after the run reaches a terminal state |
 
+## Execution boundary
+
+> **OpenFOAM computes declared mathematics; ModelHost evaluates exported models and tables.**
+
+Every FNOM model or table runs through ModelHost. BindNordic validates the artefact, applies its fitted scaling and evaluates its backend.
+
+Supported deterministic mathematics declared with `Operator.function` may run inside OpenFOAM. Any calculation that depends on fitted or packaged data remains in ModelHost, including scaling, encoding, PCA and ensemble blending.
+
+Fjord transports typed data, Harbor orders exchanges, ModelHost owns model execution and resources, and the OpenFOAM adapter owns fields, dimensions, equations and boundary treatment.
+
 ## Public surface
 
 FoamNordic exposes cases, operators, field programmes, observations, placement, schedulers, runs and results. Backend selection belongs to FNOM, while transport and process layout belong to the compiled plan. Solver-specific physics belongs to an adapter outside the generic runtime.

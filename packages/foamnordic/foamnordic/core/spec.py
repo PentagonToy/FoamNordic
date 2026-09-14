@@ -55,8 +55,9 @@ class Operator:
     """Evaluation implementation used by a field program.
 
     ``model()`` accepts one FNOM model manifest. ``table()`` declares an FNOM
-    lookup table explicitly. ``function()`` packages a callable into the
-    isolated run directory and evaluates it in a resident Python worker.
+    lookup table explicitly. ``function()`` declares deterministic mathematics
+    that may be lowered to OpenFOAM when fully supported; otherwise the callable
+    is packaged into the isolated run directory for resident evaluation.
     """
 
     kind: str

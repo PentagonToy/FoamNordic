@@ -150,5 +150,55 @@ int main() {
     std::memcpy(&interpolated, float_output.bytes.data(), sizeof(float));
     assert(std::abs(interpolated - 1.5F) < 1.0e-6F);
 
+    std::vector<std::byte> uniform_table_payload;
+    for (const char character : std::string("FNOTAB2\0", 8)) {
+        append(uniform_table_payload, character);
+    }
+    append(uniform_table_payload, std::uint8_t{2});
+    append(uniform_table_payload, std::uint8_t{1});
+    append(uniform_table_payload, std::uint16_t{0});
+    append(uniform_table_payload, std::uint64_t{1});
+    append(uniform_table_payload, std::uint8_t{0});
+    append(uniform_table_payload, std::uint8_t{1});
+    append(uniform_table_payload, std::uint16_t{0});
+    append(uniform_table_payload, std::uint64_t{3});
+    append(uniform_table_payload, 0.0);
+    append(uniform_table_payload, 0.5);
+    for (const auto point : std::vector<double>{1.0, 2.0, 5.0}) {
+        append(uniform_table_payload, point);
+    }
+    bindnordic::TableKernel uniform_table(
+        uniform_table_payload, 1, 1, bindnordic::Element::float64);
+    const auto uniform_output = uniform_table.evaluate(
+        {"coordinates", bindnordic::Element::float64, {1, 1}, bytes({0.75})},
+        0,
+        0.0);
+    assert(std::abs(value(uniform_output.bytes, 0) - 3.5) < 1.0e-12);
+
+    std::vector<std::byte> collapsed_axis_payload;
+    for (const char character : std::string("FNOTAB2\0", 8)) {
+        append(collapsed_axis_payload, character);
+    }
+    append(collapsed_axis_payload, std::uint8_t{2});
+    append(collapsed_axis_payload, std::uint8_t{1});
+    append(collapsed_axis_payload, std::uint16_t{0});
+    append(collapsed_axis_payload, std::uint64_t{1});
+    append(collapsed_axis_payload, std::uint8_t{0});
+    append(collapsed_axis_payload, std::uint8_t{1});
+    append(collapsed_axis_payload, std::uint16_t{0});
+    append(collapsed_axis_payload, std::uint64_t{2});
+    append(collapsed_axis_payload, 1.0e16);
+    append(collapsed_axis_payload, 1.0);
+    append(collapsed_axis_payload, 0.0);
+    append(collapsed_axis_payload, 1.0);
+    bool rejected_collapsed_axis = false;
+    try {
+        bindnordic::TableKernel collapsed_axis(
+            collapsed_axis_payload, 1, 1, bindnordic::Element::float64);
+    } catch (const std::invalid_argument&) {
+        rejected_collapsed_axis = true;
+    }
+    assert(rejected_collapsed_axis);
+
     return 0;
 }

@@ -7,7 +7,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "foamnordic"
-version = "1.0.7"
+version = "1.0.8"
 description = "Declarative orchestration for native OpenFOAM closure workloads"
 readme = { file = "../../others/release/README.pypi.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.13"
@@ -31,7 +31,7 @@ dependencies = [
     "cloudpickle>=3,<4",
     "joblib>=1.4,<2",
     "numpy>=1.26,<3",
-    "onsaemiro>=1.0.5",
+    "onsaemiro>=1.1.2",
     "pyyaml>=6,<7",
 ]
 
@@ -85,7 +85,7 @@ build = "cp311-* cp312-*"
 skip = "*-musllinux_*"
 test-extras = ["ml"]
 test-requires = ["pytest>=8,<10", "pytest-mock>=3.14,<4"]
-test-command = "python -c 'import bindnordic, foamnordic._native as native; print(\"BindNordic:\", bindnordic.__file__); print(\"FoamNordic native:\", native.__file__)' && python -m pytest -c {project}/pytest.ini && python {project}/others/release/check_wheel_buildkit.py"
+test-command = "python -c 'import bindnordic, foamnordic._native as native; print(\"BindNordic:\", bindnordic.__file__); print(\"FoamNordic native:\", native.__file__)' && python -m pytest -c {project}/pytest.ini {project}/others/release/tests {project}/packages/bindnordic/tests {project}/packages/foamnordic/tests && python {project}/others/release/check_wheel_buildkit.py"
 
 [tool.cibuildwheel.macos]
 environment = { MACOSX_DEPLOYMENT_TARGET = "12.0" }

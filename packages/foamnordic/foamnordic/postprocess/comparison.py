@@ -54,14 +54,14 @@ def _strict_mesh(reference: Path, candidate: Path) -> None:
 def _display(rows: list[list[str]], physical_time: float) -> None:
     import onsaemiro as osm
 
-    table = osm.TableMaker(
+    table = osm.Table(
         title=f"OpenFOAM Case Comparison (t={physical_time:g})",
         columns=["Field", "MAE", "RMSE", "Max Abs", "Relative L2"],
         mode="static",
     )
     for row in rows:
         table.add_row(row)
-    table.display()
+    table.show()
 
 
 def compare(

@@ -17,6 +17,7 @@
 #include "scalarField.H"
 #include "wordList.H"
 #include "fieldProgramSession.H"
+#include "nativeAlgebraMonitor.H"
 #include "operations/expression.H"
 
 #include <cstdint>
@@ -57,6 +58,7 @@ class fjordExchange final : public fvMeshFunctionObject {
     std::unique_ptr<foamnordic::adapter::AtomicFieldExchange> exchange_;
     std::unique_ptr<foamnordic::adapter::ExchangeSequence> sequence_;
     std::unique_ptr<foamNordic::FieldProgramObservation> observation_;
+    std::unique_ptr<foamNordic::NativeAlgebraMonitor> nativeMonitor_;
     std::vector<scalarField> inputScratch_;
     std::vector<scalarField> outputScratch_;
     foamNordic::MeshTopologySequence topology_;

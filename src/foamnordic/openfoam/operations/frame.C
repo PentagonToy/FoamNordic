@@ -719,6 +719,21 @@ void OperationFrame::validateAssignment(
                     + std::string(name.c_str())
                     + " does not match its expression field type.");
             }
+            const auto& target = mesh_.lookupObject<FieldType>(name);
+            if (target.dimensions() != source.dimensions()) {
+                throw std::invalid_argument(
+                    "OpenFOAM native algebra output "
+                    + std::string(name.c_str())
+                    + " does not match its expression dimensions.");
+            }
+            for (const auto& item : source.primitiveField()) {
+                if (!std::isfinite(static_cast<double>(Foam::mag(item)))) {
+                    throw std::invalid_argument(
+                        "OpenFOAM native algebra output "
+                        + std::string(name.c_str())
+                        + " contains a non-finite value.");
+                }
+            }
         },
         value);
 }
@@ -733,7 +748,18 @@ void OperationFrame::assign(
             using FieldType = std::decay_t<decltype(source)>;
             auto& target = mesh_.lookupObjectRef<FieldType>(name);
             target.primitiveFieldRef() = source.primitiveField();
-            target.correctBoundaryConditions();
+        },
+        value);
+}
+
+void OperationFrame::correctBoundary(
+    const word& name,
+    const Expression& expression) {
+    const auto& value = evaluate(expression);
+    std::visit(
+        [&](const auto& stored) {
+            using FieldType = std::decay_t<decltype(field(stored))>;
+            mesh_.lookupObjectRef<FieldType>(name).correctBoundaryConditions();
         },
         value);
 }

@@ -20,6 +20,14 @@
 
 namespace bindnordic {
 
+struct TableAxis {
+    std::vector<double> points;
+    double start{0.0};
+    double step{0.0};
+    std::size_t count{0};
+    bool uniform{false};
+};
+
 class TableKernel final : public PackedModelKernel {
 public:
     TableKernel(
@@ -38,7 +46,7 @@ public:
 private:
     Element element_;
     std::uint64_t output_features_;
-    std::vector<std::vector<double>> axes_;
+    std::vector<TableAxis> axes_;
     std::vector<bool> clamp_;
     std::vector<double> values_;
 };

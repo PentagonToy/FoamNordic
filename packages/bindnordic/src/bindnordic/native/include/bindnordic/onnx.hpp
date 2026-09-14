@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "bindnordic/kernel.hpp"
@@ -36,6 +37,9 @@ public:
         OnnxOptions options = {});
     explicit OnnxPackedKernel(
         std::vector<std::byte> model_bytes,
+        OnnxOptions options = {});
+    explicit OnnxPackedKernel(
+        std::span<const std::byte> model_bytes,
         OnnxOptions options = {});
     ~OnnxPackedKernel() override;
 

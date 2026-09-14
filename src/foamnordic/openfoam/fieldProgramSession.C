@@ -72,6 +72,20 @@ void writeSolverTelemetry(
         << mean(snapshot.field_commit_nanoseconds) << '}' << nl;
 }
 
+void writeNativeAlgebraTelemetry(
+    const word& program,
+    const std::uint64_t samples,
+    const std::uint64_t evaluateAndCommitNanoseconds) {
+    if (samples == 0) {
+        return;
+    }
+    Info<< "[FoamNordic] Native algebra telemetry: {\"program\":\""
+        << program << "\",\"rank\":" << Pstream::myProcNo()
+        << ",\"samples\":" << samples
+        << ",\"mean_evaluate_and_commit_nanoseconds\":"
+        << evaluateAndCommitNanoseconds / samples << '}' << nl;
+}
+
 string resolveRankAddress(const string& address) {
     std::string resolved(address.c_str());
     const std::string marker("{rank}");

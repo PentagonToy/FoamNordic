@@ -61,7 +61,6 @@ private:
     std::uint32_t capacity_units_{1};
     ExecutionContextPool backend_gate_{ExecutionResources{1}};
     std::uint64_t profile_every_{0};
-    std::atomic<std::uint64_t> profile_sequence_{0};
     std::atomic<std::uint64_t> profile_samples_{0};
     std::atomic<std::uint64_t> packing_nanoseconds_{0};
     std::atomic<std::uint64_t> inference_nanoseconds_{0};

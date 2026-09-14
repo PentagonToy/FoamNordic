@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: others/release/prepare-release VERSION [--push]
+
+Finalise an existing "## [VERSION] - Unreleased" changelog section, synchronise
+release versions, refresh uv.lock, validate the metadata, and amend the current
+main commit. The local dev branch is moved to the amended commit.
+
+Options:
+  --push    Update origin/main and origin/dev with --force-with-lease
+  -h        Show this help
+EOF
+}
+
+fail() {
+    printf '%s\n' "[FoamNordic] Error: $*" >&2
+    exit 1
+}
+
+note() {
+    printf '%s\n' "[FoamNordic] $*"
+}
+
+version=""
+push=false
+while (($#)); do
+    case "$1" in
+        --push)
+            push=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -* )
+            fail "unknown option: $1"
+            ;;
+        *)
+            [[ -z "$version" ]] || fail "provide exactly one version"
+            version=$1
+            shift
+            ;;
+    esac
+done
+
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || fail "VERSION must have the form X.Y.Z"
+
+for command in git python3 uv; do
+    command -v "$command" >/dev/null 2>&1 \
+        || fail "required command is unavailable: $command"
+done
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null) \
+    || fail "the script must remain inside the FoamNordic repository"
+cd "$repo"
+
+[[ "$(git branch --show-current)" == main ]] \
+    || fail "release preparation must run on main"
+[[ -z "$(git status --porcelain)" ]] \
+    || fail "the worktree must be clean before release preparation"
+
+git fetch --quiet origin main dev
+previous_head=$(git rev-parse HEAD)
+origin_main=$(git rev-parse origin/main)
+origin_dev=$(git rev-parse origin/dev)
+local_dev=$(git rev-parse dev)
+[[ "$previous_head" == "$origin_main" ]] \
+    || fail "local main must match origin/main"
+[[ "$local_dev" == "$previous_head" && "$origin_dev" == "$previous_head" ]] \
+    || fail "main and dev must identify the same source commit"
+
+if git show-ref --verify --quiet "refs/tags/v$version" \
+    || git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+    fail "tag v$version already exists"
+fi
+
+current_version=$(sed -nE \
+    's/^version = "([^"]+)"/\1/p' \
+    packages/foamnordic/pyproject.toml | head -1)
+[[ -n "$current_version" ]] || fail "could not read the current version"
+release_date=$(date +%F)
+
+note "Preparing FoamNordic $version ($release_date)"
+python3 - "$current_version" "$version" "$release_date" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+old, new, date = sys.argv[1:]
+
+replacements = {
+    "packages/foamnordic/pyproject.toml": (f'version = "{old}"', f'version = "{new}"'),
+    "packages/bindnordic/pyproject.toml": (f'version = "{old}"', f'version = "{new}"'),
+    "packages/foamnordic/foamnordic/__init__.py": (f'__version__ = "{old}"', f'__version__ = "{new}"'),
+    "CMakeLists.txt": (f'project(FoamNordic VERSION {old} LANGUAGES CXX)', f'project(FoamNordic VERSION {new} LANGUAGES CXX)'),
+    "packages/foamnordic/buildkit/CMakeLists.txt": (f'project(FoamNordicBuildKit VERSION {old} LANGUAGES CXX)', f'project(FoamNordicBuildKit VERSION {new} LANGUAGES CXX)'),
+    "packages/foamnordic/tests/test_cli.py": (old, new),
+    "others/release/publishing.md": (old, new),
+}
+
+for filename, (before, after) in replacements.items():
+    path = Path(filename)
+    text = path.read_text()
+    if before not in text:
+        raise SystemExit(f"release preparation failed: {before!r} is missing from {filename}")
+    path.write_text(text.replace(before, after))
+
+changelog = Path("CHANGELOG.md")
+text = changelog.read_text()
+header = f"## [{new}] - Unreleased"
+if text.count(header) != 1:
+    raise SystemExit(f"release preparation failed: expected one {header!r}")
+changelog.write_text(text.replace(header, f"## [{new}] - {date}", 1))
+PY
+
+uv lock
+uvx --from "pytest>=8,<10" pytest others/release/tests -q
+python3 others/release/release_notes.py --tag "v$version" >/dev/null
+bash -n others/release/wheel-maker
+git diff --check
+
+git add \
+    CHANGELOG.md \
+    CMakeLists.txt \
+    others/release/publishing.md \
+    packages/bindnordic/pyproject.toml \
+    packages/foamnordic/buildkit/CMakeLists.txt \
+    packages/foamnordic/foamnordic/__init__.py \
+    packages/foamnordic/pyproject.toml \
+    packages/foamnordic/tests/test_cli.py \
+    uv.lock
+git commit --amend --no-edit
+git branch -f dev HEAD
+
+if [[ "$push" == true ]]; then
+    git push \
+        --force-with-lease="refs/heads/main:$origin_main" \
+        --force-with-lease="refs/heads/dev:$origin_dev" \
+        origin main dev
+    note "Updated origin/main and origin/dev"
+else
+    note "Prepared local main and dev; use --push to update the remote branches"
+fi
+
+note "FoamNordic $version is ready for wheel-maker"
