@@ -14,6 +14,7 @@ def release_root(tmp_path: Path) -> Path:
     for filename, text in {
         "packages/foamnordic/pyproject.toml": 'version = "1.0.5"\n',
         "packages/foamnordic/foamnordic/__init__.py": '__version__ = "1.0.5"\n',
+        "packages/bindnordic/pyproject.toml": 'version = "1.0.5"\n',
         "CMakeLists.txt": "project(FoamNordic VERSION 1.0.5 LANGUAGES CXX)\n",
         "packages/foamnordic/buildkit/CMakeLists.txt": "project(FoamNordicBuildKit VERSION 1.0.5 LANGUAGES CXX)\n",
         "CHANGELOG.md": "# Changelog\n\n## [Unreleased]\nFuture\n\n## [1.0.5]\n\nExact body.\n\n### Notes\nKeep formatting.\n\n## [1.0.4]\nOld body.\n",
@@ -43,6 +44,14 @@ def test_version_mismatch(release_root: Path) -> None:
         module.release_notes(release_root)
 
 
+def test_bindnordic_version_mismatch(release_root: Path) -> None:
+    (release_root / "packages/bindnordic/pyproject.toml").write_text(
+        'version = "1.0.4"\n'
+    )
+    with pytest.raises(ValueError):
+        module.release_notes(release_root)
+
+
 @pytest.mark.parametrize(
     "changelog",
     [
@@ -59,7 +68,7 @@ def test_missing_empty_or_duplicate_section(release_root: Path, changelog: str) 
 
 def test_repository() -> None:
     notes = module.release_notes(SCRIPT.parents[2])
-    assert "foamnordic[ml]" in notes
-    assert "foamnordic[ml-cuda12]" in notes
-    assert "## [1.0.6]" not in notes
+    assert "`Field.transport()`" in notes
+    assert "`fno.Export.table()`" in notes
+    assert "## [1.0.7]" not in notes
     assert "consolidates the native runtime" not in notes

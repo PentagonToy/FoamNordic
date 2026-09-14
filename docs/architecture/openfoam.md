@@ -69,7 +69,7 @@ $$
 + S_k.
 $$
 
-The native transport path solves and bounds `k`, then evaluates the declared post-solve `nut` expression from the updated field. It reserves no ModelHost resources and performs no Python or inter-process exchange in the corrector loop. The earlier resident term contract, `nut`, `kProduction`, and `kDissipationCoeff`, remains available for compatibility.
+The native transport path solves and bounds `k`, then evaluates `nut` from the updated field. It reserves no ModelHost resources and performs no Python or inter-process exchange in the corrector loop. A post-solve output cannot mix the updated value with the original `k`; FoamNordic rejects that declaration rather than changing its meaning. The earlier resident term contract, `nut`, `kProduction`, and `kDissipationCoeff`, remains available for compatibility.
 
 ### progressRateFjord
 
@@ -85,11 +85,11 @@ Model input names remain logical contract keys. A model exported with `c`, `c_va
 
 ## Numerics policy
 
-Derived operations require entries in `fvSchemes`. The default convenient policy keeps an exact user entry or a usable default and inserts only a missing requirement. Every insertion is recorded in `numerics-changes.tsv`. Strict numerics rejects the missing requirement instead.
+Derived operations require entries in `fvSchemes`, including operations created inside a symbolic function. The default convenient policy keeps an exact user entry or a usable default and inserts only a missing requirement. Every insertion is recorded in `numerics-changes.tsv`. Strict numerics rejects the missing requirement instead.
 
 ## Atomic publication
 
-All outputs are staged and validated before commit. A bad shape, conversion, non-finite value, or overlapping destination rejects the whole exchange. Boundary correction remains solver-owned unless an adapter explicitly defines another contract.
+FoamNordic validates every output before changing a field. Resident programmes reject an invalid response as one batch. Native functions likewise evaluate and validate all outputs before assigning their internal fields, then let OpenFOAM correct their boundaries. A boundary-condition failure stops the solver after the internal assignment and is not rolled back.
 
 ## External adapters
 

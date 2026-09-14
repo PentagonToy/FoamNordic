@@ -51,14 +51,14 @@ def display_statistics(
 ) -> None:
     import onsaemiro as osm
 
-    table = osm.TableMaker(
+    table = osm.Table(
         title=title,
         columns=["Field", "Min", "Max", "Mean", "Std", "RMS"],
         mode="static",
     )
     for row in rows:
         table.add_row(row)
-    table.display()
+    table.show()
 
 
 class Case:

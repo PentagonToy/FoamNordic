@@ -1118,7 +1118,7 @@ def test_function_closure_packages_derived_input_contract(mocker) -> None:
         packaged_payload = Path(payload).read_bytes()
 
     _mock_patch_11 = mocker.patch(
-        "foamnordic.execution.function_artifact.write_bundle",
+        "foamnordic.execution.function_artifact._write_bundle",
         side_effect=capture_bundle,
     )
     try:

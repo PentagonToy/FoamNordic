@@ -23,9 +23,21 @@ from .build.onnxruntime import resolve as resolve_onnxruntime
 from .core.managed import generated_kind, mark_generated
 from .execution.mpi import write_runtime_profile
 from .execution.runtime_paths import active_runtime_candidates, platform_tag, profile
+from .execution.templates import read as read_template
 
 
 _FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+
+
+def _installation_coherence(package_dir: Path, native_file: Path | None) -> tuple[str, str]:
+    if native_file is None:
+        return "FAIL", "native extension is not loaded"
+    if native_file.parent == package_dir:
+        return "PASS", str(package_dir)
+    return (
+        "WARN",
+        f"Python package is at {package_dir}; native extension is at {native_file}",
+    )
 
 
 class _Terminal:
@@ -43,6 +55,12 @@ class _Terminal:
     def section(self, title: str) -> None:
         rule = "=" * 66
         print(f"\n{rule}\n {title}\n{rule}\n", file=self.stream)
+
+    def summary(self, rows: Sequence[tuple[str, object]]) -> None:
+        label_width = max(len(label) for label, _ in rows)
+        print(f"\n{'=' * 66}", file=self.stream)
+        for label, value in rows:
+            print(f"{label:<{label_width}} : {value}", file=self.stream)
 
     @contextmanager
     def step(self, index: int, total: int, description: str) -> Iterator[None]:
@@ -283,6 +301,11 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
                 else str(native_file or "loaded"),
             )
         )
+        coherence, detail = _installation_coherence(
+            Path(__file__).resolve().parent,
+            native_file,
+        )
+        checks.append((coherence, "Installation coherence", detail))
 
     selected = profile(required=False)
     wmake = shutil.which("wmake")
@@ -394,14 +417,14 @@ def _doctor(stream: TextIO) -> int:
     import onsaemiro as osm
 
     checks = _doctor_checks()
-    table = osm.TableMaker(
+    table = osm.Table(
         title="FoamNordic Doctor",
         columns=["Status", "Check", "Detail"],
         mode="static",
     )
     for check in checks:
         table.add_row(*check)
-    table.display()
+    table.show()
 
     failures = sum(status == "FAIL" for status, _, _ in checks)
     warnings = sum(status == "WARN" for status, _, _ in checks)
@@ -510,6 +533,13 @@ def _native_build_environment() -> dict[str, str]:
 
 
 def _build(args: argparse.Namespace, stream: TextIO) -> int:
+    banner = read_template(
+        "large_banner.txt",
+        kind="runtime banner",
+        default="FoamNordic",
+    ).rstrip()
+    print(f"{banner}\n", file=stream)
+    _Terminal(stream).section("Native build")
     if args.dry_run:
         return _build_direct(args, stream)
     from .build.generations import collect_garbage, complete, dependency_identity, fingerprint, locked, publish, source_identity, tool_identity
@@ -557,7 +587,6 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
     import bindnordic
 
     terminal = _Terminal(stream)
-    terminal.section("FoamNordic native build")
     source = _source_root(args.source)
 
     if source is None:
@@ -739,8 +768,10 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
                 print("\n".join(lines[-60:]), file=stream)
             raise
 
-    print(f"\nOpenFOAM ABI:  {selected.openfoam}", file=stream)
-    print(f"Native runtime: {prefix}", file=stream)
+    summary: list[tuple[str, object]] = [
+        ("OpenFOAM ABI", selected.openfoam),
+        ("Native runtime", prefix),
+    ]
     if not args.dry_run:
         cache = build_dir / "CMakeCache.txt"
         integration = next(
@@ -770,7 +801,7 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
                 kind="native-runtime",
                 metadata={"platform": selected.platform, "openfoam": selected.openfoam},
             )
-        print(f"Build log:  {log_path}", file=stream)
+        summary.append(("Build log", log_path))
         if onnxruntime is not None:
             worker = prefix / "bin/foamnordic_model_worker"
             if not worker.is_file():
@@ -789,13 +820,15 @@ def _build_direct(args: argparse.Namespace, stream: TextIO) -> int:
                 raise RuntimeError(
                     "native build completed without installing the ONNX connector"
                 )
-            print(
-                f"ONNX Runtime: {ONNXRUNTIME_VERSION} ({onnxruntime.source})",
-                file=stream,
+            summary.extend(
+                (
+                    ("ONNX Runtime", f"{ONNXRUNTIME_VERSION} ({onnxruntime.source})"),
+                    ("ModelHost", worker),
+                )
             )
-            print(f"ModelHost: {worker}", file=stream)
         runtime_profile = write_runtime_profile(selected)
-        print(f"Runtime profile: {runtime_profile}", file=stream)
+        summary.append(("Runtime profile", runtime_profile))
+    terminal.summary(summary)
     return 0
 
 

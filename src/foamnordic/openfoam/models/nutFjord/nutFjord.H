@@ -16,8 +16,10 @@
 #include "LESeddyViscosity.H"
 
 #include "closureHook.H"
+#include "nativeAlgebraMonitor.H"
 #include "operations/expression.H"
 
+#include <cstdint>
 #include <memory>
 
 namespace Foam::LESModels {
@@ -27,6 +29,8 @@ class nutFjord final : public LESeddyViscosity<BasicTurbulenceModel> {
     std::unique_ptr<foamNordic::ClosureHook> closure_;
     bool nativeAlgebra_;
     foamNordic::operations::Expression nativeNut_;
+    std::unique_ptr<foamNordic::NativeAlgebraMonitor> nativeMonitor_;
+    std::uint64_t nativeInvocationIndex_{0};
 
     nutFjord(const nutFjord&) = delete;
     void operator=(const nutFjord&) = delete;
@@ -51,7 +55,7 @@ public:
         const word& propertiesName = turbulenceModel::propertiesName,
         const word& type = typeName);
 
-    ~nutFjord() override = default;
+    ~nutFjord() override;
 
     bool read() override;
     tmp<volScalarField> k() const override;

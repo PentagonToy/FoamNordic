@@ -9,7 +9,7 @@ import tempfile
 from typing import Mapping, Sequence
 
 from bindnordic.models.artifact import load as load_artifact
-from bindnordic.models.artifact import write_bundle
+from bindnordic.models.artifact import _write_bundle
 from bindnordic.models.payloads import write_equinox, write_joblib, write_onnx
 from bindnordic.models.table import write_table
 
@@ -109,7 +109,13 @@ def table(
         raise
     if verbose:
         _display_export(
-            manifest, payload, model_name, inputs, outputs, written_dtype
+            manifest,
+            payload,
+            model_name,
+            inputs,
+            outputs,
+            written_dtype,
+            format_name="Table",
         )
     payload.unlink()
     return manifest
@@ -188,7 +194,7 @@ def _manifest_contract(
     if len(dtypes) != 1:
         raise ValueError("all tensors in one native artifact must share a dtype")
     dtype = dtypes.pop()
-    write_bundle(
+    _write_bundle(
         str(manifest),
         str(payload),
         model_name,
@@ -455,7 +461,7 @@ def _display_export(
     input_scaler = metadata["input_scaler"]
     output_scaler = metadata["output_scaler"]
 
-    table = osm.TableMaker(
+    table = osm.Table(
         title=f"FoamNordic Model Exported: {name}",
         columns=["Property", "Value"],
         mode="static",
@@ -477,7 +483,7 @@ def _display_export(
         rows.insert(3, ("Runtime", metadata["runtime"]))
     for row in rows:
         table.add_row(row)
-    table.display()
+    table.show()
 
 
 def __dir__() -> list[str]:

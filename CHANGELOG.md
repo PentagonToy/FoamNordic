@@ -2,25 +2,34 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
-## [1.0.8] - Unreleased
+## [1.0.8] - 2026-09-14
 
 ### Documentation and development
 
+- `foamnordic build` now opens with the packaged FoamNordic runtime banner and a compact native-build heading.
+- User-facing tables and tutorials now use the Onsaemiro 1.1 `Table` API, and the installation contract requires `onsaemiro>=1.1.2` for Rich terminal tables and publication-style Jupyter output.
 - The Python reference now records public signatures, defaults, accepted values, lifecycle results, observation records, numerical execution lanes, FNOM metadata, post-processing metrics and command-line options in one self-contained documentation set.
 - Architecture and benchmark records now use explicit ownership, lifecycle, measurement and interpretation contracts with consistent terminology and rendered diagrams.
 - Repository guides now use consistent purpose, ownership, usage and verification sections across packages, native components, examples, tutorials, templates and release tooling.
+- A developer guide now maps exchanges, closures, OpenFOAM adapters, observations, FNOM and ModelHost backends to their owning source directories and verification gates.
 - Tutorial notebooks now use the current native `kEqnFjord` contract, explicit public API arguments and descriptive shell-safe filenames. The current Extra Trees and Equinox DNN examples train from one downloadable LES dataset, launch through Slurm and display live `Observe` summaries; the basic lid-driven-cavity baseline remains local.
 - The `ml` and `ml-cuda12` authoring extras now include Optax so the Equinox training tutorial does not require an undeclared optimiser dependency.
 - The repository root is a uv workspace containing the FoamNordic package and its virtual BindNordic source component; the published wheel remains one `foamnordic` distribution containing both namespaces.
 
 ### Tables and closure composition
 
+- Uniform table axes that collapse at binary64 precision are rejected during native loading instead of producing a non-finite interpolation fraction.
+- Verbose table exports identify their payload as `Table + FNOM` rather than `ONNX + FNOM`.
+- FNOM table images store exactly uniform axes as start, step and count while retaining explicit non-uniform axes; the native evaluator accepts both the earlier and current table encoding.
 - `fno.Export.table()` writes self-contained, data-only FNOM artefacts containing ordered regular-grid axes and dense output values. BindNordic evaluates them with native multilinear interpolation and explicit clamp or error bounds policies.
 - `fno.Operator.table()` distinguishes lookup tables from executable model artefacts and verifies that distinction against the FNOM manifest before launch.
 - Immutable `Closure.update()` declarations attach solver-mediated field updates to one physical closure without adding another top-level workflow abstraction. Each stage retains an independent artefact, kernel and transport endpoint, while the solver integration owns the call sites and any equations advanced between them.
 
 ### OpenFOAM integration
 
+- GPU-backed Slurm launches now assign the requested GPU only to ModelHost and explicitly prevent the concurrent OpenFOAM step from inheriting that generic resource.
+- Native graph eligibility now examines traced outputs as well as declared ports, so hidden patch references remain resident, every lowered differential operator contributes its required `fvSchemes` entry, and ambiguous expressions that mix pre-solve and post-solve `k` aliases are rejected during declaration.
+- Native algebra publication snapshots and prevalidates every output field type, dimension and finite internal value before writing, publishes all internal fields before boundary correction, and supports the same `Observe` and sampled solver-telemetry controls as resident transforms.
 - `Field.transport()` allows a mathematical `Operator.function` to declare one implicit scalar solve. `kEqnFjord` compiles the graph once, executes its finite-volume equation entirely inside OpenFOAM, and exposes the same fixed `k` and `nut` outputs as a directly learned state update.
 - Fully symbolic `nutFjord` functions are compiled once and evaluated at the native OpenFOAM correction boundary without starting a ModelHost or exchanging fields. Unsupported functions retain the resident execution path.
 - Fully symbolic field `Transform` functions use the same ModelHost-free path at supported time-step boundaries, while model-backed transforms retain their existing resident execution contract.
@@ -37,6 +46,10 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 ### Resources
 
+- `foamnordic doctor` warns when the Python package and native extension come from different installations, making stale source and wheel combinations visible before execution.
+- Native FNOM payloads use a model-owned read-only mapping during loading, avoiding an initial whole-payload file copy and providing a safe lifetime for direct native views.
+- Embedded ONNX payloads retain that mapping while the native session is active, avoiding an extra copy and restoring compilation of the mapped loading path.
+- Resource summaries count only resident field programmes, matching the lowered launch plan so a native-only workload reports no ModelHost CPU, memory, shared memory or process allocation.
 - Backend capabilities declare memory residence, completion mode, persistent device state, shape-sensitive workspace recreation, preferred batch rows and alignment. A residency planner distinguishes direct, explicitly staged and unsupported paths; unsupported execution fails before model evaluation rather than copying data implicitly.
 - A transactional resident-engine contract supports long-lived state, optional checkpoint and restore, explicit topology-change behaviour and opt-in cost observation without adding domain semantics or mesh redistribution to the runtime.
 - Native runtime builds use the CMake-owned `foamnordic_runtime_bundle` target so every enabled runtime component, including the optional ONNX connector, is built before installation.

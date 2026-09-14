@@ -137,14 +137,6 @@ def prepare_case(
         ready = internal_path(work_dir, f"{slug}.ready")
         socket = _socket_path(work_dir, offset)
         native_program = _native_program_plan(transform)
-        if native_program is not None and longship.observations:
-            raise NotImplementedError(
-                "Observe is not yet available for native algebra transforms"
-            )
-        if native_program is not None and profile_every:
-            raise NotImplementedError(
-                "profile_every is not yet available for native algebra transforms"
-            )
         artifact = (
             None
             if native_program is not None

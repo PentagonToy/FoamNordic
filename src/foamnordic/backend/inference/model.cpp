@@ -12,6 +12,7 @@
 #include "foamnordic/backend/inference/model.hpp"
 
 #include "foamnordic/backend/inference/residency.hpp"
+#include "foamnordic/runtime/log.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -21,6 +22,15 @@
 
 namespace foamnordic::inference {
 namespace {
+
+ExecutionResources effective_resources(
+    const PackedModelKernel& kernel,
+    ExecutionResources resources) {
+    if (!kernel.capabilities().concurrent_evaluation) {
+        resources.contexts = 1;
+    }
+    return resources;
+}
 
 void update_peak(std::atomic<std::uint64_t>& peak, std::uint64_t value) noexcept {
     auto current = peak.load(std::memory_order_relaxed);
@@ -63,6 +73,36 @@ std::uint64_t checked_working_bytes(
     return input + 2 * output;
 }
 
+std::int64_t monotonic_nanoseconds(
+    std::chrono::steady_clock::time_point value) noexcept {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               value.time_since_epoch())
+        .count();
+}
+
+void log_model_work(
+    std::uint32_t rank,
+    std::uint64_t exchange_index,
+    std::size_t rows,
+    std::size_t active_cells,
+    std::chrono::steady_clock::time_point arrived,
+    std::chrono::steady_clock::time_point admitted,
+    std::chrono::steady_clock::time_point execution_started,
+    std::chrono::steady_clock::time_point completed) {
+    native::log(
+        native::LogLevel::info,
+        "Model work telemetry: {\"rank\":" + std::to_string(rank)
+            + ",\"exchange_index\":" + std::to_string(exchange_index)
+            + ",\"rows\":" + std::to_string(rows)
+            + ",\"active_cells\":" + std::to_string(active_cells)
+            + ",\"arrived_ns\":" + std::to_string(monotonic_nanoseconds(arrived))
+            + ",\"admitted_ns\":" + std::to_string(monotonic_nanoseconds(admitted))
+            + ",\"execution_started_ns\":"
+            + std::to_string(monotonic_nanoseconds(execution_started))
+            + ",\"completed_ns\":"
+            + std::to_string(monotonic_nanoseconds(completed)) + "}");
+}
+
 }  // namespace
 
 ArtifactModelKernel::ArtifactModelKernel(
@@ -72,7 +112,7 @@ ArtifactModelKernel::ArtifactModelKernel(
     : artifact_(std::move(artifact)),
       kernel_(kernel),
       smedja_(artifact_.contract),
-      contexts_(resources),
+      contexts_(effective_resources(kernel, resources)),
       capabilities_(kernel.capabilities()),
       capacity_(std::move(resources.capacity)),
       capacity_units_(capabilities_.owns_compute_threads
@@ -97,10 +137,7 @@ TensorMap ArtifactModelKernel::evaluate(
     double physical_time,
     std::uint32_t rank) {
     const auto sampled = profile_every_ != 0
-                         && profile_sequence_.fetch_add(
-                                1, std::memory_order_relaxed)
-                                % profile_every_
-                                == 0;
+                         && exchange_index % profile_every_ == 0;
     const auto admission_started = sampled ? std::chrono::steady_clock::now()
                                           : std::chrono::steady_clock::time_point{};
     auto context = contexts_.acquire(
@@ -150,6 +187,15 @@ TensorMap ArtifactModelKernel::evaluate(
                     finished - inference_started).count(),
                 std::memory_order_relaxed);
             profile_samples_.fetch_add(1, std::memory_order_relaxed);
+            log_model_work(
+                rank,
+                exchange_index,
+                inputs.begin()->second.shape.front(),
+                active_cells.size(),
+                admission_started,
+                packing_started,
+                inference_started,
+                finished);
         }
         return outputs;
     }
@@ -220,6 +266,15 @@ TensorMap ArtifactModelKernel::evaluate(
                 finished - output_started).count(),
             std::memory_order_relaxed);
         profile_samples_.fetch_add(1, std::memory_order_relaxed);
+        log_model_work(
+            rank,
+            exchange_index,
+            inputs.begin()->second.shape.front(),
+            active_cells.size(),
+            admission_started,
+            packing_started,
+            backend_started,
+            finished);
     }
     return outputs;
 }

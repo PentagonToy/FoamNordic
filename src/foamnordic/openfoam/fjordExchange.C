@@ -37,8 +37,11 @@ fjordExchange::fjordExchange(
     fvMeshFunctionObject(name, runTime, dict) {
     sequence_ = std::make_unique<foamnordic::adapter::ExchangeSequence>();
     read(dict);
-    observation_ = foamNordic::FieldProgramObservation::create(dict);
-    if (!nativeAlgebra_) {
+    if (nativeAlgebra_) {
+        nativeMonitor_ =
+            std::make_unique<foamNordic::NativeAlgebraMonitor>(dict);
+    } else {
+        observation_ = foamNordic::FieldProgramObservation::create(dict);
         connectPeer();
     }
 }
@@ -54,6 +57,9 @@ fjordExchange::~fjordExchange() {
             harbor_->shutdown();
         } catch (...) {
         }
+    }
+    if (nativeMonitor_) {
+        nativeMonitor_->shutdown();
     }
 }
 
@@ -165,6 +171,8 @@ bool fjordExchange::exchange() {
             return true;
         }
         if (nativeAlgebra_) {
+            const auto started = std::chrono::steady_clock::now();
+            const auto exchangeIndex = *selected;
             foamNordic::operations::OperationFrame frame(mesh_);
             std::vector<std::string> snapshots(outputs_.size());
             forAll(outputs_, index) {
@@ -184,6 +192,17 @@ bool fjordExchange::exchange() {
                     Foam::foamNordic::operations::Expression::parse(
                         snapshots[index]));
             }
+            forAll(outputs_, index) {
+                frame.correctBoundary(
+                    outputs_[index],
+                    Foam::foamNordic::operations::Expression::parse(
+                        snapshots[index]));
+            }
+            const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - started);
+            nativeMonitor_->record(
+                mesh_, mesh_.time(), exchangeIndex,
+                static_cast<std::uint64_t>(elapsed.count()));
             return true;
         }
         const auto exchangeIndex = *selected;

@@ -53,6 +53,7 @@ def write_batch(
         "" if model_gres is None else f"#SBATCH --gres={model_gres}\n"
     )
     host_gres = "" if model_gres is None else f"    --gres={model_gres} \\\n"
+    solver_gres = "" if model_gres is None else "    --gres=none \\\n"
     if not (
         host is not None
         and scheduler.has_model_resources
@@ -127,7 +128,7 @@ exec srun \\
   --solver srun --nodes={scheduler.nodes} --ntasks={scheduler.ntasks} \\
     --ntasks-per-node={runtime['solver_tasks_per_node']} \\
     --cpus-per-task={scheduler.cpus_per_task} --cpu-bind=none \\
-    --exact --exclusive \\
+{solver_gres}    --exact --exclusive \\
     {quote_command(solver)}"""
     slurm = work_dir / "slurm"
     slurm.mkdir(parents=True, exist_ok=True)

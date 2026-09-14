@@ -109,7 +109,9 @@ def test_table_export_is_self_contained_and_contract_driven() -> None:
         assert artifact.runtime == "table"
         assert [port.name for port in artifact.inputs] == ["progress", "variance"]
         assert artifact.outputs[0].components == 2
-        assert read_payload(path).startswith(b"FNOTAB1\0")
+        payload = read_payload(path)
+        assert payload.startswith(b"FNOTAB2\0")
+        assert len(payload) == 172
         assert not path.with_suffix(".table").exists()
 
 
@@ -333,6 +335,22 @@ def test_verbose_true_displays_export_summary(mocker) -> None:
     finally:
         mocker.stop(display)
     display.assert_called_once()
+
+
+def test_verbose_table_summary_uses_table_format_name(mocker) -> None:
+    import numpy as np
+
+    display = mocker.patch("foamnordic.export._display_export")
+    with tempfile.TemporaryDirectory() as directory:
+        fno.Export.table(
+            {"x": [0.0, 1.0]},
+            np.asarray([0.0, 1.0]),
+            path=Path(directory) / "table.fnom",
+            outputs={"y": fno.Tensor.scalar()},
+            verbose=True,
+        )
+
+    assert display.call_args.kwargs["format_name"] == "Table"
 
 
 @pytest.mark.skipif(

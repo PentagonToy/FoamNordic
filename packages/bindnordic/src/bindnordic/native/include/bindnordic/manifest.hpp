@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -24,6 +25,23 @@ namespace bindnordic {
 struct BundlePayloadRegion {
     std::uint64_t offset;
     std::uint64_t size;
+};
+
+class MappedPayload final {
+public:
+    MappedPayload(
+        const std::filesystem::path& path,
+        BundlePayloadRegion region);
+    ~MappedPayload();
+
+    MappedPayload(const MappedPayload&) = delete;
+    MappedPayload& operator=(const MappedPayload&) = delete;
+
+    [[nodiscard]] std::span<const std::byte> bytes() const noexcept;
+
+private:
+    struct Storage;
+    std::unique_ptr<Storage> storage_;
 };
 
 [[nodiscard]] std::vector<std::byte> encode_manifest(
@@ -50,6 +68,9 @@ void extract_bundle_payload(
 [[nodiscard]] bool is_bundle(const std::filesystem::path& path);
 
 [[nodiscard]] std::vector<std::byte> read_bundle_payload(
+    const std::filesystem::path& path);
+
+[[nodiscard]] std::shared_ptr<MappedPayload> map_bundle_payload(
     const std::filesystem::path& path);
 
 }  // namespace bindnordic

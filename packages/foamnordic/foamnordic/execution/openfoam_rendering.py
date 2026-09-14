@@ -30,11 +30,22 @@ def _scheme_requirements(longship: Longship) -> tuple[tuple[str, str, str], ...]
     requirements: dict[tuple[str, str], str] = {}
     for program in longship.field_programs:
         native = program.native_program
+        expressions = list(program.inputs.values())
         if isinstance(native, NativeTransportPlan):
             requirements[("divSchemes", f"div(phi,{native.field.field_name})")] = (
                 "Gauss linear"
             )
-        for expression in program.inputs.values():
+            expressions.extend(
+                (
+                    native.diffusivity,
+                    native.source,
+                    native.implicit_sink,
+                    *native.outputs.values(),
+                )
+            )
+        elif isinstance(native, NativeAlgebraPlan):
+            expressions.extend(native.outputs.values())
+        for expression in expressions:
             for node in _walk_expression(expression):
                 configuration = defaults.get(node.operation)
                 if configuration is None:
@@ -320,21 +331,32 @@ def render_dictionary(
         execution_block = "\n".join(transport_lines)
     else:
         assert isinstance(native_program, NativeAlgebraPlan)
-        execution_block = "\n".join(
-            (
-                "foamNordicAlgebra",
-                "        {",
-                "            outputs",
-                "            {",
-                *(
-                    "                "
-                    f'{closure.outputs[name].field_name} "{expression.canonical}";'
-                    for name, expression in native_program.outputs.items()
-                ),
-                "            }",
-                "        }",
-            )
+        observation = (
+            ""
+            if observation_path is None
+            else observation_block(longship, observation_path)
         )
+        algebra_lines = [
+            "foamNordicAlgebra",
+            "        {",
+            "            outputs",
+            "            {",
+            *(
+                "                "
+                f'{closure.outputs[name].field_name} "{expression.canonical}";'
+                for name, expression in native_program.outputs.items()
+            ),
+            "            }",
+            f"            profileEvery       {profile_every};",
+            f"            profileProgram     {closure.name};",
+        ]
+        if observation:
+            algebra_lines.extend(
+                f"            {line}" if line else ""
+                for line in observation.splitlines()
+            )
+        algebra_lines.append("        }")
+        execution_block = "\n".join(algebra_lines)
     variables = {
         "FOAMNORDIC_MODEL": closure.name,
         "FOAMNORDIC_MODEL_CONFIGURATION": model_configuration,
@@ -366,10 +388,6 @@ def render_transform_dictionary(
     """Render a generic field exchange at the supported solver boundary."""
 
     if native_program is not None:
-        if observation_block:
-            raise NotImplementedError(
-                "Observe is not yet available for native algebra transforms"
-            )
         values = {
             "EXECUTE_INTERVAL": 1,
             "EXCHANGE_STAGE": {
@@ -392,6 +410,8 @@ def render_transform_dictionary(
                 f'"{expression.canonical}"'
                 for expression in native_program.outputs.values()
             ),
+            "OBSERVATION_BLOCK": observation_block,
+            "PROFILE_EVERY": profile_every,
         }
         return render_template(
             read_template(

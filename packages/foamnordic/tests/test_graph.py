@@ -54,6 +54,75 @@ def test_compile_native_transport_lowers_post_solve_dependency() -> None:
     assert "sqrt(k)" in plan.outputs["nut"].canonical
 
 
+def test_native_transport_rejects_mixed_pre_and_post_solve_state() -> None:
+    def mixed(k, nu):
+        k_new = fno.Field.transport(
+            k,
+            diffusivity=nu,
+            source=0.0 * k,
+            implicit_sink=0.0 * k,
+        )
+
+
+def test_native_transport_rejects_equivalent_pre_solve_field_alias() -> None:
+    def mixed(k, nu):
+        k_new = fno.Field.transport(
+            k,
+            diffusivity=nu,
+            source=0.0 * k,
+            implicit_sink=0.0 * k,
+        )
+        return {"k": k_new, "nut": k_new - fno.Field("k")}
+
+    with pytest.raises(ValueError, match="cannot mix pre-solve and post-solve"):
+        compile_native_transport(
+            mixed,
+            {"k": fno.Field("k"), "nu": fno.Field("nu")},
+            {"k": fno.Field("k"), "nut": fno.Field("nut")},
+        )
+        return {"k": k_new, "nut": k_new - k}
+
+    with pytest.raises(ValueError, match="cannot mix pre-solve and post-solve"):
+        compile_native_transport(
+            mixed,
+            {"k": fno.Field("k"), "nu": fno.Field("nu")},
+            {"k": fno.Field("k"), "nut": fno.Field("nut")},
+        )
+
+
+def test_hidden_patch_expression_does_not_use_native_lane() -> None:
+    def hidden_patch(velocity):
+        return fno.Field.patch("U", "inlet") * 1.01
+
+    assert compile_native_program(
+        hidden_patch,
+        {"velocity": fno.Field("U")},
+        {"velocity": fno.Field("U")},
+    ) is None
+
+
+def test_scheme_requirements_include_traced_native_outputs() -> None:
+    def diffuse(velocity, viscosity):
+        return velocity + fno.Field.delta() * fno.Field.laplacian(
+            viscosity, velocity
+        )
+
+    transform = fno.Transform(
+        name="diffuse",
+        operator=fno.Operator.function(diffuse),
+        inputs={"velocity": fno.Field("U"), "viscosity": fno.Field("nu")},
+        outputs={"velocity": fno.Field("U")},
+    )
+    longship = fno.Longship(
+        case=fno.OpenFOAM.Case(case_dir="case", run_dir="runs"),
+        transforms=(transform,),
+    )
+
+    assert _scheme_requirements(longship) == (
+        ("laplacianSchemes", "laplacian(nu,U)", "Gauss linear corrected"),
+    )
+
+
 def test_regular_function_is_not_traced() -> None:
     def scale(velocity):
         return {"velocity": velocity * 1.01}
@@ -208,6 +277,9 @@ def test_nut_algebra_uses_native_openfoam_lane() -> None:
     longship = fno.Longship(
         case=fno.OpenFOAM.Case(case_dir="case", run_dir="runs"),
         closures=(closure,),
+        observations=(
+            fno.Observe(summaries={"nut": ("min", "max")}, interval=4),
+        ),
     )
 
     assert isinstance(closure.native_program, NativeAlgebraPlan)
@@ -218,11 +290,18 @@ def test_nut_algebra_uses_native_openfoam_lane() -> None:
         closure,
         "unix:///unused.sock",
         True,
+        observation_path="runs/observations.{rank}.jsonl",
+        profile_every=3,
         native_program=closure.native_program,
     )
     assert "foamNordicAlgebra" in rendered
     assert "foamNordicClosure" not in rendered
     assert 'nut "multiply(' in rendered
+    assert "profileEvery       3;" in rendered
+    assert "profileProgram     nutFjord;" in rendered
+    assert 'path        "runs/observations.{rank}.jsonl";' in rendered
+    assert "fields      (nut);" in rendered
+    assert "every       4;" in rendered
     assert "unix:///unused.sock" not in rendered
 
 
@@ -328,6 +407,30 @@ def test_native_algebra_with_update_stays_on_resident_lane() -> None:
     assert coupled.execution_lane == "resident"
 
 
+def test_model_artifact_is_never_lowered_to_native_algebra() -> None:
+    closure = fno.Closure(
+        name="nutFjord",
+        operator=fno.Operator.model("linear.fnom"),
+        inputs={"delta": fno.Field.delta()},
+        outputs={"nut": fno.Field("nut")},
+    )
+
+    assert closure.native_program is None
+    assert closure.execution_lane == "resident"
+
+
+def test_table_artifact_is_never_lowered_to_native_algebra() -> None:
+    transform = fno.Transform(
+        name="lookupTemperature",
+        operator=fno.Operator.table("temperature.fnom"),
+        inputs={"progress": fno.Field("c")},
+        outputs={"temperature": fno.Field("T")},
+    )
+
+    assert transform.native_program is None
+    assert transform.execution_lane == "resident"
+
+
 def test_non_symbolic_function_remains_resident() -> None:
     def model(velocity):
         return float(velocity)
@@ -388,9 +491,14 @@ def test_symbolic_transform_uses_native_openfoam_lane() -> None:
         transform,
         "unix:///unused.sock",
         True,
+        "observation\n    {\n        fields (U);\n    }",
+        5,
         native_program=transform.native_program,
     )
     assert "nativeAlgebra   true;" in rendered
     assert "outputs         (U);" in rendered
     assert 'outputExpressions ("multiply(1.0001,U)");' in rendered
+    assert "profileEvery    5;" in rendered
+    assert "observation" in rendered
+    assert "fields (U);" in rendered
     assert "unix:///unused.sock" not in rendered

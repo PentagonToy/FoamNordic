@@ -21,7 +21,60 @@
 #include <string>
 #include <utility>
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 namespace bindnordic {
+
+struct MappedPayload::Storage {
+    int descriptor{-1};
+    const std::byte* mapping{nullptr};
+    std::size_t mapping_bytes{0};
+    std::span<const std::byte> payload;
+
+    ~Storage() {
+        if (mapping != nullptr) munmap(
+            const_cast<std::byte*>(mapping), mapping_bytes);
+        if (descriptor >= 0) close(descriptor);
+    }
+};
+
+MappedPayload::MappedPayload(
+    const std::filesystem::path& path,
+    const BundlePayloadRegion region)
+    : storage_(std::make_unique<Storage>()) {
+    storage_->descriptor = open(path.c_str(), O_RDONLY);
+    if (storage_->descriptor < 0) {
+        throw std::runtime_error("Could not map FNOM bundle: " + path.string());
+    }
+    struct stat status {};
+    if (fstat(storage_->descriptor, &status) != 0 || status.st_size < 0
+        || region.offset > static_cast<std::uint64_t>(status.st_size)
+        || region.size > static_cast<std::uint64_t>(status.st_size) - region.offset) {
+        throw std::runtime_error("FNOM payload mapping is out of bounds: " + path.string());
+    }
+    storage_->mapping_bytes = static_cast<std::size_t>(status.st_size);
+    const auto* mapped = mmap(
+        nullptr, storage_->mapping_bytes, PROT_READ, MAP_PRIVATE,
+        storage_->descriptor, 0);
+    if (mapped == MAP_FAILED) {
+        throw std::runtime_error("Could not map FNOM bundle: " + path.string());
+    }
+    storage_->mapping = static_cast<const std::byte*>(mapped);
+    storage_->payload = {
+        storage_->mapping + region.offset,
+        static_cast<std::size_t>(region.size),
+    };
+}
+
+MappedPayload::~MappedPayload() = default;
+
+std::span<const std::byte> MappedPayload::bytes() const noexcept {
+    return storage_->payload;
+}
+
 namespace {
 
 constexpr std::array<std::byte, 8> magic{
@@ -511,6 +564,11 @@ std::vector<std::byte> read_bundle_payload(const std::filesystem::path& path) {
         throw std::runtime_error("Could not read FNOM payload: " + path.string());
     }
     return payload;
+}
+
+std::shared_ptr<MappedPayload> map_bundle_payload(
+    const std::filesystem::path& path) {
+    return std::make_shared<MappedPayload>(path, bundle_payload_region(path));
 }
 
 void extract_bundle_payload(

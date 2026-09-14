@@ -482,7 +482,7 @@ def _layout(path: Path) -> tuple[int, int, int]:
     return manifest_size, payload_offset, payload_size
 
 
-def write_bundle(
+def _write_bundle(
     path: str | Path,
     payload_path: str | Path,
     name: str,
@@ -619,5 +619,5 @@ __all__ = [
     "AffineScaler", "ModelArtifact", "TensorContract", "TreeLeaf",
     "extract_payload", "load", "normalize_scaler", "payload_region",
     "register_scaler_adapter",
-    "read_payload", "write_bundle",
+    "read_payload",
 ]

@@ -22,6 +22,8 @@ using bindnordic::encode_manifest;
 using bindnordic::extract_bundle_payload;
 using bindnordic::is_bundle;
 using bindnordic::read_bundle_payload;
+using bindnordic::map_bundle_payload;
+using bindnordic::MappedPayload;
 using bindnordic::read_manifest;
 using bindnordic::write_bundle;
 

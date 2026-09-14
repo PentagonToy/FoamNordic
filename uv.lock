@@ -3,8 +3,8 @@ revision = 3
 requires-python = ">=3.11, <3.13"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'linux'",
-    "python_full_version < '3.12' and sys_platform == 'linux'",
     "python_full_version >= '3.12' and sys_platform != 'linux'",
+    "python_full_version < '3.12' and sys_platform == 'linux'",
     "python_full_version < '3.12' and sys_platform != 'linux'",
 ]
 
@@ -35,7 +35,7 @@ wheels = [
 
 [[package]]
 name = "bindnordic"
-version = "1.0.7"
+version = "1.0.8"
 source = { virtual = "packages/bindnordic" }
 dependencies = [
     { name = "cloudpickle" },
@@ -210,7 +210,7 @@ wheels = [
 
 [[package]]
 name = "foamnordic"
-version = "1.0.7"
+version = "1.0.8"
 source = { editable = "packages/foamnordic" }
 dependencies = [
     { name = "cloudpickle" },
@@ -257,7 +257,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "onnx", marker = "extra == 'ml'", specifier = ">=1.17,<2" },
     { name = "onnx", marker = "extra == 'ml-cuda12'", specifier = ">=1.17,<2" },
-    { name = "onsaemiro", specifier = ">=1.0.5" },
+    { name = "onsaemiro", specifier = ">=1.1.2" },
     { name = "optax", marker = "extra == 'ml'", specifier = ">=0.2.6,<0.3" },
     { name = "optax", marker = "extra == 'ml-cuda12'", specifier = ">=0.2.6,<0.3" },
     { name = "pyyaml", specifier = ">=6,<7" },
@@ -931,18 +931,16 @@ wheels = [
 
 [[package]]
 name = "onsaemiro"
-version = "1.0.5"
+version = "1.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipython" },
     { name = "matplotlib" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/0d/370049cc15317974f81fcf32069092ea639fe63af5cc89f7e414273654e4/onsaemiro-1.0.5.tar.gz", hash = "sha256:b117a4561d9f34d7a026dd8d84fca024ba988fbdd1887f7e09ebfd862a5c3852", size = 27208, upload-time = "2026-08-18T11:54:14.852Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/9a/f8c0fafa5748c01db3637fe1d19db079dd6ad069cf2fd2b51ca1f4fd7701/onsaemiro-1.1.2.tar.gz", hash = "sha256:57e2c6f5737093bf53a956e2de0d6d4b868fcb28d082238819c5e3c012c68fdd", size = 23303, upload-time = "2026-09-14T05:58:32.562Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/b5/ec61fff0af09c32ac327d2720b4e6013dbb8ef9f178806e886a5fcd2264b/onsaemiro-1.0.5-py3-none-any.whl", hash = "sha256:448379a8b8f606a220d2cc01862b94499a0666f18e2b76ff408ac81147404003", size = 22409, upload-time = "2026-08-18T11:54:13.637Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/d7/8092e905de31c7aac60ea39aa734503a27d81100344a230d938ffd13798f/onsaemiro-1.1.2-py3-none-any.whl", hash = "sha256:52ba2df795e7b31636975c6868dbcd25af67d5ceadc43885b28c8656f9564dff", size = 20652, upload-time = "2026-09-14T05:58:31.474Z" },
 ]
 
 [[package]]

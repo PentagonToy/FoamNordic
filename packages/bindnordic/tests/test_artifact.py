@@ -9,10 +9,16 @@ from bindnordic.models.artifact import (
     normalize_scaler,
     read_payload,
     register_scaler_adapter,
-    write_bundle,
+    _write_bundle,
 )
 from bindnordic.models.schema import model_format
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+
+def test_generic_bundle_writer_is_internal() -> None:
+    import bindnordic.models as models
+
+    assert not hasattr(models, "write_bundle")
 
 
 def test_round_trip_preserves_contract_scalers_and_payload():
@@ -22,7 +28,7 @@ def test_round_trip_preserves_contract_scalers_and_payload():
         payload = root / "model.joblib"
         payload.write_bytes(b"payload")
         path = root / "model.fnom"
-        write_bundle(
+        _write_bundle(
             path,
             payload,
             "model",
@@ -49,7 +55,7 @@ def test_named_input_formats_are_joblib_only():
         payload = root / "model.onnx"
         payload.write_bytes(b"payload")
         with pytest.raises(ValueError, match="only Joblib"):
-            write_bundle(
+            _write_bundle(
                 root / "model.fnom",
                 payload,
                 "model",
@@ -85,7 +91,7 @@ def test_artifact_reports_derived_execution_capabilities():
         payload = root / "table.bin"
         payload.write_bytes(b"payload")
         path = root / "table.fnom"
-        write_bundle(
+        _write_bundle(
             path,
             payload,
             "table",

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 from foamnordic._cli import (
     _doctor_checks,
+    _installation_coherence,
     _native_build_environment,
     _source_root,
     main,
@@ -107,7 +108,7 @@ def test_build_discovers_kit_bundled_beside_installed_package(mocker) -> None:
 
 
 def test_public_version_and_directory_are_discoverable() -> None:
-    assert fno.__version__ == "1.0.7"
+    assert fno.__version__ == "1.0.8"
     assert "Longship" in dir(fno)
     assert "Export" in dir(fno)
     assert "export" not in dir(fno)
@@ -118,7 +119,7 @@ def test_cli_version_is_discoverable() -> None:
     with pytest.raises(SystemExit) as stopped, redirect_stdout(output):
         main(["--version"])
     assert stopped.value.code == 0
-    assert output.getvalue().strip() == "foamnordic 1.0.7"
+    assert output.getvalue().strip() == "foamnordic 1.0.8"
 
 
 def test_top_level_help_lists_runtime_and_fnom_commands() -> None:
@@ -317,6 +318,19 @@ def test_doctor_reports_fast_read_only_environment_checks(mocker) -> None:
     assert records["Runtime profile"][0] == "WARN"
 
 
+def test_installation_coherence_detects_mixed_python_and_native_paths() -> None:
+    status, _ = _installation_coherence(
+        Path("/source/foamnordic"),
+        Path("/venv/site-packages/foamnordic/_native.so"),
+    )
+    assert status == "WARN"
+    status, _ = _installation_coherence(
+        Path("/venv/site-packages/foamnordic"),
+        Path("/venv/site-packages/foamnordic/_native.so"),
+    )
+    assert status == "PASS"
+
+
 def test_build_help_is_discoverable() -> None:
     output = StringIO()
     with pytest.raises(SystemExit) as stopped, redirect_stdout(output):
@@ -384,6 +398,11 @@ def test_source_build_dry_run_is_visual_and_non_mutating(mocker) -> None:
             mocker.stop(_mock_patch_12)
             mocker.stop(_mock_patch_11)
         assert status == 0
+        assert "███████╗ ██████╗" in output.getvalue()
+        assert " Native build" in output.getvalue()
+        assert output.getvalue().count("=" * 66) == 3
+        assert "OpenFOAM ABI   : openfoam-v2512-linux64GccDPInt32" in output.getvalue()
+        assert "Native runtime:" not in output.getvalue()
         assert "[Step 1/5]" in output.getvalue()
         assert "Configure native SDK" in output.getvalue()
         assert "foamnordic_runtime_bundle" in output.getvalue()

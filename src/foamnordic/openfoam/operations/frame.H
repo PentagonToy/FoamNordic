@@ -68,6 +68,7 @@ public:
         std::size_t index);
     void validateAssignment(const word& name, const Expression& expression);
     void assign(const word& name, const Expression& expression);
+    void correctBoundary(const word& name, const Expression& expression);
 
     void bind(const std::string& name, const volScalarField& value);
     void bind(const std::string& name, const volVectorField& value);

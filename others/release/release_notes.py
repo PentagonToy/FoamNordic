@@ -12,6 +12,7 @@ def release_notes(root: Path, tag: str | None = None) -> str:
     sources = (
         ("packages/foamnordic/pyproject.toml", r'^version = "([^"]+)"$'),
         ("packages/foamnordic/foamnordic/__init__.py", r'^__version__ = "([^"]+)"$'),
+        ("packages/bindnordic/pyproject.toml", r'^version = "([^"]+)"$'),
         ("CMakeLists.txt", r'^project\(FoamNordic VERSION (\S+) LANGUAGES CXX\)$'),
         ("packages/foamnordic/buildkit/CMakeLists.txt", r'^project\(FoamNordicBuildKit VERSION (\S+) LANGUAGES CXX\)$'),
     )

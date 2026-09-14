@@ -34,8 +34,10 @@ public:
     OwnedArtifactKernel(
         ModelArtifact artifact,
         std::unique_ptr<PackedModelKernel> packed,
+        std::shared_ptr<const void> payload_owner,
         ExecutionResources resources)
-        : packed_(std::move(packed)),
+        : payload_owner_(std::move(payload_owner)),
+          packed_(std::move(packed)),
           kernel_(std::move(artifact), *packed_, resources) {}
 
     TensorMap evaluate(
@@ -72,6 +74,7 @@ public:
     void cancel_pending() noexcept override { kernel_.cancel_pending(); }
 
 private:
+    std::shared_ptr<const void> payload_owner_;
     std::unique_ptr<PackedModelKernel> packed_;
     ArtifactModelKernel kernel_;
 };
@@ -109,6 +112,7 @@ LoadedModel load_model(
     options.validate();
     auto artifact = read_manifest(manifest_path);
     std::unique_ptr<PackedModelKernel> packed;
+    std::shared_ptr<const void> payload_owner;
     if (artifact.format == ModelFormat::table) {
         if (!is_bundle(manifest_path)) {
             throw std::invalid_argument("Table models require a self-contained FNOM bundle.");
@@ -117,33 +121,46 @@ LoadedModel load_model(
         std::uint64_t outputs = 0;
         for (const auto& field : artifact.contract.inputs) inputs += field.components;
         for (const auto& field : artifact.contract.outputs) outputs += field.components;
+        auto mapped = map_bundle_payload(manifest_path);
         packed = std::make_unique<bindnordic::TableKernel>(
-            read_bundle_payload(manifest_path), inputs, outputs,
+            mapped->bytes(), inputs, outputs,
             artifact.contract.inputs.front().element);
+        payload_owner = std::move(mapped);
     } else if (artifact.runtime == "forest") {
-        std::vector<std::byte> data;
-        if (is_bundle(manifest_path)) data = read_bundle_payload(manifest_path);
+        std::span<const std::byte> data;
+        std::shared_ptr<std::vector<std::byte>> buffered;
+        if (is_bundle(manifest_path)) {
+            auto mapped = map_bundle_payload(manifest_path);
+            data = mapped->bytes();
+            payload_owner = std::move(mapped);
+        }
         else {
             std::ifstream stream(resolve_artifact(manifest_path, artifact.artifact_path), std::ios::binary | std::ios::ate);
             if (!stream || stream.tellg() < 0) throw std::runtime_error("Cannot read forest payload.");
-            data.resize(static_cast<std::size_t>(stream.tellg()));
+            buffered = std::make_shared<std::vector<std::byte>>(
+                static_cast<std::size_t>(stream.tellg()));
             stream.seekg(0);
-            if (!stream.read(reinterpret_cast<char*>(data.data()), data.size()))
+            if (!stream.read(reinterpret_cast<char*>(buffered->data()), buffered->size()))
                 throw std::runtime_error("Truncated forest payload.");
+            data = *buffered;
+            payload_owner = std::move(buffered);
         }
         packed = std::make_unique<ForestKernel>(data, options.threads);
     } else
 #ifdef FOAMNORDIC_HAS_ONNXRUNTIME
     if (artifact.format == ModelFormat::onnx && is_bundle(manifest_path)) {
+        auto mapped = map_bundle_payload(manifest_path);
         packed = std::make_unique<OnnxPackedKernel>(
-            read_bundle_payload(manifest_path),
+            mapped->bytes(),
             OnnxOptions{static_cast<std::int32_t>(options.threads), 1});
+        payload_owner = std::move(mapped);
     } else
 #endif
     {
         std::vector<std::byte> data;
         if (is_bundle(manifest_path)) {
-            data = read_bundle_payload(manifest_path);
+            auto mapped = map_bundle_payload(manifest_path);
+            data.assign(mapped->bytes().begin(), mapped->bytes().end());
         } else {
             std::ifstream stream(
                 resolve_artifact(manifest_path, artifact.artifact_path),
@@ -163,6 +180,7 @@ LoadedModel load_model(
     auto kernel = std::make_unique<OwnedArtifactKernel>(
         artifact,
         std::move(packed),
+        std::move(payload_owner),
         ExecutionResources{
             options.execution_contexts,
             options.maximum_working_bytes,

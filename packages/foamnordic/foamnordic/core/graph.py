@@ -23,6 +23,28 @@ def _uses_patch(expressions) -> bool:
     )
 
 
+def _uses_outside(
+    expression: FieldExpression,
+    target: FieldExpression,
+    boundary: FieldExpression,
+) -> bool:
+    """Return whether target occurs without crossing the supplied boundary."""
+
+    if expression is boundary:
+        return False
+    if (
+        expression.operation == "field"
+        and target.operation == "field"
+        and expression.field_name == target.field_name
+        and expression.patch_name == target.patch_name
+    ):
+        return True
+    return any(
+        _uses_outside(argument, target, boundary)
+        for argument in expression.arguments
+    )
+
+
 def _replace(
     expression: FieldExpression,
     target: FieldExpression,
@@ -128,6 +150,8 @@ def compile_native_transport(
         raise ValueError("kEqnFjord outputs must bind to fields 'k' and 'nut'")
     if not all(isinstance(value, FieldExpression) for value in traced.values()):
         raise TypeError("native function outputs must be symbolic field expressions")
+    if _uses_patch(traced.values()):
+        raise ValueError("Field.transport does not support patch fields")
 
     barriers = {
         node
@@ -151,6 +175,14 @@ def compile_native_transport(
         for expression in (diffusivity, source, implicit_sink)
     ):
         raise ValueError("transport coefficients must not contain another solve")
+    if any(
+        _uses_outside(expression, transported, barrier)
+        for name, expression in traced.items()
+        if name != "k"
+    ):
+        raise ValueError(
+            "native transport outputs cannot mix pre-solve and post-solve 'k'"
+        )
     replacement = field("k")
     lowered_outputs = {
         name: _replace(expression, barrier, replacement)
@@ -192,6 +224,8 @@ def compile_native_program(
     if set(traced) != set(outputs) or not all(
         isinstance(value, FieldExpression) for value in traced.values()
     ):
+        return None
+    if _uses_patch(traced.values()):
         return None
     if any(value.contains_transport for value in traced.values()):
         return None

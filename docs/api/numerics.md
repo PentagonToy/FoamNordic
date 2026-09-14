@@ -138,7 +138,7 @@ The finite-volume operators use the copied case's `system/fvSchemes`. FoamNordic
 
 ## Native algebra
 
-A fully symbolic `Operator.function` attached to `nutFjord` is compiled once and evaluated at the OpenFOAM correction boundary. A fully symbolic `Transform` follows the same native path at a supported time-step boundary. Neither path starts a ModelHost or exchanges fields.
+A symbolic `Operator.function` can run directly in OpenFOAM when every operation is supported and it uses complete fields. Functions that use patches or unsupported Python operations run through ModelHost instead. Native closures and transforms support `Observe` and `profile_every` without exchanging fields.
 
 ```python
 # Define the Smagorinsky closure
@@ -206,7 +206,7 @@ closure = fno.Closure(
 )
 ```
 
-The current native transport contract permits exactly one scalar transport barrier and fixes the `kEqnFjord` outputs as `k` and `nut`. Inputs remain freely selectable. Unsupported native graphs fail during declaration rather than invoking Python inside the solver loop. `Observe` samples the requested OpenFOAM fields after each completed correction according to its interval, and `profile_every` measures the native algebra, matrix assembly, solve and field-commit stages.
+The current native transport contract permits one scalar solve and fixes the `kEqnFjord` outputs as `k` and `nut`. Use the value returned by `Field.transport()` for post-solve calculations; mixing it with the original `k` in one output is rejected. `Observe` samples the requested OpenFOAM fields after completed corrections, and `profile_every` measures native algebra, matrix assembly, solving and field publication.
 
 ## Random keys
 

@@ -141,6 +141,7 @@ def test_coupled_batch_reserves_native_sidecar_task() -> None:
     assert "#SBATCH --ntasks=3" in script
     assert "--host srun --nodes=1 --ntasks=1" in script
     assert "--solver srun --nodes=1 --ntasks=2" in script
+    assert "--gres=" not in script
 
 
 @pytest.mark.skipif(
@@ -202,6 +203,36 @@ def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate() -> None:
     assert "--solver srun --nodes=1 --ntasks=16" in script
 
 
+def test_native_programmes_do_not_reserve_model_resources() -> None:
+    def scale(velocity):
+        return velocity * 1.01
+
+    transform = fno.Transform(
+        name="scale",
+        operator=fno.Operator.function(scale),
+        inputs={"velocity": fno.Field("U")},
+        outputs={"velocity": fno.Field("U")},
+    )
+    longship = fno.Longship(
+        case=fno.OpenFOAM.Case(case_dir="case", run_dir="runs"),
+        transforms=(transform,),
+        scheduler=fno.Slurm(
+            account="project_example",
+            partition="small",
+            time="00:15:00",
+            openfoam=fno.Slurm.openfoam(nodes=1, ntasks=1),
+        ),
+    )
+
+    values = resource_values(longship)
+
+    assert values["programs"] == 0
+    assert values["model_cpus"] == 0
+    assert values["model_memory"] == 0
+    assert values["shm"] == 0
+    assert values["host_instances"] == 0
+
+
 @pytest.mark.skipif(
     not native_available(), reason="nanobind extension is not installed"
 )
@@ -251,7 +282,7 @@ def test_model_gres_is_reserved_and_assigned_to_the_host_step() -> None:
     assert "--host srun --nodes=1 --ntasks=1" in script
     assert "--gres=gpu:gh200:1" in script
     solver = script.split("--solver srun", 1)[1]
-    assert "--gres=" not in solver
+    assert "--gres=none" in solver
 
 
 @pytest.mark.skipif(
