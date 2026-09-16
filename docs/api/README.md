@@ -1,26 +1,34 @@
 # Python API reference
 
-FoamNordic's installable Python control plane compiles immutable case, field-program, observation, placement, and scheduler declarations into a deterministic native plan. `Longship.launch()` prepares an isolated case and returns the cancellation-safe `Run`; `Run.stop()` produces one durable `Result`.
+FoamNordic's Python API declares a workload, compiles an immutable plan, launches an isolated OpenFOAM case, and consumes durable results. Python is a control plane; native code owns repeated solver execution, field access, scaling, inference, transport, and atomic publication.
 
-Python describes experiments before launch and inspects compact results during or after selected exchanges. Native code owns solver timing, field views, feature evaluation, scaling, inference, atomic publication, and failure handling. A Python callback is never inserted into a production solver loop.
+## Public namespace
 
-| Reference | Public namespace | Contents |
+The top-level namespace is intentionally small. Grouped namespaces collect related operations; direct declarations define a workload.
+
+| Group | Public names | Use it for |
 | --- | --- | --- |
-| [Run control](run-control.md) | `OpenFOAM`, `Operator`, `Closure`, `Transform`, `Observe`, `Longship`, `Slurm`, `Runtime` | Case declarations, field programmes, scheduling, launch, observation, cancellation and results |
-| [Models and FNOM](model-artifact.md) | `Tensor`, `Export`, `Models` | ONNX, sklearn, Equinox, tables, preprocessing, inspection and validation |
-| [Numerics](numerics.md) | `Field`, `Math`, `Context`, `Random` | Array algebra, symbolic OpenFOAM expressions, native graphs and random keys |
-| [Postprocessing](postprocess.md) | `Postprocess` | Stored fields, statistics and case comparison |
-| [Datasets](dataset.md) | `Dataset` | Lossless OpenFOAM field histories for machine learning and analysis |
-| [Command-line interface](command-line.md) | `foamnordic` | Native installation, diagnostics, paths, FNOM tools and safe cleanup |
+| Workload | `OpenFOAM`, `Field`, `Context`, `Math`, `Operator`, `Closure`, `Transform`, `Observe` | Declare case inputs, field programmes, and monitoring |
+| Execution | `Longship`, `Slurm`, `Runtime` | Compile, place, launch, control, and inspect a run |
+| Model artefacts | `Tensor`, `Export`, `Models` | Export, inspect, validate, and deploy FNOM artefacts |
+| Results | `Postprocess`, `Dataset` | Read fields, compare runs, and prepare ML data |
+| Reproducibility | `Random` | Declare deterministic stochastic programmes |
 
-Public declarations are compiled before the solver starts. Explicit transport requests never silently fall back, observations cannot gate solver progress, and bulk field-program tensors do not pass through the notebook. Low-level contracts are documented under [architecture](../architecture/README.md); measured behaviour is kept under [benchmarks](../benchmarks/README.md). Wheel publication is a maintainer workflow documented in [others](../../others/release/publishing.md).
+Lowercase modules and older helper names remain importable only for compatibility. New code should use the names above.
 
-The interactive top-level namespace contains only the declarations used to define a workload or consume its results: `OpenFOAM`, `Closure`, `Transform`, `Observe`, `Longship`, `Operator`, `Field`, `Math`, `Context`, `Slurm`, `Export`, `Models`, `Tensor`, `Random`, `Runtime`, `Postprocess`, and `Dataset`. Lifecycle result types live under `Runtime`; model artefact types live under `Models`. Earlier lowercase modules and helper functions remain importable for compatibility but are not part of canonical interactive discovery, must not appear in new examples, and may be removed only in a declared major release.
+## Reference map
+
+| Task | Reference | Main API |
+| --- | --- | --- |
+| Declare and launch an OpenFOAM workload | [Run control](run-control.md) | `OpenFOAM`, `Operator`, `Closure`, `Transform`, `Observe`, `Longship`, `Slurm`, `Runtime` |
+| Build symbolic field programmes | [Numerics](numerics.md) | `Field`, `Context`, `Math`, `Random` |
+| Export or inspect a model or table | [Models and FNOM](model-artifact.md) | `Tensor`, `Export`, `Models` |
+| Read, summarise, or compare stored fields | [Postprocessing](postprocess.md) | `Postprocess` |
+| Create a lossless field-history container | [Datasets](dataset.md) | `Dataset` |
+| Install, inspect, or maintain a runtime | [Command-line interface](command-line.md) | `foamnordic` |
 
 ## Reference conventions
 
-Signatures show keyword-only arguments after `*`. A default of `None` means that FoamNordic either infers the value or disables the optional behaviour as described in the parameter table. Paths accept `str` and `os.PathLike`; relative paths are resolved by the owning declaration before launch. Public declarations are immutable unless a method explicitly documents an in-place state transition.
+Signatures show keyword-only options after `*`. Parameters follow the repository convention: subject, selection or configuration, destination, execution or reporting, then safety control. `None` either disables an optional behaviour or requests documented inference. Paths accept `str` and `os.PathLike`.
 
-Parameter tables use `required` when no default exists. “Allowed values” lists closed sets enforced by the implementation; an omitted entry means that the Python type and stated validation define the accepted domain. Errors are raised during declaration or launch preparation whenever they can be detected before OpenFOAM starts.
-
-The [command-line reference](command-line.md) documents installation, diagnostics, paths, FNOM tooling and marker-owned cleanup. Every command also provides independent `--help` output.
+Declarations are immutable unless a method explicitly documents an in-place transition. Validation failures are raised during declaration or launch preparation whenever they can be detected before OpenFOAM starts. Architecture contracts are in [Architecture](../architecture/README.md), measured evidence is in [Benchmarks](../benchmarks/README.md), and publication maintenance is in [Release publishing](../../others/release/publishing.md).

@@ -13,7 +13,7 @@ flowchart LR
     BN --> FNOM[FNOM model or table]
 ```
 
-No notebook callback, model object or scheduler command appears in the solver exchange loop. The OpenFOAM solver retains ownership of equations, correction order, mesh and boundary conditions; FoamNordic evaluates only the declared operator at an adapter-owned boundary.
+OpenFOAM retains equations, correction order, mesh, and boundary conditions. FoamNordic evaluates declared operators at adapter-owned boundaries.
 
 ## Component boundaries
 
@@ -44,11 +44,11 @@ Local and Slurm execution consume the same compiled plan. FNOM is the deployment
 
 | Document | Contract |
 | --- | --- |
-| [Design principles](principles.md) | Stable ownership, failure, reproducibility and non-goals |
-| [Native runtime](runtime.md) | Admission, workspaces, backend capabilities and atomic output |
-| [Native transport](transport.md) | Rune frames, Harbor exchanges, channels and memory credit |
-| [FNOM](fnom.md) | Artefact contents, backend selection, validation and trust |
-| [OpenFOAM integration](openfoam.md) | Fields, topology, closures, numerics and external adapters |
-| [Execution lifecycle](lifecycle.md) | Local and Slurm launch, ownership, shutdown and generations |
-| [Observations](observations.md) | Read-only monitoring, retention and backpressure |
-| [Package boundary](../../packages/README.md) | Separation between model execution and simulation semantics |
+| [Design principles](principles.md) | Ownership, failure, reproducibility, and non-goals |
+| [OpenFOAM integration](openfoam.md) | Fields, topology, closures, numerics, and external adapters |
+| [Native runtime](runtime.md) | Admission, workspaces, backend capabilities, and atomic output |
+| [Native transport](transport.md) | Rune frames, Harbor exchanges, channels, and memory credit |
+| [FNOM](fnom.md) | Artefact contents, backend selection, validation, and trust |
+| [Execution lifecycle](lifecycle.md) | Local and Slurm launch, ownership, shutdown, and generations |
+| [Observations](observations.md) | Read-only monitoring, retention, and backpressure |
+| [Package boundary](../../packages/README.md) | Model execution and simulation semantics |

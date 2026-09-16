@@ -16,9 +16,15 @@
 #include "closureHook.H"
 #include "volFields.H"
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
-class progressRateFjord final {
+class progressRateFjord final
+{
+    // Private Data
+
     const volScalarField& progress_;
     const volScalarField& variance_;
     const volScalarField& temperature_;
@@ -26,25 +32,36 @@ class progressRateFjord final {
     volScalarField normalizedVariance_;
     ClosureHook closure_;
 
+
+    // Private Member Functions
+
     [[nodiscard]] static const dictionary& validateContract(
         const dictionary& dictionary,
-        const volScalarField& reactionRate);
+        const volScalarField& reactionRate
+    );
 
 public:
+    // Constructors
+
     progressRateFjord(
         const dictionary& dictionary,
         const volScalarField& progress,
         const volScalarField& variance,
         const volScalarField& temperature,
-        volScalarField& reactionRate);
+        volScalarField& reactionRate
+    );
 
     progressRateFjord(const progressRateFjord&) = delete;
     progressRateFjord& operator=(const progressRateFjord&) = delete;
+
+
+    // Member Functions
 
     void correct();
     void shutdown();
 };
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

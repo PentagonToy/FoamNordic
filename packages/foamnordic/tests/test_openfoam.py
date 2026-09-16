@@ -111,6 +111,7 @@ def test_grouped_namespace_naming_is_canonical_and_compatible() -> None:
     assert fno.Models is fno.models
     assert fno.Runtime is fno.runtime
     assert "Case" in dir(fno.OpenFOAM)
+    assert "setup" in dir(fno.OpenFOAM)
     assert "Toolchain" not in dir(fno.OpenFOAM)
     assert "openfoam" not in dir(fno)
     assert "field" not in dir(fno)
@@ -126,6 +127,20 @@ def test_module_shorthand_is_lowered_to_internal_environment() -> None:
         of_cmd="openfoam/2512",
         shell="zsh",
     )
+    assert case.of_cmd == "openfoam/2512"
+    assert case.shell == "zsh"
+    assert case._toolchain.command == "module load openfoam/2512"
+
+
+def test_setup_supplies_defaults_to_later_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    from foamnordic import openfoam
+
+    monkeypatch.setattr(openfoam, "_DEFAULT_OF_CMD", None)
+    monkeypatch.setattr(openfoam, "_DEFAULT_SHELL", "bash")
+    fno.OpenFOAM.setup(of_cmd="openfoam/2512", shell="zsh")
+
+    case = fno.OpenFOAM.Case(case_dir="case", run_dir="runs")
+
     assert case.of_cmd == "openfoam/2512"
     assert case.shell == "zsh"
     assert case._toolchain.command == "module load openfoam/2512"

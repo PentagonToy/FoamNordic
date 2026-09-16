@@ -23,7 +23,15 @@ result = run.stop(progress=True)
 post = result.postprocess
 ```
 
-`fno.OpenFOAM`, `fno.Export`, `fno.Models`, `fno.Postprocess`, and `fno.Runtime` are the canonical grouped namespaces. Core declarations remain directly available as `fno.Closure`, `fno.Transform`, `fno.Observe`, `fno.Longship`, `fno.Operator`, `fno.Field`, `fno.Math`, `fno.Context`, `fno.Slurm`, `fno.Tensor`, and `fno.Random`. Compatibility aliases remain importable but are omitted from interactive discovery. Filesystem arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
+| Group | Names |
+| --- | --- |
+| Workload | `OpenFOAM`, `Field`, `Context`, `Math`, `Operator`, `Closure`, `Transform`, `Observe` |
+| Execution | `Longship`, `Slurm`, `Runtime` |
+| Model artefacts | `Tensor`, `Export`, `Models` |
+| Results | `Postprocess`, `Dataset` |
+| Reproducibility | `Random` |
+
+Compatibility aliases remain importable but are omitted from interactive discovery. Filesystem arguments accept strings, `pathlib.Path`, and text `PathLike` objects.
 
 See the [API reference](../../docs/api/README.md) for closures, transforms, Slurm, observations, model export and post-processing.
 

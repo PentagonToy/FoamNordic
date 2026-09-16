@@ -46,7 +46,7 @@ source .venv/bin/activate
 uv pip install "foamnordic[ml]"
 ```
 
-The `ml` extra installs scikit-learn, ONNX, Equinox, Optax and CPU JAX on Linux or macOS. On a Linux CUDA 12 system, including Roihu GPU nodes, install `foamnordic[ml-cuda12]` instead. The explicit CUDA choice avoids treating CPU architecture as evidence that a GPU is available. Use plain `foamnordic` for ordinary OpenFOAM runs, mathematical functions or existing model artefacts that do not require those authoring libraries.
+The `ml` extra installs scikit-learn, ONNX, Equinox, Optax, and CPU JAX on Linux or macOS. On a Linux CUDA 12 system, install `foamnordic[ml-cuda12]` instead. Plain `foamnordic` supports ordinary OpenFOAM runs, mathematical functions, and existing model artefacts.
 
 Wheels include the Python API and native control runtime. Build the small OpenFOAM integration for each compiler/ABI used on the machine:
 
@@ -66,7 +66,7 @@ Check the active Python, native, OpenFOAM, MPI, and ABI-matched runtime without 
 foamnordic doctor
 ```
 
-The runtime is installed below `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple OpenFOAM ABIs can coexist and are selected from `Case.of_cmd` at launch. `FOAMNORDIC_OPENFOAM_LIB` is an advanced override, not a normal setup step.
+The runtime is installed below `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple OpenFOAM ABIs coexist and `Case.of_cmd` selects one at launch. `FOAMNORDIC_OPENFOAM_LIB` is an advanced override.
 
 To use the current source directly:
 
@@ -79,7 +79,7 @@ module load openfoam/2512
 foamnordic build
 ```
 
-The uv workspace declares FoamNordic and its internal BindNordic source component explicitly while preserving one published `foamnordic` distribution. To install only the library from a checkout, use `uv pip install -e "./packages/foamnordic[ml]"`; replace `ml` with `ml-cuda12` on a Linux CUDA 12 host. On macOS, replace the module command with `openfoam`. Offline ONNX builds may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive; workflows that do not need native ONNX can use `foamnordic build --without-onnx`.
+To install only the library from a checkout, use `uv pip install -e "./packages/foamnordic[ml]"`; use `ml-cuda12` on a Linux CUDA 12 host. On macOS, replace the module command with `openfoam`. Offline ONNX builds may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive; workloads without native ONNX can use `foamnordic build --without-onnx`.
 
 ## Quick start
 
@@ -105,7 +105,7 @@ post = result.postprocess
 post.statistics(["U", "p"], time_idx=-1, verbose=True)
 ```
 
-The source case is copied into an isolated run directory and is never modified. `0.orig/` is accepted when `0/` is absent. With no scheduler, rank one runs directly and multiple ranks use the MPI launcher from the declared OpenFOAM environment.
+The source case is copied into an isolated run directory. `0.orig/` is accepted when `0/` is absent. With no scheduler, rank one runs directly and multiple ranks use the MPI launcher from the declared OpenFOAM environment.
 
 ## Couple a model or function
 

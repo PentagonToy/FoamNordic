@@ -2,7 +2,7 @@
 
 `fno.Math` provides backend-neutral array algebra, while `fno.Field` describes OpenFOAM fields and finite-volume operations. NumPy arrays remain in NumPy, JAX arrays and tracers remain in JAX, and symbolic field expressions are evaluated by OpenFOAM at the declared solver boundary.
 
-## Supported operations
+## Execution lanes
 
 | API | Operations | OpenFOAM native graph |
 |---|---|:---:|
@@ -18,25 +18,20 @@
 | `fno.Field` solver control | `Field.transport` | Yes, `kEqnFjord` |
 | `fno.Context` runtime values | `Context.delta_time` | Yes |
 
-`Yes` means that a fully symbolic function can execute inside OpenFOAM without a ModelHost or field exchange. `Resident` means that the operation remains available to NumPy or JAX functions evaluated by the ModelHost. Mixed functions use the resident path rather than splitting one function between execution lanes.
+`Yes` means that a fully symbolic function executes inside OpenFOAM. `Resident` means that the operation executes in ModelHost for NumPy or JAX inputs. A mixed function uses the resident lane.
 
 ## `Math` reference
 
 All `Math` functions return the native result type of their operands: NumPy input produces NumPy output, JAX input remains in JAX, and a symbolic `FieldExpression` produces another expression. Arguments named `axis`, `axes`, `shape` and `subscripts` follow NumPy conventions on the resident path.
 
-| Function | Signature | Default or constraint |
+| Group | Functions | Default or constraint |
 | --- | --- | --- |
-| Unary arithmetic | `abs(x)`, `sqrt(x)`, `square(x)` | `sqrt` requires a non-negative numerical value or scalar field expression |
-| Exponential and logarithmic | `exp(x)`, `expm1(x)`, `log(x)`, `log1p(x)` | Resident path |
-| Trigonometric | `sin(x)`, `cos(x)`, `tan(x)`, `tanh(x)` | Resident path |
-| Bounds | `maximum(a, b)`, `minimum(a, b)`, `clip(x, minimum=None, maximum=None)` | At least one `clip` bound is required |
-| Selection | `where(condition, when_true, when_false)` | Native graph supports scalar field comparison conditions |
-| Reductions | `sum(x, axis=None, keepdims=False)`, `mean(...)`, `min(...)`, `max(...)` | Resident path |
-| Layout | `reshape(x, shape)`, `transpose(x, axes=None)` | Resident path |
-| Joining | `stack(values, axis=0)`, `concatenate(values, axis=0)` | Non-empty iterable |
-| Tensor contraction | `einsum(subscripts, *operands)`, `matmul(a, b)`, `dot(a, b)`, `ddot(a, b)` | Native patterns are listed above |
-| Tensor construction | `outer(a, b)` | Vector × vector → tensor |
-| Tensor properties | `trace(A)`, `mag(x)`, `symm(A)`, `dev(A)` | Component-compatible operands |
+| Elementwise | `abs(x)`, `sqrt(x)`, `square(x)` | `sqrt` requires a non-negative numerical value or scalar field expression |
+| Elementwise | `exp(x)`, `expm1(x)`, `log(x)`, `log1p(x)`, `sin(x)`, `cos(x)`, `tan(x)`, `tanh(x)` | Resident path |
+| Bounds and selection | `maximum(a, b)`, `minimum(a, b)`, `clip(x, minimum=None, maximum=None)`, `where(condition, when_true, when_false)` | At least one `clip` bound is required |
+| Reduction | `sum(x, axis=None, keepdims=False)`, `mean(...)`, `min(...)`, `max(...)` | Resident path |
+| Layout | `reshape(x, shape)`, `transpose(x, axes=None)`, `stack(values, axis=0)`, `concatenate(values, axis=0)` | `stack` and `concatenate` require a non-empty iterable |
+| Tensor algebra | `einsum(subscripts, *operands)`, `matmul(a, b)`, `dot(a, b)`, `ddot(a, b)`, `outer(a, b)`, `trace(A)`, `mag(x)`, `symm(A)`, `dev(A)` | Native patterns are listed above |
 
 `fno.Math.outer(a, b)` maps two vector fields to a tensor field, and `fno.Math.trace(A)` maps a tensor field to a scalar field. `fno.Context.delta_time()` reads the active OpenFOAM time-step size at the invocation boundary.
 

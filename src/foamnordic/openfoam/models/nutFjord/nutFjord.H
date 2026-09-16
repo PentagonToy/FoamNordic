@@ -22,28 +22,45 @@
 #include <cstdint>
 #include <memory>
 
-namespace Foam::LESModels {
+namespace Foam
+{
+namespace LESModels
+{
 
 template<class BasicTurbulenceModel>
-class nutFjord final : public LESeddyViscosity<BasicTurbulenceModel> {
+class nutFjord final : public LESeddyViscosity<BasicTurbulenceModel>
+{
+    // Private Data
+
     std::unique_ptr<foamNordic::ClosureHook> closure_;
     bool nativeAlgebra_;
     foamNordic::operations::Expression nativeNut_;
     std::unique_ptr<foamNordic::NativeAlgebraMonitor> nativeMonitor_;
-    std::uint64_t nativeInvocationIndex_{0};
+    std::uint64_t nativeInvocationIndex_ { 0 };
+
+
+    // Private Member Functions
 
     nutFjord(const nutFjord&) = delete;
     void operator=(const nutFjord&) = delete;
 
 protected:
+    // Protected Member Functions
+
     void correctNut() override;
 
+
 public:
+    // Public Types
+
     using alphaField = typename BasicTurbulenceModel::alphaField;
     using rhoField = typename BasicTurbulenceModel::rhoField;
     using transportModel = typename BasicTurbulenceModel::transportModel;
 
     TypeName("nutFjord");
+
+
+    // Constructors
 
     nutFjord(
         const alphaField& alpha,
@@ -53,16 +70,21 @@ public:
         const surfaceScalarField& phi,
         const transportModel& transport,
         const word& propertiesName = turbulenceModel::propertiesName,
-        const word& type = typeName);
+        const word& type = typeName
+    );
 
     ~nutFjord() override;
+
+
+    // Member Functions
 
     bool read() override;
     tmp<volScalarField> k() const override;
     void correct() override;
 };
 
-}  // namespace Foam::LESModels
+} // End namespace LESModels
+} // End namespace Foam
 
 #ifdef NoRepository
 #include "nutFjord.C"

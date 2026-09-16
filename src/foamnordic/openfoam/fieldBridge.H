@@ -21,43 +21,52 @@
 
 #include <cstdint>
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
 [[nodiscard]] foamnordic::fjord::TensorView inputFieldView(
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
     double physicalTime,
-    scalarField* scratch = nullptr);
+    scalarField* scratch = nullptr
+);
 
 [[nodiscard]] foamnordic::fjord::TensorView inputPatchView(
     const fvMesh& mesh,
     const word& name,
     const word& patch,
     std::uint64_t exchangeIndex,
-    double physicalTime);
+    double physicalTime
+);
 
 [[nodiscard]] foamnordic::fjord::MutableTensorView outputFieldView(
     const fvMesh& mesh,
     const word& name,
     std::uint64_t exchangeIndex,
     double physicalTime,
-    scalarField* scratch = nullptr);
+    scalarField* scratch = nullptr
+);
 
 [[nodiscard]] foamnordic::fjord::MutableTensorView outputPatchView(
     const fvMesh& mesh,
     const word& name,
     const word& patch,
     std::uint64_t exchangeIndex,
-    double physicalTime);
+    double physicalTime
+);
 
 void commitOutputField(
     const fvMesh& mesh,
     const word& name,
-    const scalarField* scratch = nullptr);
+    const scalarField* scratch = nullptr
+);
 
 void correctFieldBoundary(const fvMesh& mesh, const word& name);
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

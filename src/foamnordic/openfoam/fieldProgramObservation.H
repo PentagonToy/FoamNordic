@@ -24,20 +24,24 @@
 #include <cstdint>
 #include <memory>
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
-class FieldProgramObservation final {
+class FieldProgramObservation final
+{
     wordList fields_;
     foamnordic::adapter::CompiledObservationPlan plan_;
     std::unique_ptr<foamnordic::adapter::ObservationPublisher> publisher_;
     std::unique_ptr<foamnordic::adapter::ObservationJsonlWriter> writer_;
-    bool enabled_{true};
+    bool enabled_ { true };
 
     explicit FieldProgramObservation(const dictionary& dict);
 
 public:
-    [[nodiscard]] static std::unique_ptr<FieldProgramObservation> create(
-        const dictionary& closureDict);
+    [[nodiscard]] static std::unique_ptr<FieldProgramObservation>
+    create(const dictionary& closureDict);
 
     FieldProgramObservation(const FieldProgramObservation&) = delete;
     FieldProgramObservation& operator=(const FieldProgramObservation&) = delete;
@@ -47,10 +51,12 @@ public:
         const Time& time,
         std::uint64_t exchangeIndex,
         std::uint64_t topologyGeneration,
-        double closureWait) noexcept;
+        double closureWait
+    ) noexcept;
     void shutdown() noexcept;
 };
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

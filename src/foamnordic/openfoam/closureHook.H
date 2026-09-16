@@ -25,37 +25,45 @@
 #include <string>
 #include <vector>
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
-namespace operations {
+namespace operations
+{
 class OperationFrame;
 }
 
-struct ClosureInput final {
+struct ClosureInput final
+{
     std::string key;
     std::string expression;
     word patch;
 };
 
-struct ClosureOutput final {
+struct ClosureOutput final
+{
     std::string key;
     word field;
     word patch;
 };
 
-class ClosureHook final {
+class ClosureHook final
+{
     std::vector<ClosureInput> inputs_;
     std::vector<ClosureOutput> outputs_;
     FieldProgramSession session_;
     std::unique_ptr<FieldProgramObservation> observation_;
     word program_;
-    [[nodiscard]] static std::vector<ClosureInput> readInputs(
-        const dictionary& dict);
-    [[nodiscard]] static std::vector<ClosureOutput> readOutputs(
-        const dictionary& dict);
+    [[nodiscard]] static std::vector<ClosureInput>
+    readInputs(const dictionary& dict);
+    [[nodiscard]] static std::vector<ClosureOutput>
+    readOutputs(const dictionary& dict);
     [[nodiscard]] static foamnordic::adapter::ExchangeContract contract(
         const std::vector<ClosureInput>& inputs,
-        const std::vector<ClosureOutput>& outputs);
+        const std::vector<ClosureOutput>& outputs
+    );
 
 public:
     using InputBinder = std::function<void(operations::OperationFrame&)>;
@@ -66,17 +74,14 @@ public:
     ClosureHook(const ClosureHook&) = delete;
     ClosureHook& operator=(const ClosureHook&) = delete;
 
-    [[nodiscard]] std::uint64_t invoke(
-        const fvMesh& mesh,
-        const Time& time);
-    [[nodiscard]] std::uint64_t invoke(
-        const fvMesh& mesh,
-        const Time& time,
-        const InputBinder& bindInputs);
+    [[nodiscard]] std::uint64_t invoke(const fvMesh& mesh, const Time& time);
+    [[nodiscard]] std::uint64_t
+    invoke(const fvMesh& mesh, const Time& time, const InputBinder& bindInputs);
 
     void shutdown();
 };
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

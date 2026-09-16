@@ -131,6 +131,12 @@ All remaining parameters follow `Export.sklearn`. Equinox payloads execute in a 
 ## Inspecting an artefact
 
 ```python
+fno.Models.load(path)
+```
+
+`Models.load()` validates the FNOM container and returns read-only metadata without loading its payload for execution.
+
+```python
 import foamnordic as fno
 
 artifact = fno.Models.load("reaction-rate.fnom")

@@ -2,7 +2,7 @@
 
 This directory keeps publication assets and release tooling outside the runtime package.
 
-End users do not need these files. The PyPI README supplies package metadata, while maintainer scripts and their tests are excluded from the wheel payload. The tracked inputs make each release reproducible; generated wheelhouses remain untracked.
+This directory contains publication assets and release tooling. Generated wheelhouses remain untracked.
 
 | Path | Purpose |
 | --- | --- |
@@ -18,7 +18,7 @@ From a clean, pushed `main` branch:
 ./others/release/wheel-maker
 ```
 
-The command performs the following checks:
+The command:
 
 1. verifies that local `HEAD` exactly matches `origin/main`;
 2. starts `.github/workflows/wheels.yml` and waits in compact mode;

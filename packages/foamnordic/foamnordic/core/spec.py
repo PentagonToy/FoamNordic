@@ -754,13 +754,13 @@ class Longship:
     def launch(
         self,
         *,
+        start_timeout: float | None = None,
         readiness_timeout: float = 120.0,
+        receive_memory_bytes: int | None = None,
+        profile_every: int = 0,
         termination_grace: float = 30.0,
         orphan_timeout: float = 30.0,
-        start_timeout: float | None = None,
         verbose: bool | None = None,
-        profile_every: int = 0,
-        receive_memory_bytes: int | None = None,
     ) -> Run:
         """Prepare an isolated case and return a non-blocking native Run."""
 

@@ -20,148 +20,215 @@
 #include <unordered_set>
 #include <utility>
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
-std::vector<ClosureInput> ClosureHook::readInputs(const dictionary& dict) {
+std::vector<ClosureInput>
+ClosureHook::readInputs(
+    const dictionary& dict
+)
+{
     const auto names = dict.get<wordList>("inputs");
-    const auto expressions = dict.getOrDefault<List<string>>(
-        "inputExpressions", List<string>());
-    const auto patches = dict.getOrDefault<wordList>(
-        "inputPatches", wordList());
-    if (!expressions.empty() && expressions.size() != names.size()) {
+    const auto expressions
+        = dict.getOrDefault<List<string>>("inputExpressions", List<string>());
+    const auto patches
+        = dict.getOrDefault<wordList>("inputPatches", wordList());
+    if (!expressions.empty() && expressions.size() != names.size())
+    {
         throw std::invalid_argument(
-            "FoamNordic inputExpressions must have the same length as inputs.");
+            "FoamNordic inputExpressions must have the same length as inputs."
+        );
     }
-    if (!patches.empty() && patches.size() != names.size()) {
+    if (!patches.empty() && patches.size() != names.size())
+    {
         throw std::invalid_argument(
-            "FoamNordic inputPatches must have the same length as inputs.");
+            "FoamNordic inputPatches must have the same length as inputs."
+        );
     }
 
     std::vector<ClosureInput> result;
     result.reserve(names.size());
     std::unordered_set<std::string> unique;
-    forAll(names, index) {
+    forAll(names, index)
+    {
         const std::string key(names[index].c_str());
         const std::string expression(
             expressions.empty() ? names[index].c_str()
-                                : expressions[index].c_str());
-        if (key.empty() || expression.empty() || !unique.insert(key).second) {
+                                : expressions[index].c_str()
+        );
+        if (key.empty() || expression.empty() || !unique.insert(key).second)
+        {
             throw std::invalid_argument(
                 "FoamNordic closure input keys and expressions must be "
-                "non-empty, with unique keys.");
+                "non-empty, with unique keys."
+            );
         }
         const word patch = patches.empty() || patches[index] == "none"
             ? word()
             : patches[index];
         if (!patch.empty()
-            && expression.find_first_of("(),") != std::string::npos) {
+            && expression.find_first_of("(),") != std::string::npos)
+        {
             throw std::invalid_argument(
                 "FoamNordic patch inputs must name a stored field, not a "
-                "derived expression.");
+                "derived expression."
+            );
         }
-        result.push_back({key, expression, patch});
+        result.push_back({ key, expression, patch });
     }
-    if (result.empty()) {
+    if (result.empty())
+    {
         throw std::invalid_argument(
-            "FoamNordic closure requires at least one input expression.");
+            "FoamNordic closure requires at least one input expression."
+        );
     }
     return result;
 }
 
-std::vector<ClosureOutput> ClosureHook::readOutputs(const dictionary& dict) {
+std::vector<ClosureOutput>
+ClosureHook::readOutputs(
+    const dictionary& dict
+)
+{
     const auto fields = dict.get<wordList>("outputs");
     const auto keys = dict.getOrDefault<wordList>("outputKeys", wordList());
-    const auto patches = dict.getOrDefault<wordList>(
-        "outputPatches", wordList());
-    if (fields.empty()) {
+    const auto patches
+        = dict.getOrDefault<wordList>("outputPatches", wordList());
+    if (fields.empty())
+    {
         throw std::invalid_argument(
-            "FoamNordic closure requires at least one output field.");
+            "FoamNordic closure requires at least one output field."
+        );
     }
-    if (!keys.empty() && keys.size() != fields.size()) {
+    if (!keys.empty() && keys.size() != fields.size())
+    {
         throw std::invalid_argument(
-            "FoamNordic outputKeys must have the same length as outputs.");
+            "FoamNordic outputKeys must have the same length as outputs."
+        );
     }
-    if (!patches.empty() && patches.size() != fields.size()) {
+    if (!patches.empty() && patches.size() != fields.size())
+    {
         throw std::invalid_argument(
-            "FoamNordic outputPatches must have the same length as outputs.");
+            "FoamNordic outputPatches must have the same length as outputs."
+        );
     }
     std::vector<ClosureOutput> result;
     result.reserve(fields.size());
     std::unordered_set<std::string> unique;
-    forAll(fields, index) {
+    forAll(fields, index)
+    {
         const std::string key(
-            keys.empty() ? fields[index].c_str() : keys[index].c_str());
-        if (key.empty() || !unique.insert(key).second) {
+            keys.empty() ? fields[index].c_str() : keys[index].c_str()
+        );
+        if (key.empty() || !unique.insert(key).second)
+        {
             throw std::invalid_argument(
-                "FoamNordic closure output keys must be non-empty and unique.");
+                "FoamNordic closure output keys must be non-empty and unique."
+            );
         }
         const word patch = patches.empty() || patches[index] == "none"
             ? word()
             : patches[index];
-        result.push_back({key, fields[index], patch});
+        result.push_back({ key, fields[index], patch });
     }
     return result;
 }
 
-foamnordic::adapter::ExchangeContract ClosureHook::contract(
+foamnordic::adapter::ExchangeContract
+ClosureHook::contract(
     const std::vector<ClosureInput>& inputs,
-    const std::vector<ClosureOutput>& outputs) {
+    const std::vector<ClosureOutput>& outputs
+)
+{
     foamnordic::adapter::ExchangeContract result;
     result.inputs.reserve(inputs.size());
     result.outputs.reserve(outputs.size());
-    for (const auto& input : inputs) {
+    for (const auto& input : inputs)
+    {
         result.inputs.push_back(input.key);
     }
-    for (const auto& output : outputs) {
+    for (const auto& output : outputs)
+    {
         result.outputs.push_back(output.key);
     }
     result.validate();
     return result;
 }
 
-ClosureHook::ClosureHook(const dictionary& dict)
-    : inputs_(readInputs(dict)),
-      outputs_(readOutputs(dict)),
-      session_(dict, contract(inputs_, outputs_)),
-      observation_(FieldProgramObservation::create(dict)),
-      program_(dict.getOrDefault<word>("profileProgram", "closure")) {}
+ClosureHook::ClosureHook(
+    const dictionary& dict
+) :
+    inputs_(readInputs(dict)),
+    outputs_(readOutputs(dict)),
+    session_(dict, contract(inputs_, outputs_)),
+    observation_(FieldProgramObservation::create(dict)),
+    program_(dict.getOrDefault<word>("profileProgram", "closure"))
+{
+}
 
-ClosureHook::~ClosureHook() noexcept {
-    try {
+ClosureHook::~ClosureHook() noexcept
+{
+    try
+    {
         shutdown();
-    } catch (...) {
+    }
+    catch (...)
+    {
         // Destructors must not turn solver teardown into a failure path.
     }
 }
 
-std::uint64_t ClosureHook::invoke(const fvMesh& mesh, const Time& time) {
-    return invoke(mesh, time, [](operations::OperationFrame&) {});
+std::uint64_t
+ClosureHook::invoke(
+    const fvMesh& mesh,
+    const Time& time
+)
+{
+    return invoke(
+        mesh,
+        time,
+        [](operations::OperationFrame&)
+        {
+        }
+    );
 }
 
-std::uint64_t ClosureHook::invoke(
+std::uint64_t
+ClosureHook::invoke(
     const fvMesh& mesh,
     const Time& time,
-    const InputBinder& bindInputs) {
+    const InputBinder& bindInputs
+)
+{
     operations::OperationFrame frame(mesh);
-    if (bindInputs) {
+    if (bindInputs)
+    {
         bindInputs(frame);
     }
     auto invocation = session_.begin(mesh, time);
-    for (const auto& input : inputs_) {
-        if (input.patch.empty()) {
+    for (const auto& input : inputs_)
+    {
+        if (input.patch.empty())
+        {
             frame.provide(invocation, input.key, input.expression);
-        } else {
+        }
+        else
+        {
             auto view = inputPatchView(
                 mesh,
                 word(input.expression),
                 input.patch,
                 0,
-                0.0);
+                0.0
+            );
             view.name = input.key;
             invocation.provide(std::move(view));
         }
     }
-    for (const auto& output : outputs_) {
+    for (const auto& output : outputs_)
+    {
         auto view = output.patch.empty()
             ? outputFieldView(mesh, output.field, 0, 0.0)
             : outputPatchView(mesh, output.field, output.patch, 0, 0.0);
@@ -171,22 +238,36 @@ std::uint64_t ClosureHook::invoke(
 
     const auto closureStarted = std::chrono::steady_clock::now();
     const auto exchangeIndex = invocation.commit();
-    const auto closureWait = std::chrono::duration<double>(
-        std::chrono::steady_clock::now() - closureStarted).count();
-    for (const auto& output : outputs_) {
-        if (output.patch.empty()) {
+    const auto closureWait
+        = std::chrono::duration<double>(
+              std::chrono::steady_clock::now() - closureStarted
+        )
+              .count();
+    for (const auto& output : outputs_)
+    {
+        if (output.patch.empty())
+        {
             correctFieldBoundary(mesh, output.field);
         }
     }
-    if (observation_) {
+    if (observation_)
+    {
         observation_->publish(
-            mesh, time, exchangeIndex, session_.topologyGeneration(), closureWait);
+            mesh,
+            time,
+            exchangeIndex,
+            session_.topologyGeneration(),
+            closureWait
+        );
     }
     return exchangeIndex;
 }
 
-void ClosureHook::shutdown() {
-    if (observation_) {
+void
+ClosureHook::shutdown()
+{
+    if (observation_)
+    {
         observation_->shutdown();
         observation_.reset();
     }
@@ -194,4 +275,5 @@ void ClosureHook::shutdown() {
     session_.shutdown();
 }
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam

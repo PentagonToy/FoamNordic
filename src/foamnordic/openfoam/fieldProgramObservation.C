@@ -25,25 +25,42 @@
 #include <unordered_set>
 #include <utility>
 
-namespace Foam::foamNordic {
-namespace {
+namespace Foam
+{
+namespace foamNordic
+{
+namespace
+{
 
-foamnordic::adapter::ObservationRetention retention(const dictionary& dict) {
+foamnordic::adapter::ObservationRetention
+retention(
+    const dictionary& dict
+)
+{
     const auto maxRecords = dict.getOrDefault<label>("maxRecords", 64);
     const auto maxBytes = dict.getOrDefault<label>("maxBytes", 256 * 1024);
-    if (maxRecords <= 0 || maxBytes <= 0) {
+    if (maxRecords <= 0 || maxBytes <= 0)
+    {
         throw std::invalid_argument(
-            "FoamNordic observation maxRecords and maxBytes must be positive.");
+            "FoamNordic observation maxRecords and maxBytes must be positive."
+        );
     }
     const auto overflow = dict.getOrDefault<word>("overflow", "dropOldest");
     foamnordic::adapter::ObservationOverflow policy;
-    if (overflow == "dropOldest") {
+    if (overflow == "dropOldest")
+    {
         policy = foamnordic::adapter::ObservationOverflow::drop_oldest;
-    } else if (overflow == "dropNewest") {
+    }
+    else if (overflow == "dropNewest")
+    {
         policy = foamnordic::adapter::ObservationOverflow::drop_newest;
-    } else {
+    }
+    else
+    {
         throw std::invalid_argument(
-            "FoamNordic observation overflow must be dropOldest or dropNewest.");
+            "FoamNordic observation overflow must be "
+            "dropOldest or dropNewest."
+        );
     }
     return {
         static_cast<std::size_t>(maxRecords),
@@ -52,126 +69,174 @@ foamnordic::adapter::ObservationRetention retention(const dictionary& dict) {
     };
 }
 
-foamnordic::adapter::CompiledObservationPlan compilePlan(
+foamnordic::adapter::CompiledObservationPlan
+compilePlan(
     const wordList& fields,
-    const dictionary& dict) {
+    const dictionary& dict
+)
+{
     const auto every = dict.getOrDefault<label>("every", 1);
     const auto offset = dict.getOrDefault<label>("offset", 0);
-    if (every <= 0 || offset < 0) {
+    if (every <= 0 || offset < 0)
+    {
         throw std::invalid_argument(
-            "FoamNordic observation every must be positive and offset non-negative.");
+            "FoamNordic observation every must be "
+            "positive and offset non-negative."
+        );
     }
     foamnordic::adapter::ObservationPlan declaration;
     std::unordered_set<std::string> unique;
-    for (const auto& field : fields) {
+    for (const auto& field : fields)
+    {
         const std::string name(field.c_str());
-        if (name.empty() || !unique.insert(name).second) {
+        if (name.empty() || !unique.insert(name).second)
+        {
             throw std::invalid_argument(
-                "FoamNordic observation fields must be non-empty and unique.");
+                "FoamNordic observation fields must be non-empty and unique."
+            );
         }
         declaration.observe(
             name,
             {
                 static_cast<std::uint64_t>(every),
                 static_cast<std::uint64_t>(offset),
-            });
+            }
+        );
     }
     return declaration.compile();
 }
 
-}  // namespace
+} // namespace
 
-FieldProgramObservation::FieldProgramObservation(const dictionary& dict)
-    : fields_(dict.get<wordList>("fields")),
-      plan_(compilePlan(fields_, dict)) {
-    if (dict.found("path")) {
+FieldProgramObservation::FieldProgramObservation(
+    const dictionary& dict
+) :
+    fields_(dict.get<wordList>("fields")),
+    plan_(compilePlan(fields_, dict))
+{
+    if (dict.found("path"))
+    {
         writer_ = std::make_unique<foamnordic::adapter::ObservationJsonlWriter>(
             resolveRankAddress(dict.get<string>("path")).c_str(),
-            retention(dict));
-    } else {
-        publisher_ = std::make_unique<foamnordic::adapter::ObservationPublisher>(
-            foamnordic::fjord::connect(
-                foamnordic::fjord::FjordAddress::parse(
-                    resolveRankAddress(dict.get<string>("address")).c_str())),
-            retention(dict));
+            retention(dict)
+        );
+    }
+    else
+    {
+        publisher_
+            = std::make_unique<foamnordic::adapter::ObservationPublisher>(
+                foamnordic::fjord::connect(
+                    foamnordic::fjord::FjordAddress::parse(
+                        resolveRankAddress(dict.get<string>("address")).c_str()
+                    )
+                ),
+                retention(dict)
+            );
     }
 }
 
-std::unique_ptr<FieldProgramObservation> FieldProgramObservation::create(
-    const dictionary& closureDict) {
-    if (!closureDict.found("observation")) {
+std::unique_ptr<FieldProgramObservation>
+FieldProgramObservation::create(
+    const dictionary& closureDict
+)
+{
+    if (!closureDict.found("observation"))
+    {
         return nullptr;
     }
     return std::unique_ptr<FieldProgramObservation>(
-        new FieldProgramObservation(closureDict.subDict("observation")));
+        new FieldProgramObservation(closureDict.subDict("observation"))
+    );
 }
 
-void FieldProgramObservation::publish(
+void
+FieldProgramObservation::publish(
     const fvMesh& mesh,
     const Time& time,
     std::uint64_t exchangeIndex,
     std::uint64_t topologyGeneration,
-    double closureWait) noexcept {
-    if (!enabled_) {
+    double closureWait
+) noexcept
+{
+    if (!enabled_)
+    {
         return;
     }
-    try {
+    try
+    {
         const auto started = std::chrono::steady_clock::now();
         foamnordic::adapter::ReadOnlyFieldMap views;
         views.reserve(fields_.size());
-        for (const auto& field : fields_) {
-            auto view =
-                inputFieldView(
-                    mesh,
-                    field,
-                    exchangeIndex,
-                    static_cast<double>(time.value()));
+        for (const auto& field : fields_)
+        {
+            auto view = inputFieldView(
+                mesh,
+                field,
+                exchangeIndex,
+                static_cast<double>(time.value())
+            );
             view.topology_generation = topologyGeneration;
-            views.emplace(
-                field.c_str(),
-                std::move(view));
+            views.emplace(field.c_str(), std::move(view));
         }
         auto record = plan_.execute(
             exchangeIndex,
             static_cast<double>(time.value()),
             views,
-            topologyGeneration);
-        if (record) {
+            topologyGeneration
+        );
+        if (record)
+        {
             record->model_wait = closureWait;
             record->evaluate = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - started).count();
-            if (writer_) {
+                                   std::chrono::steady_clock::now() - started
+            )
+                                   .count();
+            if (writer_)
+            {
                 static_cast<void>(writer_->try_publish(std::move(*record)));
-            } else {
+            }
+            else
+            {
                 static_cast<void>(publisher_->try_publish(std::move(*record)));
             }
         }
-        if (writer_ && !writer_->healthy()) {
+        if (writer_ && !writer_->healthy())
+        {
             throw std::runtime_error(writer_->failure());
         }
-        if (publisher_ && !publisher_->healthy()) {
+        if (publisher_ && !publisher_->healthy())
+        {
             throw std::runtime_error(publisher_->failure());
         }
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception& error)
+    {
         enabled_ = false;
-        Info<< "[FoamNordic] Observation disabled: " << error.what() << nl;
-        if (writer_) {
+        Info << "[FoamNordic] Observation disabled: " << error.what() << nl;
+        if (writer_)
+        {
             writer_->stop();
         }
-        if (publisher_) {
+        if (publisher_)
+        {
             publisher_->stop();
         }
     }
 }
 
-void FieldProgramObservation::shutdown() noexcept {
+void
+FieldProgramObservation::shutdown() noexcept
+{
     enabled_ = false;
-    if (publisher_) {
+    if (publisher_)
+    {
         publisher_->stop();
     }
-    if (writer_) {
+    if (writer_)
+    {
         writer_->stop();
     }
 }
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam

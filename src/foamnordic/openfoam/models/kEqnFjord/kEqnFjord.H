@@ -24,10 +24,16 @@
 #include <memory>
 #include <string>
 
-namespace Foam::LESModels {
+namespace Foam
+{
+namespace LESModels
+{
 
 template<class BasicTurbulenceModel>
-class kEqnFjord final : public LESeddyViscosity<BasicTurbulenceModel> {
+class kEqnFjord final : public LESeddyViscosity<BasicTurbulenceModel>
+{
+    // Private Data
+
     volScalarField k_;
     dimensionedScalar Ck_;
     volScalarField kProduction_;
@@ -53,6 +59,9 @@ class kEqnFjord final : public LESeddyViscosity<BasicTurbulenceModel> {
     std::uint64_t nativeCommitNanoseconds_;
     std::uint64_t nativeInvocationIndex_;
 
+
+    // Private Member Functions
+
     kEqnFjord(const kEqnFjord&) = delete;
     void operator=(const kEqnFjord&) = delete;
 
@@ -62,15 +71,22 @@ class kEqnFjord final : public LESeddyViscosity<BasicTurbulenceModel> {
     void writeNativeTelemetry() const;
 
 protected:
+    // Protected Member Functions
+
     void correctNut() override;
     tmp<fvScalarMatrix> kSource() const;
 
 public:
+    // Public Types
+
     using alphaField = typename BasicTurbulenceModel::alphaField;
     using rhoField = typename BasicTurbulenceModel::rhoField;
     using transportModel = typename BasicTurbulenceModel::transportModel;
 
     TypeName("kEqnFjord");
+
+
+    // Constructors
 
     kEqnFjord(
         const alphaField& alpha,
@@ -80,18 +96,27 @@ public:
         const surfaceScalarField& phi,
         const transportModel& transport,
         const word& propertiesName = turbulenceModel::propertiesName,
-        const word& type = typeName);
+        const word& type = typeName
+    );
 
     ~kEqnFjord() override;
 
+
+    // Member Functions
+
     bool read() override;
     void validate() override;
-    tmp<volScalarField> k() const override { return k_; }
+    tmp<volScalarField>
+    k() const override
+    {
+        return k_;
+    }
     tmp<volScalarField> DkEff() const;
     void correct() override;
 };
 
-}  // namespace Foam::LESModels
+} // End namespace LESModels
+} // End namespace Foam
 
 #ifdef NoRepository
 #include "kEqnFjord.C"

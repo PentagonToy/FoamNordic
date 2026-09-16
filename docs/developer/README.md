@@ -33,5 +33,6 @@ Do not embed a model backend in an OpenFOAM adapter, move solver equations into 
 | Guide | Use it for |
 | --- | --- |
 | [Field programmes and OpenFOAM](field-programs.md) | Closures, transforms, native algebra, observations and external solver adapters |
+| [OpenFOAM source style](openfoam-style.md) | Formatting and reviewing OpenFOAM-linked C++ without changing runtime design |
 | [Native runtime](native-runtime.md) | Rune, Fjord, Harbor, ModelHost, Smedja, BindNordic and connectors |
 | [Verification](verification.md) | Selecting the smallest sufficient local, OpenFOAM, MPI and Roihu checks |

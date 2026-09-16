@@ -13,6 +13,10 @@ from .core.paths import PathInput, path_from
 from .core.validation import require_nonempty, require_positive
 
 
+_DEFAULT_OF_CMD: str | None = None
+_DEFAULT_SHELL = "bash"
+
+
 @dataclass(frozen=True, slots=True)
 class _Toolchain:
     """Shell command that prepares OpenFOAM before a native command runs.
@@ -65,6 +69,36 @@ class _Toolchain:
         }
 
 
+def _toolchain(of_cmd: str | None, shell: str) -> _Toolchain:
+    command = None if of_cmd is None else require_nonempty(of_cmd, "of_cmd")
+    words = () if command is None else tuple(shlex.split(command))
+    if words and Path(words[0]).name == "openfoam":
+        return _Toolchain.openfoam_wrapper(command, shell=shell)
+    if command is not None and "/" in command and not any(
+        character.isspace() for character in command
+    ):
+        return _Toolchain.module(command, shell=shell)
+    return _Toolchain(command=command, shell=shell)
+
+
+def setup(*, of_cmd: str | None = None, shell: str = "bash") -> None:
+    """Set the default OpenFOAM shell environment for later declarations.
+
+    ``of_cmd="openfoam/2512"`` is interpreted as ``module load
+    openfoam/2512``. Cases snapshot these defaults when declared; standalone
+    Dataset derivation uses the active defaults immediately.
+    """
+
+    _toolchain(of_cmd, shell)
+    global _DEFAULT_OF_CMD, _DEFAULT_SHELL
+    _DEFAULT_OF_CMD = of_cmd
+    _DEFAULT_SHELL = shell
+
+
+def _configured_toolchain() -> _Toolchain:
+    return _toolchain(_DEFAULT_OF_CMD, _DEFAULT_SHELL)
+
+
 @dataclass(frozen=True, slots=True)
 class DictionaryTemplate:
     """Custom OpenFOAM dictionary template for a closure integration.
@@ -115,7 +149,7 @@ class Case:
     case_dir: PathInput
     run_dir: PathInput
     of_cmd: str | None = None
-    shell: str = "bash"
+    shell: str | None = None
     application: str = "pimpleFoam"
     ranks: int = 1
     integration: DictionaryTemplate | None = None
@@ -154,18 +188,9 @@ class Case:
             require_nonempty(self.application, "application"),
         )
         require_positive(self.ranks, "ranks")
-        command = self.of_cmd
-        if command is not None:
-            command = require_nonempty(command, "of_cmd")
-        words = () if command is None else tuple(shlex.split(command))
-        if words and Path(words[0]).name == "openfoam":
-            toolchain = _Toolchain.openfoam_wrapper(command, shell=self.shell)
-        elif command is not None and "/" in command and not any(
-            character.isspace() for character in command
-        ):
-            toolchain = _Toolchain.module(command, shell=self.shell)
-        else:
-            toolchain = _Toolchain(command=command, shell=self.shell)
+        command = _DEFAULT_OF_CMD if self.of_cmd is None else self.of_cmd
+        shell = _DEFAULT_SHELL if self.shell is None else self.shell
+        toolchain = _toolchain(command, shell)
         object.__setattr__(self, "of_cmd", command)
         object.__setattr__(self, "shell", toolchain.shell)
         object.__setattr__(self, "_toolchain", toolchain)
@@ -262,7 +287,7 @@ class Case:
         }
 
 
-__all__ = ["Case", "DictionaryTemplate", "Field"]
+__all__ = ["Case", "DictionaryTemplate", "Field", "setup"]
 
 
 def __dir__() -> list[str]:

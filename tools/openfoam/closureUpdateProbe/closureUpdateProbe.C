@@ -14,16 +14,18 @@
 #include "closureHook.H"
 #include "fvCFD.H"
 
-int main(int argc, char* argv[])
+int
+main(
+    int argc,
+    char* argv[]
+)
 {
-    #include "setRootCaseLists.H"
-    #include "createTime.H"
-    #include "createMesh.H"
+#include "setRootCaseLists.H"
+#include "createTime.H"
+#include "createMesh.H"
 
-    Foam::volVectorField U
-    (
-        Foam::IOobject
-        (
+    Foam::volVectorField U(
+        Foam::IOobject(
             "U",
             runTime.timeName(),
             mesh,
@@ -32,10 +34,8 @@ int main(int argc, char* argv[])
         ),
         mesh
     );
-    Foam::volScalarField p
-    (
-        Foam::IOobject
-        (
+    Foam::volScalarField p(
+        Foam::IOobject(
             "p",
             runTime.timeName(),
             mesh,
@@ -44,10 +44,8 @@ int main(int argc, char* argv[])
         ),
         mesh
     );
-    Foam::IOdictionary properties
-    (
-        Foam::IOobject
-        (
+    Foam::IOdictionary properties(
+        Foam::IOobject(
             "closureUpdateProperties",
             runTime.system(),
             mesh,
@@ -65,6 +63,6 @@ int main(int argc, char* argv[])
 
     U.write();
     p.write();
-    Foam::Info<< "End\n" << Foam::endl;
+    Foam::Info << "End\n" << Foam::endl;
     return 0;
 }

@@ -6,7 +6,7 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 ### Data and API
 
-- `fno.Dataset` writes lossless indexed FData containers from reconstructed or decomposed OpenFOAM cases with bounded field-by-field compression, selective loading, optional coordinates, disposable OpenFOAM derivation of `gradX`, `C`, and configured or `cubeRootVol` `delta`, and binary OpenFOAM processor addressing.
+- `fno.Dataset` writes lossless indexed FNOD containers from reconstructed or decomposed OpenFOAM cases with bounded field-by-field compression, selective loading, optional coordinates, disposable OpenFOAM derivation of `gradX`, `C`, and configured or `cubeRootVol` `delta`, and binary OpenFOAM processor addressing.
 - The Python reference now groups the shallow public namespace by workload, execution, artefacts, results, and reproducibility. Public keyword options follow a consistent declaration, execution, and safety order.
 
 ### OpenFOAM development

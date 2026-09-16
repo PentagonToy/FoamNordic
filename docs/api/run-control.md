@@ -16,6 +16,7 @@ flowchart LR
 
 | API | Purpose | Returns |
 | --- | --- | --- |
+| `fno.OpenFOAM.setup(...)` | Set the default OpenFOAM shell environment | `None` |
 | `fno.OpenFOAM.Case(...)` | Declare a source case, run location and OpenFOAM environment | `OpenFOAM.Case` |
 | `case.initialize(...)` | Declare mesh validation or generation for the isolated run | The same `Case` |
 | `fno.Operator.model(...)` | Use an executable FNOM model | `Operator` |
@@ -34,23 +35,38 @@ flowchart LR
 from pathlib import Path
 import foamnordic as fno
 
+fno.OpenFOAM.setup(
+    of_cmd="openfoam/2512",
+    shell="bash",
+)
+
 case = fno.OpenFOAM.Case(
     name="lidDrivenCavity",
     case_dir=Path("cases/lidDrivenCavity"),
     run_dir=Path("output"),
-    of_cmd="openfoam/2512",
     application="pimpleFoam",
 )
 case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
 ```
 
-`of_cmd` may be an environment module shorthand or an explicit shell command. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
+`OpenFOAM.setup(of_cmd="openfoam/2512")` resolves the module shorthand to `module load openfoam/2512` inside generated shell commands. It also supplies the toolchain used by standalone `Dataset.parse(...)` derivation. A `Case` may override either setting. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
+
+### `OpenFOAM.setup`
+
+```python
+fno.OpenFOAM.setup(*, of_cmd=None, shell="bash")
+```
+
+| Parameter | Type | Default | Allowed values or constraint |
+| --- | --- | --- | --- |
+| `of_cmd` | `str \| None` | `None` | Module shorthand, shell initialisation command, OpenFOAM.app wrapper, or `None` for commands already on `PATH` |
+| `shell` | `str` | `"bash"` | Executable resolving to `bash` or `zsh` |
 
 ### `OpenFOAM.Case`
 
 ```python
 fno.OpenFOAM.Case(*, name=None, case_dir, run_dir, of_cmd=None,
-                  shell="bash", application="pimpleFoam", ranks=1,
+                  shell=None, application="pimpleFoam", ranks=1,
                   integration=None)
 ```
 
@@ -59,8 +75,8 @@ fno.OpenFOAM.Case(*, name=None, case_dir, run_dir, of_cmd=None,
 | `name` | `str \| None` | `None` | Non-empty run label; inferred from `case_dir` when omitted |
 | `case_dir` | path | required | Existing source case; must differ from `run_dir` |
 | `run_dir` | path | required | Parent output location for isolated runs |
-| `of_cmd` | `str \| None` | `None` | Module name, shell initialisation command, OpenFOAM.app wrapper or commands already on `PATH` |
-| `shell` | `str` | `"bash"` | Executable resolving to `bash` or `zsh` |
+| `of_cmd` | `str \| None` | configured default | Module name, shell initialisation command, OpenFOAM.app wrapper or commands already on `PATH` |
+| `shell` | `str \| None` | configured default | Executable resolving to `bash` or `zsh` |
 | `application` | `str` | `"pimpleFoam"` | Non-empty OpenFOAM executable name or path |
 | `ranks` | `int` | `1` | Positive integer |
 | `integration` | `OpenFOAM.DictionaryTemplate \| None` | `None` | Optional out-of-tree adapter dictionary template |
@@ -321,20 +337,20 @@ fno.Longship(case, closures=(), transforms=(), observations=(),
 | `numerics` | `str` | `"convenient"` | `convenient` may add missing derived-field schemes to the copied case; `strict` rejects them |
 
 ```python
-longship.launch(*, readiness_timeout=120.0, termination_grace=30.0,
-                orphan_timeout=30.0, start_timeout=None, verbose=None,
-                profile_every=0, receive_memory_bytes=None)
+longship.launch(*, start_timeout=None, readiness_timeout=120.0,
+                receive_memory_bytes=None, profile_every=0,
+                termination_grace=30.0, orphan_timeout=30.0, verbose=None)
 ```
 
 | Parameter | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `start_timeout` | `float \| None` | `None` | Positive seconds to wait for scheduler start; unlimited when omitted |
 | `readiness_timeout` | `float` | `120.0` | Positive seconds allowed for ModelHost readiness |
+| `receive_memory_bytes` | `int \| None` | `None` | Positive shared pre-receive memory credit; automatically budgeted when omitted |
+| `profile_every` | `int` | `0` | Profile every N exchanges; `0` disables profiling |
 | `termination_grace` | `float` | `30.0` | Positive seconds allowed for coordinated child shutdown |
 | `orphan_timeout` | `float` | `30.0` | Non-negative seconds before cancelling after owner loss; `0` requests immediate cancellation |
-| `start_timeout` | `float \| None` | `None` | Positive seconds to wait for scheduler start; unlimited when omitted |
 | `verbose` | `bool \| None` | `None` | Overrides `Longship.verbose`; `None` inherits it |
-| `profile_every` | `int` | `0` | Profile every N exchanges; `0` disables profiling |
-| `receive_memory_bytes` | `int \| None` | `None` | Positive shared pre-receive memory credit; automatically budgeted when omitted |
 
 ## Run ownership
 

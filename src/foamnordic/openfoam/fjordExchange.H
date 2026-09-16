@@ -25,22 +25,32 @@
 #include <string>
 #include <vector>
 
-namespace foamnordic::adapter {
+namespace foamnordic::adapter
+{
 class AtomicFieldExchange;
 class ExchangeSequence;
 }
 
-namespace foamnordic::fjord {
+namespace foamnordic::fjord
+{
 class Harbor;
 }
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 class FieldProgramObservation;
-}
+} // End namespace foamNordic
+} // End namespace Foam
 
-namespace Foam::functionObjects {
+namespace Foam
+{
+namespace functionObjects
+{
 
-class fjordExchange final : public fvMeshFunctionObject {
+class fjordExchange final : public fvMeshFunctionObject
+{
     wordList inputKeys_;
     wordList inputs_;
     wordList inputPatches_;
@@ -48,11 +58,11 @@ class fjordExchange final : public fvMeshFunctionObject {
     wordList outputs_;
     wordList outputPatches_;
     string address_;
-    bool sharedMemory_{true};
-    bool ucx_{false};
-    std::uint64_t sessionId_{1};
-    std::uint64_t profileEvery_{0};
-    bool nativeAlgebra_{false};
+    bool sharedMemory_ { true };
+    bool ucx_ { false };
+    std::uint64_t sessionId_ { 1 };
+    std::uint64_t profileEvery_ { 0 };
+    bool nativeAlgebra_ { false };
     std::vector<foamNordic::operations::Expression> outputExpressions_;
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::AtomicFieldExchange> exchange_;
@@ -63,8 +73,14 @@ class fjordExchange final : public fvMeshFunctionObject {
     std::vector<scalarField> outputScratch_;
     foamNordic::MeshTopologySequence topology_;
 
-    enum class Stage { timeStepStart, outerCorrector, pressureCorrected, timeStepEnd };
-    Stage stage_{Stage::timeStepStart};
+    enum class Stage
+    {
+        timeStepStart,
+        outerCorrector,
+        pressureCorrected,
+        timeStepEnd
+    };
+    Stage stage_ { Stage::timeStepStart };
 
     void connectPeer();
     bool exchange();
@@ -79,7 +95,11 @@ public:
 #pragma clang diagnostic pop
 #endif
 
-    fjordExchange(const word& name, const Time& runTime, const dictionary& dict);
+    fjordExchange(
+        const word& name,
+        const Time& runTime,
+        const dictionary& dict
+    );
     ~fjordExchange() override;
 
     fjordExchange(const fjordExchange&) = delete;
@@ -91,6 +111,7 @@ public:
     void updateMesh(const mapPolyMesh&) override;
 };
 
-}  // namespace Foam::functionObjects
+} // End namespace functionObjects
+} // End namespace Foam
 
 #endif

@@ -1,4 +1,4 @@
-"""Lossless, indexed storage for FoamNordic field datasets."""
+"""Lossless, indexed FoamNordic data containers."""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ import zlib
 import numpy as np
 
 
-class FDataError(ValueError):
-    """Raised when an FData container is incomplete or incompatible."""
+class FNODError(ValueError):
+    """Raised when an FNOD container is incomplete or incompatible."""
 
 
-_MAGIC = b"FNOFDAT1"
+_MAGIC = b"FNOFNOD1"
 _TRAILER = struct.Struct("<8sQQ")
-_TRAILER_MAGIC = b"FNOFEND1"
+_TRAILER_MAGIC = b"FNONEND1"
 _COMPRESSION_BLOCK_BYTES = 16 * 1024 * 1024
 
 
@@ -36,8 +36,8 @@ def _encode_array(item: tuple[str, np.ndarray]) -> tuple[str, bytes, int, str, l
 
 
 @dataclass(frozen=True, slots=True)
-class FDataChunk:
-    """One independently compressed array in an FData container."""
+class FNODChunk:
+    """One independently compressed array in an FNOD container."""
 
     key: str
     offset: int
@@ -48,12 +48,12 @@ class FDataChunk:
 
 
 @dataclass(frozen=True, slots=True)
-class FData:
-    """An indexed FData container with lazy chunk reads."""
+class FNOD:
+    """An indexed FNOD container with lazy chunk reads."""
 
     path: Path
     metadata: dict[str, object]
-    chunks: dict[str, FDataChunk]
+    chunks: dict[str, FNODChunk]
 
     def read(self, key: str) -> np.ndarray:
         """Read one named array without inflating unrelated chunks."""
@@ -61,42 +61,42 @@ class FData:
         try:
             chunk = self.chunks[key]
         except KeyError as error:
-            raise KeyError(f"FData array {key!r} was not found") from error
+            raise KeyError(f"FNOD array {key!r} was not found") from error
         with self.path.open("rb") as stream:
             stream.seek(chunk.offset)
             payload = stream.read(chunk.compressed_bytes)
         if len(payload) != chunk.compressed_bytes:
-            raise FDataError(f"FData array {key!r} is truncated")
+            raise FNODError(f"FNOD array {key!r} is truncated")
         raw = zlib.decompress(payload)
         if len(raw) != chunk.raw_bytes:
-            raise FDataError(f"FData array {key!r} has an invalid uncompressed size")
+            raise FNODError(f"FNOD array {key!r} has an invalid uncompressed size")
         return np.frombuffer(raw, dtype=np.dtype(chunk.dtype)).reshape(chunk.shape).copy()
 
 
-def read_fdata(path: str | Path) -> FData:
-    """Open an FData container and read only its compact footer index."""
+def read_fnod(path: str | Path) -> FNOD:
+    """Open an FNOD container and read only its compact footer index."""
 
     selected = Path(path).expanduser().resolve()
     with selected.open("rb") as stream:
         if stream.read(len(_MAGIC)) != _MAGIC:
-            raise FDataError(f"{selected} is not an FData container")
+            raise FNODError(f"{selected} is not an FNOD container")
         stream.seek(-_TRAILER.size, 2)
         trailer = stream.read(_TRAILER.size)
         if len(trailer) != _TRAILER.size:
-            raise FDataError(f"{selected} has no FData footer")
+            raise FNODError(f"{selected} has no FNOD footer")
         marker, footer_offset, footer_bytes = _TRAILER.unpack(trailer)
         if marker != _TRAILER_MAGIC:
-            raise FDataError(f"{selected} has an invalid FData footer")
+            raise FNODError(f"{selected} has an invalid FNOD footer")
         stream.seek(footer_offset)
         encoded = stream.read(footer_bytes)
     try:
         footer = json.loads(encoded.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FDataError(f"{selected} has an invalid FData index") from error
+        raise FNODError(f"{selected} has an invalid FNOD index") from error
     if footer.get("schema_version") != 1:
-        raise FDataError(f"{selected} has an unsupported FData schema")
+        raise FNODError(f"{selected} has an unsupported FNOD schema")
     chunks = {
-        item["key"]: FDataChunk(
+        item["key"]: FNODChunk(
             key=item["key"],
             offset=item["offset"],
             compressed_bytes=item["compressed_bytes"],
@@ -106,11 +106,11 @@ def read_fdata(path: str | Path) -> FData:
         )
         for item in footer["chunks"]
     }
-    return FData(selected, footer["metadata"], chunks)
+    return FNOD(selected, footer["metadata"], chunks)
 
 
-class FDataWriter:
-    """Append independently compressed arrays to one atomic FData container."""
+class FNODWriter:
+    """Append independently compressed arrays to one atomic FNOD container."""
 
     def __init__(self, path: str | Path, *, metadata: dict[str, object], workers: int = 1) -> None:
         if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
@@ -124,7 +124,7 @@ class FDataWriter:
         self._executor: ThreadPoolExecutor | None = None
         self._stream = None
 
-    def __enter__(self) -> FDataWriter:
+    def __enter__(self) -> FNODWriter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._stream = self._temporary.open("wb")
         self._stream.write(_MAGIC)
@@ -135,7 +135,7 @@ class FDataWriter:
         """Queue one array while bounding resident compression work."""
 
         if self._executor is None:
-            raise RuntimeError("FDataWriter is not open")
+            raise RuntimeError("FNODWriter is not open")
         self._pending.add(self._executor.submit(_encode_array, (key, array)))
         if len(self._pending) >= self._workers:
             self._drain(final=False)
@@ -167,7 +167,7 @@ class FDataWriter:
                 }
             )
 
-    def close(self) -> FData:
+    def close(self) -> FNOD:
         """Finish the footer and atomically publish the container."""
 
         try:
@@ -187,7 +187,7 @@ class FDataWriter:
             self._stream.close()
             self._stream = None
             self._temporary.replace(self._path)
-            return read_fdata(self._path)
+            return read_fnod(self._path)
         except BaseException:
             self.abort()
             raise
@@ -210,17 +210,17 @@ class FDataWriter:
             self.abort()
 
 
-def write_fdata(
+def write_fnod(
     path: str | Path,
     *,
     metadata: dict[str, object],
     arrays: Iterable[tuple[str, np.ndarray]],
     workers: int = 1,
-) -> FData:
-    """Write one atomic, lossless FData container from named arrays."""
+) -> FNOD:
+    """Write one atomic, lossless FNOD container from named arrays."""
 
-    writer = FDataWriter(path, metadata=metadata, workers=workers)
+    writer = FNODWriter(path, metadata=metadata, workers=workers)
     with writer:
         for key, array in arrays:
             writer.append(key, array)
-    return read_fdata(path)
+    return read_fnod(path)

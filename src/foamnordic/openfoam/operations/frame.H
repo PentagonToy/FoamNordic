@@ -25,7 +25,12 @@
 #include <unordered_map>
 #include <variant>
 
-namespace Foam::foamNordic::operations {
+namespace Foam
+{
+namespace foamNordic
+{
+namespace operations
+{
 
 using FieldValue = std::variant<
     std::reference_wrapper<const volScalarField>,
@@ -39,7 +44,8 @@ using FieldValue = std::variant<
     tmp<volSymmTensorField>,
     tmp<volSphericalTensorField>>;
 
-class OperationFrame final {
+class OperationFrame final
+{
     const fvMesh& mesh_;
     std::unordered_map<std::string, FieldValue> fields_;
 
@@ -47,11 +53,9 @@ class OperationFrame final {
     [[nodiscard]] FieldValue evaluateUnary(const Expression& expression);
     [[nodiscard]] FieldValue evaluateBinary(const Expression& expression);
     [[nodiscard]] FieldValue evaluateTernary(const Expression& expression);
-    [[nodiscard]] FieldValue evaluateContraction(
-        const Expression& expression);
+    [[nodiscard]] FieldValue evaluateContraction(const Expression& expression);
     [[nodiscard]] FieldValue evaluateAlgebra(const Expression& expression);
-    [[nodiscard]] FieldValue evaluateCoefficient(
-        const Expression& expression);
+    [[nodiscard]] FieldValue evaluateCoefficient(const Expression& expression);
 
 public:
     explicit OperationFrame(const fvMesh& mesh);
@@ -63,9 +67,8 @@ public:
     [[nodiscard]] const FieldValue& evaluate(const std::string& expression);
     [[nodiscard]] const volScalarField& scalar(const Expression& expression);
     [[nodiscard]] const volScalarField& scalar(const std::string& expression);
-    [[nodiscard]] std::string snapshot(
-        const Expression& expression,
-        std::size_t index);
+    [[nodiscard]] std::string
+    snapshot(const Expression& expression, std::size_t index);
     void validateAssignment(const word& name, const Expression& expression);
     void assign(const word& name, const Expression& expression);
     void correctBoundary(const word& name, const Expression& expression);
@@ -76,16 +79,18 @@ public:
     void bind(const std::string& name, const volSymmTensorField& value);
     void bind(const std::string& name, const volSphericalTensorField& value);
 
-    [[nodiscard]] foamnordic::fjord::TensorView view(
-        const std::string& key,
-        const std::string& expression);
+    [[nodiscard]] foamnordic::fjord::TensorView
+    view(const std::string& key, const std::string& expression);
 
     void provide(
         foamnordic::adapter::FieldInvocation& invocation,
         const std::string& key,
-        const std::string& expression);
+        const std::string& expression
+    );
 };
 
-}  // namespace Foam::foamNordic::operations
+} // End namespace operations
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

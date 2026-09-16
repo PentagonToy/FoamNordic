@@ -128,7 +128,9 @@ def test_dataset_parse_writes_one_default_container_and_loads_table(tmp_path: Pa
         coordinates=False,
     )
 
-    assert dataset.path == case_dir / "dataset/dataset.fdata"
+    assert dataset.path == case_dir / "dataset/dataset.fnod"
+    assert not dataset.path.with_suffix(".fnod.tmp").exists()
+    assert not list(dataset.path.parent.glob(".dataset-staging-*"))
     assert dataset.fields == ("nut",)
     assert dataset.times == (0.0, 1.0)
     assert dataset.note == "small fixture"
@@ -327,7 +329,18 @@ def test_dataset_removes_disposable_case_after_derivation_failure(
     with pytest.raises(RuntimeError, match="post-processing failed"):
         fno.Dataset.parse(case_dir=case_dir, fields=["gradU"], coordinates=False)
 
-    assert not list((case_dir / "dataset").glob(".dataset-staging-*"))
+    assert not (case_dir / "dataset").exists()
+
+
+def test_dataset_removes_incomplete_container_after_contract_failure(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case"
+    _write_field(case_dir, "0", "nut", [1.0])
+    _write_vector_field(case_dir, "1", "nut", [(2.0, 3.0, 4.0)])
+
+    with pytest.raises(ValueError, match="changes its stored contract"):
+        fno.Dataset.parse(case_dir=case_dir, fields=["nut"], coordinates=False)
+
+    assert not (case_dir / "dataset").exists()
 
 
 def test_dataset_staging_enables_configured_initial_field_writes(tmp_path: Path) -> None:

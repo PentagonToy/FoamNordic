@@ -13,16 +13,23 @@
 #include "ExternalNutFjord.H"
 #include "operations/frame.H"
 
-namespace Foam::LESModels {
+namespace Foam
+{
+namespace LESModels
+{
 
 template<class BasicTurbulenceModel>
-void externalNutFjord<BasicTurbulenceModel>::correctNut() {
+void
+externalNutFjord<BasicTurbulenceModel>::correctNut()
+{
     static_cast<void>(closure_->invoke(
         this->mesh_,
         this->runTime_,
-        [this](foamNordic::operations::OperationFrame& frame) {
+        [this](foamNordic::operations::OperationFrame& frame)
+        {
             frame.bind("delta", this->delta());
-        }));
+        }
+    ));
 
     this->nut_.correctBoundaryConditions();
     BasicTurbulenceModel::correctNut();
@@ -37,30 +44,41 @@ externalNutFjord<BasicTurbulenceModel>::externalNutFjord(
     const surfaceScalarField& phi,
     const transportModel& transport,
     const word& propertiesName,
-    const word& type)
-    : LESeddyViscosity<BasicTurbulenceModel>(
-          type,
-          alpha,
-          rho,
-          velocity,
-          alphaRhoPhi,
-          phi,
-          transport,
-          propertiesName),
-      closure_(std::make_unique<foamNordic::ClosureHook>(
-          this->coeffDict_.subDict("foamNordicClosure"))) {
-    if (type == typeName) {
+    const word& type
+) :
+    LESeddyViscosity<BasicTurbulenceModel>(
+        type,
+        alpha,
+        rho,
+        velocity,
+        alphaRhoPhi,
+        phi,
+        transport,
+        propertiesName
+    ),
+    closure_(
+        std::make_unique<foamNordic::ClosureHook>(
+            this->coeffDict_.subDict("foamNordicClosure")
+        )
+    )
+{
+    if (type == typeName)
+    {
         this->printCoeffs(type);
     }
 }
 
 template<class BasicTurbulenceModel>
-bool externalNutFjord<BasicTurbulenceModel>::read() {
+bool
+externalNutFjord<BasicTurbulenceModel>::read()
+{
     return LESeddyViscosity<BasicTurbulenceModel>::read();
 }
 
 template<class BasicTurbulenceModel>
-tmp<volScalarField> externalNutFjord<BasicTurbulenceModel>::k() const {
+tmp<volScalarField>
+externalNutFjord<BasicTurbulenceModel>::k() const
+{
     return tmp<volScalarField>::New(
         IOobject(
             IOobject::groupName("k", this->U_.group()),
@@ -68,18 +86,24 @@ tmp<volScalarField> externalNutFjord<BasicTurbulenceModel>::k() const {
             this->mesh_,
             IOobject::NO_READ,
             IOobject::NO_WRITE,
-            IOobject::NO_REGISTER),
+            IOobject::NO_REGISTER
+        ),
         this->mesh_,
-        dimensionedScalar("zero", sqr(dimVelocity), 0));
+        dimensionedScalar("zero", sqr(dimVelocity), 0)
+    );
 }
 
 template<class BasicTurbulenceModel>
-void externalNutFjord<BasicTurbulenceModel>::correct() {
-    if (!this->turbulence_) {
+void
+externalNutFjord<BasicTurbulenceModel>::correct()
+{
+    if (!this->turbulence_)
+    {
         return;
     }
     LESeddyViscosity<BasicTurbulenceModel>::correct();
     correctNut();
 }
 
-}  // namespace Foam::LESModels
+} // End namespace LESModels
+} // End namespace Foam

@@ -24,11 +24,15 @@
 #include <cstdint>
 #include <memory>
 
-namespace foamnordic::fjord {
+namespace foamnordic::fjord
+{
 class Harbor;
 }
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
 [[nodiscard]] string resolveRankAddress(const string& address);
 
@@ -36,26 +40,30 @@ namespace Foam::foamNordic {
     const string& address,
     bool sharedMemory,
     bool ucx,
-    std::uint64_t sessionId);
+    std::uint64_t sessionId
+);
 
 void writeSolverTelemetry(
     const word& program,
-    const foamnordic::adapter::SolverExchangeSnapshot& snapshot);
+    const foamnordic::adapter::SolverExchangeSnapshot& snapshot
+);
 
 void writeNativeAlgebraTelemetry(
     const word& program,
     std::uint64_t samples,
-    std::uint64_t evaluateAndCommitNanoseconds);
+    std::uint64_t evaluateAndCommitNanoseconds
+);
 
-class MeshTopologySequence final {
+class MeshTopologySequence final
+{
     string facesInstance_;
-    label cells_{-1};
-    label faces_{-1};
-    label points_{-1};
-    std::uint64_t generation_{0};
-    bool initialised_{false};
-    bool wasChanging_{false};
-    bool explicitlyChanged_{false};
+    label cells_ { -1 };
+    label faces_ { -1 };
+    label points_ { -1 };
+    std::uint64_t generation_ { 0 };
+    bool initialised_ { false };
+    bool wasChanging_ { false };
+    bool explicitlyChanged_ { false };
 
 public:
     [[nodiscard]] std::uint64_t observe(const fvMesh& mesh);
@@ -63,7 +71,8 @@ public:
     [[nodiscard]] std::uint64_t generation() const noexcept;
 };
 
-class FieldProgramSession final {
+class FieldProgramSession final
+{
     std::unique_ptr<foamnordic::fjord::Harbor> harbor_;
     std::unique_ptr<foamnordic::adapter::FieldProgramPort> port_;
     MeshTopologySequence topology_;
@@ -71,15 +80,15 @@ class FieldProgramSession final {
 public:
     FieldProgramSession(
         const dictionary& dict,
-        foamnordic::adapter::ExchangeContract contract);
+        foamnordic::adapter::ExchangeContract contract
+    );
     ~FieldProgramSession();
 
     FieldProgramSession(const FieldProgramSession&) = delete;
     FieldProgramSession& operator=(const FieldProgramSession&) = delete;
 
-    [[nodiscard]] foamnordic::adapter::FieldInvocation begin(
-        const fvMesh& mesh,
-        const Time& time);
+    [[nodiscard]] foamnordic::adapter::FieldInvocation
+    begin(const fvMesh& mesh, const Time& time);
     [[nodiscard]] std::uint64_t topologyGeneration() const noexcept;
 
     [[nodiscard]] foamnordic::adapter::SolverExchangeSnapshot
@@ -88,6 +97,7 @@ public:
     void shutdown();
 };
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

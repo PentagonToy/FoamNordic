@@ -16,7 +16,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 import onsaemiro as osm
-from bindnordic.fdata import FData, read_fdata, write_fdata
+from bindnordic.fnod import FNOD, read_fnod, write_fnod
 from bindnordic.openfoam import OpenFOAMDecodeError, read_field as read_openfoam_field
 
 from ._field import _cell_count, numeric_times, processor_directories
@@ -482,8 +482,8 @@ def _derive_missing(
         completed = True
         return staged
     finally:
-        if not completed:
-            shutil.rmtree(staging, ignore_errors=True)
+        if not completed and staging.exists():
+            shutil.rmtree(staging)
 
 
 def _mesh_changes(case_dir: Path, physical_times: Sequence[float]) -> bool:
@@ -533,7 +533,7 @@ def _dataset_workers(n_jobs: int | None, work_count: int, *, decomposed: bool) -
 class _Dataset:
     """A compact, table-like history of OpenFOAM internal fields."""
 
-    _container: FData
+    _container: FNOD
 
     @property
     def path(self) -> Path:
@@ -566,7 +566,7 @@ class _Dataset:
         selected_fields = self.fields if fields is None else _normalise_fields(fields)
         missing = set(selected_fields).difference(self.fields)
         if missing:
-            raise KeyError(f"FData fields are unavailable: {', '.join(sorted(missing))}")
+            raise KeyError(f"FNOD fields are unavailable: {', '.join(sorted(missing))}")
         available_times = self.times
         if times is None:
             selected_times = available_times
@@ -598,7 +598,7 @@ class _Dataset:
             arrays = [self._container.read(f"{time_index}/{name}") for name in selected_fields]
             count = len(arrays[0])
             if any(len(array) != count for array in arrays[1:]):
-                raise ValueError(f"FData time {physical_time:g} has incompatible field lengths")
+                raise ValueError(f"FNOD time {physical_time:g} has incompatible field lengths")
             if descriptors is None:
                 descriptors = [("time", "<f8"), ("cell", "<i8")]
                 if self.coordinates:
@@ -611,13 +611,13 @@ class _Dataset:
                 key = f"{time_index}/coordinates" if self._container.metadata["coordinates"]["time_varying"] else "coordinates"
                 centres = self._container.read(key)
                 if len(centres) != count:
-                    raise ValueError(f"FData time {physical_time:g} has incompatible cell-centre coordinates")
+                    raise ValueError(f"FNOD time {physical_time:g} has incompatible cell-centre coordinates")
                 table["x"], table["y"], table["z"] = centres.T
             for name, array in zip(selected_fields, arrays, strict=True):
                 table[name] = array
             rows.append(table)
         if not rows:
-            raise ValueError("times selected no stored FData rows")
+            raise ValueError("times selected no stored FNOD rows")
         return np.concatenate(rows)
 
 
@@ -634,7 +634,7 @@ def parse(
     progress: bool = False,
     overwrite: bool = False,
 ) -> _Dataset:
-    """Parse an OpenFOAM case into one lossless `dataset.fdata` container."""
+    """Parse an OpenFOAM case into one lossless `dataset.fnod` container."""
 
     if n_jobs is not None and (
         isinstance(n_jobs, bool)
@@ -653,99 +653,103 @@ def parse(
     if not selected_case.is_dir():
         raise FileNotFoundError(f"OpenFOAM case directory does not exist: {selected_case}")
     selected_output = selected_case / "dataset" if output_dir is None else Path(output_dir).expanduser().resolve()
-    destination = selected_output / "dataset.fdata"
+    destination = selected_output / "dataset.fnod"
     if destination.exists() and not overwrite:
-        raise FileExistsError(f"FData dataset already exists: {destination}")
+        raise FileExistsError(f"FNOD dataset already exists: {destination}")
     selected_fields = _normalise_fields(fields)
     selected_times = _normalise_times(selected_case, times)
-    working_case = (
-        _derive_missing(
-            selected_case,
-            selected_output,
-            selected_times,
-            selected_fields,
-            coordinates=coordinates,
-        )
-        if derive_missing
-        else selected_case
-    )
-    field_work = [
-        ("field", time_index, physical_time, name)
-        for time_index, physical_time in enumerate(selected_times)
-        for name in selected_fields
-    ]
-    coordinate_work = _coordinate_work(working_case, selected_times) if coordinates else ()
-    work = field_work + [("coordinates", index, physical_time, "C") for index, physical_time in coordinate_work]
-    workers = _dataset_workers(
-        n_jobs,
-        len(work),
-        decomposed=bool(processor_directories(working_case)),
-    )
-    if n_jobs == -1:
-        print(f"[FoamNordic] Dataset workers: n_jobs=-1 resolved to {workers}.")
-
-    def read_one(item: tuple[str, int | None, float, str]) -> tuple[str, int | None, str, np.ndarray, str, str | None]:
-        kind, time_index, physical_time, name = item
-        values, field_class, dimensions = _read_case_field(working_case, physical_time, name)
-        return kind, time_index, name, values, field_class, dimensions
-
-    metadata_fields: dict[str, dict[str, object]] = {}
-    metadata: dict[str, object] = {
-        "created_at": datetime.now(UTC).isoformat(),
-        "note": note,
-        "fields": list(selected_fields),
-        "times": list(selected_times),
-        "field_metadata": metadata_fields,
-        "coordinates": {"components": ["x", "y", "z"], "time_varying": len(coordinate_work) > 1} if coordinates else None,
-        "layout": "time-cell",
-    }
-    reporter = osm.Progress(total=len(work), desc="FoamNordic dataset") if progress else None
-
-    def arrays() -> Iterable[tuple[str, np.ndarray]]:
-        try:
-            for item in work:
-                kind, time_index, name, values, field_class, dimensions = read_one(item)
-                if kind == "coordinates":
-                    key = f"{time_index}/coordinates" if time_index is not None else "coordinates"
-                    yield key, _coordinates(values)
-                else:
-                    assert time_index is not None
-                    contract = {
-                        "class": field_class,
-                        "dimensions": dimensions,
-                        "shape": list(values.shape[1:]),
-                        "dtype": values.dtype.str,
-                    }
-                    previous = metadata_fields.setdefault(name, contract)
-                    if previous != contract:
-                        raise ValueError(
-                            f"OpenFOAM field {name!r} changes its stored contract across selected times"
-                        )
-                    yield f"{time_index}/{name}", values
-                if reporter is not None:
-                    reporter.update()
-        finally:
-            if reporter is not None:
-                reporter.finish()
+    output_existed = selected_output.exists()
+    working_case = selected_case
     try:
-        result = _Dataset(
-            write_fdata(
+        working_case = (
+            _derive_missing(
+                selected_case,
+                selected_output,
+                selected_times,
+                selected_fields,
+                coordinates=coordinates,
+            )
+            if derive_missing
+            else selected_case
+        )
+        field_work = [
+            ("field", time_index, physical_time, name)
+            for time_index, physical_time in enumerate(selected_times)
+            for name in selected_fields
+        ]
+        coordinate_work = _coordinate_work(working_case, selected_times) if coordinates else ()
+        work = field_work + [("coordinates", index, physical_time, "C") for index, physical_time in coordinate_work]
+        workers = _dataset_workers(
+            n_jobs,
+            len(work),
+            decomposed=bool(processor_directories(working_case)),
+        )
+        if n_jobs == -1:
+            print(f"[FoamNordic] Dataset workers: n_jobs=-1 resolved to {workers}.")
+
+        def read_one(item: tuple[str, int | None, float, str]) -> tuple[str, int | None, str, np.ndarray, str, str | None]:
+            kind, time_index, physical_time, name = item
+            values, field_class, dimensions = _read_case_field(working_case, physical_time, name)
+            return kind, time_index, name, values, field_class, dimensions
+
+        metadata_fields: dict[str, dict[str, object]] = {}
+        metadata: dict[str, object] = {
+            "created_at": datetime.now(UTC).isoformat(),
+            "note": note,
+            "fields": list(selected_fields),
+            "times": list(selected_times),
+            "field_metadata": metadata_fields,
+            "coordinates": {"components": ["x", "y", "z"], "time_varying": len(coordinate_work) > 1} if coordinates else None,
+            "layout": "time-cell",
+        }
+        reporter = osm.Progress(total=len(work), desc="FoamNordic dataset") if progress else None
+
+        def arrays() -> Iterable[tuple[str, np.ndarray]]:
+            try:
+                for item in work:
+                    kind, time_index, name, values, field_class, dimensions = read_one(item)
+                    if kind == "coordinates":
+                        key = f"{time_index}/coordinates" if time_index is not None else "coordinates"
+                        yield key, _coordinates(values)
+                    else:
+                        assert time_index is not None
+                        contract = {
+                            "class": field_class,
+                            "dimensions": dimensions,
+                            "shape": list(values.shape[1:]),
+                            "dtype": values.dtype.str,
+                        }
+                        previous = metadata_fields.setdefault(name, contract)
+                        if previous != contract:
+                            raise ValueError(
+                                f"OpenFOAM field {name!r} changes its stored contract across selected times"
+                            )
+                        yield f"{time_index}/{name}", values
+                    if reporter is not None:
+                        reporter.update()
+            finally:
+                if reporter is not None:
+                    reporter.finish()
+
+        return _Dataset(
+            write_fnod(
                 destination,
                 metadata=metadata,
                 arrays=arrays(),
                 workers=workers,
             )
         )
-        return result
     finally:
         if working_case != selected_case:
-            shutil.rmtree(working_case.parent, ignore_errors=True)
+            shutil.rmtree(working_case.parent)
+        if not output_existed and not destination.exists() and selected_output.exists():
+            selected_output.rmdir()
 
 
 def read(*, path: str | Path) -> _Dataset:
-    """Open one previously created `dataset.fdata` container."""
+    """Open one previously created `dataset.fnod` container."""
 
-    return _Dataset(read_fdata(path))
+    return _Dataset(read_fnod(path))
 
 
 def __dir__() -> list[str]:
@@ -753,6 +757,6 @@ def __dir__() -> list[str]:
 
 
 def load(*, path: str | Path, fields: Sequence[str] | None = None, times: Sequence[float] | tuple[float, float] | None = None) -> np.ndarray:
-    """Open and load rows from one `dataset.fdata` container."""
+    """Open and load rows from one `dataset.fnod` container."""
 
     return read(path=path).load(fields=fields, times=times)

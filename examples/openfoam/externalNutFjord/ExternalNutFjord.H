@@ -18,25 +18,42 @@
 
 #include <memory>
 
-namespace Foam::LESModels {
+namespace Foam
+{
+namespace LESModels
+{
 
 template<class BasicTurbulenceModel>
-class externalNutFjord final
-    : public LESeddyViscosity<BasicTurbulenceModel> {
+class externalNutFjord final : public LESeddyViscosity<BasicTurbulenceModel>
+{
+    // Private Data
+
     std::unique_ptr<foamNordic::ClosureHook> closure_;
+
+
+    // Private Member Functions
 
     externalNutFjord(const externalNutFjord&) = delete;
     void operator=(const externalNutFjord&) = delete;
 
+
 protected:
+    // Protected Member Functions
+
     void correctNut() override;
 
+
 public:
+    // Public Types
+
     using alphaField = typename BasicTurbulenceModel::alphaField;
     using rhoField = typename BasicTurbulenceModel::rhoField;
     using transportModel = typename BasicTurbulenceModel::transportModel;
 
     TypeName("externalNutFjord");
+
+
+    // Constructors
 
     externalNutFjord(
         const alphaField& alpha,
@@ -46,16 +63,21 @@ public:
         const surfaceScalarField& phi,
         const transportModel& transport,
         const word& propertiesName = turbulenceModel::propertiesName,
-        const word& type = typeName);
+        const word& type = typeName
+    );
 
     ~externalNutFjord() override = default;
+
+
+    // Member Functions
 
     bool read() override;
     tmp<volScalarField> k() const override;
     void correct() override;
 };
 
-}  // namespace Foam::LESModels
+} // End namespace LESModels
+} // End namespace Foam
 
 #ifdef NoRepository
 #include "ExternalNutFjord.C"

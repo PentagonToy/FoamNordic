@@ -26,11 +26,17 @@
 #include <chrono>
 #include <stdexcept>
 
-namespace Foam::LESModels {
+namespace Foam
+{
+namespace LESModels
+{
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::updateClosure(
-    const volTensorField& gradU) {
+void
+kEqnFjord<BasicTurbulenceModel>::updateClosure(
+    const volTensorField& gradU
+)
+{
     this->nut_ = Ck_ * sqrt(k_) * this->delta();
     kProduction_ = this->nut_ * (gradU && devTwoSymm(gradU));
     kDissipationCoeff_ = this->Ce_ * sqrt(k_) / this->delta();
@@ -38,35 +44,46 @@ void kEqnFjord<BasicTurbulenceModel>::updateClosure(
     static_cast<void>(closure_->invoke(
         this->mesh_,
         this->runTime_,
-        [this, &gradU](foamNordic::operations::OperationFrame& frame) {
+        [this, &gradU](foamNordic::operations::OperationFrame& frame)
+        {
             frame.bind("k", k_);
             frame.bind("grad(U)", gradU);
             frame.bind("delta", this->delta());
-        }));
+        }
+    ));
     correctNut();
 }
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::updateState(
-    const volTensorField& gradU) {
+void
+kEqnFjord<BasicTurbulenceModel>::updateState(
+    const volTensorField& gradU
+)
+{
     tmp<volScalarField> molecularViscosity = this->nu();
     static_cast<void>(closure_->invoke(
         this->mesh_,
         this->runTime_,
-        [this, &gradU, &molecularViscosity](
-            foamNordic::operations::OperationFrame& frame) {
+        [this,
+         &gradU,
+         &molecularViscosity](foamNordic::operations::OperationFrame& frame)
+        {
             frame.bind("k", k_);
             frame.bind("grad(U)", gradU);
             frame.bind("delta", this->delta());
             frame.bind("nu", molecularViscosity());
-        }));
+        }
+    ));
     bound(k_, this->kMin_);
     correctNut();
 }
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::validateNative(
-    const volTensorField& gradU) {
+void
+kEqnFjord<BasicTurbulenceModel>::validateNative(
+    const volTensorField& gradU
+)
+{
     tmp<volScalarField> molecularViscosity = this->nu();
     foamNordic::operations::OperationFrame frame(this->mesh_);
     frame.bind("k", k_);
@@ -81,39 +98,48 @@ void kEqnFjord<BasicTurbulenceModel>::validateNative(
 }
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::writeNativeTelemetry() const {
-    if (nativeProfileSamples_ == 0) {
+void
+kEqnFjord<BasicTurbulenceModel>::writeNativeTelemetry() const
+{
+    if (nativeProfileSamples_ == 0)
+    {
         return;
     }
-    const auto mean = [this](std::uint64_t total) {
+    const auto mean = [this](std::uint64_t total)
+    {
         return total / nativeProfileSamples_;
     };
-    Info<< "[FoamNordic] Native transport telemetry: {\"program\":\""
-        << nativeProfileProgram_ << "\",\"rank\":" << Pstream::myProcNo()
-        << ",\"samples\":" << nativeProfileSamples_
-        << ",\"mean_pre_solve_nanoseconds\":"
-        << mean(nativePreSolveNanoseconds_)
-        << ",\"mean_assemble_nanoseconds\":"
-        << mean(nativeAssembleNanoseconds_)
-        << ",\"mean_solve_nanoseconds\":" << mean(nativeSolveNanoseconds_)
-        << ",\"mean_post_solve_nanoseconds\":"
-        << mean(nativePostSolveNanoseconds_)
-        << ",\"mean_commit_nanoseconds\":"
-        << mean(nativeCommitNanoseconds_) << '}' << nl;
+    Info << "[FoamNordic] Native transport telemetry: {\"program\":\""
+         << nativeProfileProgram_ << "\",\"rank\":" << Pstream::myProcNo()
+         << ",\"samples\":" << nativeProfileSamples_
+         << ",\"mean_pre_solve_nanoseconds\":"
+         << mean(nativePreSolveNanoseconds_)
+         << ",\"mean_assemble_nanoseconds\":"
+         << mean(nativeAssembleNanoseconds_)
+         << ",\"mean_solve_nanoseconds\":" << mean(nativeSolveNanoseconds_)
+         << ",\"mean_post_solve_nanoseconds\":"
+         << mean(nativePostSolveNanoseconds_)
+         << ",\"mean_commit_nanoseconds\":" << mean(nativeCommitNanoseconds_)
+         << '}' << nl;
 }
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::correctNut() {
+void
+kEqnFjord<BasicTurbulenceModel>::correctNut()
+{
     this->nut_.correctBoundaryConditions();
     fv::options::New(this->mesh_).correct(this->nut_);
     BasicTurbulenceModel::correctNut();
 }
 
 template<class BasicTurbulenceModel>
-tmp<fvScalarMatrix> kEqnFjord<BasicTurbulenceModel>::kSource() const {
+tmp<fvScalarMatrix>
+kEqnFjord<BasicTurbulenceModel>::kSource() const
+{
     return tmp<fvScalarMatrix>::New(
         k_,
-        dimVolume * this->rho_.dimensions() * k_.dimensions() / dimTime);
+        dimVolume * this->rho_.dimensions() * k_.dimensions() / dimTime
+    );
 }
 
 template<class BasicTurbulenceModel>
@@ -125,118 +151,140 @@ kEqnFjord<BasicTurbulenceModel>::kEqnFjord(
     const surfaceScalarField& phi,
     const transportModel& transport,
     const word& propertiesName,
-    const word& type)
-    : LESeddyViscosity<BasicTurbulenceModel>(
-          type,
-          alpha,
-          rho,
-          velocity,
-          alphaRhoPhi,
-          phi,
-          transport,
-          propertiesName),
-      k_(
-          IOobject(
-              IOobject::groupName("k", this->alphaRhoPhi_.group()),
-              this->runTime_.timeName(),
-              this->mesh_,
-              IOobject::MUST_READ,
-              IOobject::AUTO_WRITE),
-          this->mesh_),
-      Ck_(dimensioned<scalar>::getOrAddToDict("Ck", this->coeffDict_, 0.094)),
-      kProduction_(
-          IOobject(
-              IOobject::groupName(
-                  "kProduction", this->alphaRhoPhi_.group()),
-              this->runTime_.timeName(),
-              this->mesh_,
-              IOobject::NO_READ,
-              IOobject::AUTO_WRITE),
-          this->mesh_,
-          dimensionedScalar("zero", sqr(dimVelocity) / dimTime, 0)),
-      kDissipationCoeff_(
-          IOobject(
-              IOobject::groupName(
-                  "kDissipationCoeff", this->alphaRhoPhi_.group()),
-              this->runTime_.timeName(),
-              this->mesh_,
-              IOobject::NO_READ,
-              IOobject::AUTO_WRITE),
-          this->mesh_,
-          dimensionedScalar("zero", dimless / dimTime, 0)),
-      closure_(nullptr),
-      nativeTransport_(false),
-      directState_(false),
-      nativeLowerBound_(0),
-      nativeObservation_(nullptr),
-      nativeProfileProgram_(typeName),
-      nativeProfileEvery_(0),
-      nativeProfileSequence_(0),
-      nativeProfileSamples_(0),
-      nativePreSolveNanoseconds_(0),
-      nativeAssembleNanoseconds_(0),
-      nativeSolveNanoseconds_(0),
-      nativePostSolveNanoseconds_(0),
-      nativeCommitNanoseconds_(0),
-      nativeInvocationIndex_(0) {
+    const word& type
+) :
+    LESeddyViscosity<BasicTurbulenceModel>(
+        type,
+        alpha,
+        rho,
+        velocity,
+        alphaRhoPhi,
+        phi,
+        transport,
+        propertiesName
+    ),
+    k_(IOobject(
+           IOobject::groupName("k", this->alphaRhoPhi_.group()),
+           this->runTime_.timeName(),
+           this->mesh_,
+           IOobject::MUST_READ,
+           IOobject::AUTO_WRITE
+       ),
+       this->mesh_),
+    Ck_(dimensioned<scalar>::getOrAddToDict("Ck", this->coeffDict_, 0.094)),
+    kProduction_(
+        IOobject(
+            IOobject::groupName("kProduction", this->alphaRhoPhi_.group()),
+            this->runTime_.timeName(),
+            this->mesh_,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        this->mesh_,
+        dimensionedScalar("zero", sqr(dimVelocity) / dimTime, 0)
+    ),
+    kDissipationCoeff_(
+        IOobject(
+            IOobject::groupName(
+                "kDissipationCoeff",
+                this->alphaRhoPhi_.group()
+            ),
+            this->runTime_.timeName(),
+            this->mesh_,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        this->mesh_,
+        dimensionedScalar("zero", dimless / dimTime, 0)
+    ),
+    closure_(nullptr),
+    nativeTransport_(false),
+    directState_(false),
+    nativeLowerBound_(0),
+    nativeObservation_(nullptr),
+    nativeProfileProgram_(typeName),
+    nativeProfileEvery_(0),
+    nativeProfileSequence_(0),
+    nativeProfileSamples_(0),
+    nativePreSolveNanoseconds_(0),
+    nativeAssembleNanoseconds_(0),
+    nativeSolveNanoseconds_(0),
+    nativePostSolveNanoseconds_(0),
+    nativeCommitNanoseconds_(0),
+    nativeInvocationIndex_(0)
+{
     nativeTransport_ = this->coeffDict_.found("foamNordicTransport");
-    if (nativeTransport_) {
-        const dictionary& transport =
-            this->coeffDict_.subDict("foamNordicTransport");
+    if (nativeTransport_)
+    {
+        const dictionary& transport
+            = this->coeffDict_.subDict("foamNordicTransport");
         const word transportedField = transport.get<word>("field");
-        if (transportedField != "k") {
+        if (transportedField != "k")
+        {
             FatalIOErrorInFunction(transport)
                 << "kEqnFjord native transport must advance field k."
                 << exit(FatalIOError);
         }
         nativeDiffusivity_ = foamNordic::operations::Expression::parse(
-            transport.get<Foam::string>("diffusivity"));
+            transport.get<Foam::string>("diffusivity")
+        );
         nativeSource_ = foamNordic::operations::Expression::parse(
-            transport.get<Foam::string>("source"));
+            transport.get<Foam::string>("source")
+        );
         nativeImplicitSink_ = foamNordic::operations::Expression::parse(
-            transport.get<Foam::string>("implicitSink"));
+            transport.get<Foam::string>("implicitSink")
+        );
         nativeNut_ = foamNordic::operations::Expression::parse(
-            transport.get<Foam::string>("nut"));
+            transport.get<Foam::string>("nut")
+        );
         nativeLowerBound_ = transport.get<scalar>("lowerBound");
-        const auto configuredProfileEvery =
-            transport.getOrDefault<label>("profileEvery", 0);
-        if (configuredProfileEvery < 0) {
+        const auto configuredProfileEvery
+            = transport.getOrDefault<label>("profileEvery", 0);
+        if (configuredProfileEvery < 0)
+        {
             throw std::invalid_argument(
-                "FoamNordic profileEvery must not be negative.");
+                "FoamNordic profileEvery must not be negative."
+            );
         }
-        nativeProfileEvery_ =
-            static_cast<std::uint64_t>(configuredProfileEvery);
-        nativeProfileProgram_ =
-            transport.getOrDefault<word>("profileProgram", typeName);
-        nativeObservation_ =
-            foamNordic::FieldProgramObservation::create(transport);
-    } else {
-        const dictionary& closureDict =
-            this->coeffDict_.subDict("foamNordicClosure");
+        nativeProfileEvery_
+            = static_cast<std::uint64_t>(configuredProfileEvery);
+        nativeProfileProgram_
+            = transport.getOrDefault<word>("profileProgram", typeName);
+        nativeObservation_
+            = foamNordic::FieldProgramObservation::create(transport);
+    }
+    else
+    {
+        const dictionary& closureDict
+            = this->coeffDict_.subDict("foamNordicClosure");
         const wordList outputFields = closureDict.get<wordList>("outputs");
-        directState_ = outputFields.size() == 2
-            && outputFields.found("k")
+        directState_ = outputFields.size() == 2 && outputFields.found("k")
             && outputFields.found("nut");
-        closure_ = std::make_unique<foamNordic::ClosureHook>(
-            closureDict);
+        closure_ = std::make_unique<foamNordic::ClosureHook>(closureDict);
     }
     bound(k_, this->kMin_);
-    if (type == typeName) {
+    if (type == typeName)
+    {
         this->printCoeffs(type);
     }
 }
 
 template<class BasicTurbulenceModel>
-kEqnFjord<BasicTurbulenceModel>::~kEqnFjord() {
-    if (nativeObservation_) {
+kEqnFjord<BasicTurbulenceModel>::~kEqnFjord()
+{
+    if (nativeObservation_)
+    {
         nativeObservation_->shutdown();
     }
     writeNativeTelemetry();
 }
 
 template<class BasicTurbulenceModel>
-bool kEqnFjord<BasicTurbulenceModel>::read() {
-    if (!LESeddyViscosity<BasicTurbulenceModel>::read()) {
+bool
+kEqnFjord<BasicTurbulenceModel>::read()
+{
+    if (!LESeddyViscosity<BasicTurbulenceModel>::read())
+    {
         return false;
     }
     Ck_.readIfPresent(this->coeffDict());
@@ -244,25 +292,37 @@ bool kEqnFjord<BasicTurbulenceModel>::read() {
 }
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::validate() {
+void
+kEqnFjord<BasicTurbulenceModel>::validate()
+{
     const tmp<volTensorField> gradU = fvc::grad(this->U_);
-    if (nativeTransport_) {
+    if (nativeTransport_)
+    {
         validateNative(gradU());
-    } else if (directState_) {
+    }
+    else if (directState_)
+    {
         updateState(gradU());
-    } else {
+    }
+    else
+    {
         updateClosure(gradU());
     }
 }
 
 template<class BasicTurbulenceModel>
-tmp<volScalarField> kEqnFjord<BasicTurbulenceModel>::DkEff() const {
+tmp<volScalarField>
+kEqnFjord<BasicTurbulenceModel>::DkEff() const
+{
     return tmp<volScalarField>::New("DkEff", this->nut_ + this->nu());
 }
 
 template<class BasicTurbulenceModel>
-void kEqnFjord<BasicTurbulenceModel>::correct() {
-    if (!this->turbulence_) {
+void
+kEqnFjord<BasicTurbulenceModel>::correct()
+{
+    if (!this->turbulence_)
+    {
         return;
     }
 
@@ -276,24 +336,31 @@ void kEqnFjord<BasicTurbulenceModel>::correct() {
     const volScalarField divU(fvc::div(fvc::absolute(this->phi(), velocity)));
     tmp<volTensorField> gradU = fvc::grad(velocity);
 
-    if (directState_) {
+    if (directState_)
+    {
         updateState(gradU());
         return;
     }
 
-    if (nativeTransport_) {
+    if (nativeTransport_)
+    {
         using Clock = std::chrono::steady_clock;
         const bool sampled = nativeProfileEvery_ != 0
             && nativeProfileSequence_++ % nativeProfileEvery_ == 0;
-        auto phaseStarted = sampled ? Clock::now() : Clock::time_point{};
-        const auto accumulate = [sampled, &phaseStarted](std::uint64_t& total) {
-            if (!sampled) {
+        auto phaseStarted = sampled ? Clock::now() : Clock::time_point {};
+        const auto accumulate = [sampled, &phaseStarted](std::uint64_t& total)
+        {
+            if (!sampled)
+            {
                 return;
             }
             const auto now = Clock::now();
             total += static_cast<std::uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    now - phaseStarted).count());
+                    now - phaseStarted
+                )
+                    .count()
+            );
             phaseStarted = now;
         };
 
@@ -309,13 +376,13 @@ void kEqnFjord<BasicTurbulenceModel>::correct() {
         accumulate(nativePreSolveNanoseconds_);
 
         tmp<fvScalarMatrix> equation(
-            fvm::ddt(alpha, rho, k_)
-            + fvm::div(alphaRhoPhi, k_)
-            - fvm::laplacian(alpha * rho * diffusivity, k_)
+            fvm::ddt(alpha, rho, k_) + fvm::div(alphaRhoPhi, k_)
+                - fvm::laplacian(alpha * rho * diffusivity, k_)
             == alpha * rho * production
-               - fvm::SuSp((2.0 / 3.0) * alpha * rho * divU, k_)
-               - fvm::Sp(alpha * rho * dissipation, k_) + kSource()
-               + options(alpha, rho, k_));
+                - fvm::SuSp((2.0 / 3.0) * alpha * rho * divU, k_)
+                - fvm::Sp(alpha * rho * dissipation, k_) + kSource()
+                + options(alpha, rho, k_)
+        );
         accumulate(nativeAssembleNanoseconds_);
 
         equation.ref().relax();
@@ -327,7 +394,9 @@ void kEqnFjord<BasicTurbulenceModel>::correct() {
             dimensionedScalar(
                 "FoamNordic:kLowerBound",
                 k_.dimensions(),
-                nativeLowerBound_));
+                nativeLowerBound_
+            )
+        );
         accumulate(nativeSolveNanoseconds_);
 
         foamNordic::operations::OperationFrame postSolve(this->mesh_);
@@ -339,16 +408,19 @@ void kEqnFjord<BasicTurbulenceModel>::correct() {
         accumulate(nativePostSolveNanoseconds_);
         correctNut();
         accumulate(nativeCommitNanoseconds_);
-        if (sampled) {
+        if (sampled)
+        {
             ++nativeProfileSamples_;
         }
-        if (nativeObservation_) {
+        if (nativeObservation_)
+        {
             nativeObservation_->publish(
                 this->mesh_,
                 this->runTime_,
                 nativeInvocationIndex_,
                 nativeTopology_.observe(this->mesh_),
-                0.0);
+                0.0
+            );
         }
         ++nativeInvocationIndex_;
         return;
@@ -357,13 +429,13 @@ void kEqnFjord<BasicTurbulenceModel>::correct() {
     updateClosure(gradU());
 
     tmp<fvScalarMatrix> equation(
-        fvm::ddt(alpha, rho, k_)
-        + fvm::div(alphaRhoPhi, k_)
-        - fvm::laplacian(alpha * rho * DkEff(), k_)
+        fvm::ddt(alpha, rho, k_) + fvm::div(alphaRhoPhi, k_)
+            - fvm::laplacian(alpha * rho * DkEff(), k_)
         == alpha * rho * kProduction_
-           - fvm::SuSp((2.0 / 3.0) * alpha * rho * divU, k_)
-           - fvm::Sp(alpha * rho * kDissipationCoeff_, k_) + kSource()
-           + options(alpha, rho, k_));
+            - fvm::SuSp((2.0 / 3.0) * alpha * rho * divU, k_)
+            - fvm::Sp(alpha * rho * kDissipationCoeff_, k_) + kSource()
+            + options(alpha, rho, k_)
+    );
 
     equation.ref().relax();
     options.constrain(equation.ref());
@@ -374,4 +446,5 @@ void kEqnFjord<BasicTurbulenceModel>::correct() {
     updateClosure(gradU());
 }
 
-}  // namespace Foam::LESModels
+} // End namespace LESModels
+} // End namespace Foam

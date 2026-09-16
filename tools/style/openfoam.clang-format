@@ -1,0 +1,46 @@
+---
+Language: Cpp
+BasedOnStyle: WebKit
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+ColumnLimit: 80
+BreakBeforeBraces: Allman
+BreakAfterReturnType: AllDefinitions
+BreakFunctionDefinitionParameters: true
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+AllowShortLoopsOnASingleLine: false
+BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
+PackConstructorInitializers: Never
+NamespaceIndentation: None
+IndentCaseLabels: false
+IndentPPDirectives: None
+FixNamespaceComments: false
+SortIncludes: Never
+IncludeBlocks: Preserve
+PointerAlignment: Left
+DerivePointerAlignment: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeParens: ControlStatements
+SpacesInParens: Never
+AlignAfterOpenBracket: BlockIndent
+AlignOperands: DontAlign
+AlignTrailingComments:
+  Kind: Never
+MaxEmptyLinesToKeep: 2
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: true
+  AtStartOfFile: true
+InsertNewlineAtEOF: true
+...

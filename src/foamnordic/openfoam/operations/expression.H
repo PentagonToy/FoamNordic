@@ -16,9 +16,15 @@
 #include <string>
 #include <vector>
 
-namespace Foam::foamNordic::operations {
+namespace Foam
+{
+namespace foamNordic
+{
+namespace operations
+{
 
-struct Expression {
+struct Expression
+{
     std::string name;
     std::vector<Expression> arguments;
 
@@ -28,6 +34,8 @@ struct Expression {
     [[nodiscard]] static Expression parse(const std::string& source);
 };
 
-}  // namespace Foam::foamNordic::operations
+} // End namespace operations
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif

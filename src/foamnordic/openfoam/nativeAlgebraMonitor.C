@@ -14,56 +14,80 @@
 
 #include <stdexcept>
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
-NativeAlgebraMonitor::NativeAlgebraMonitor(const dictionary& dict)
-    : observation_(FieldProgramObservation::create(dict)),
-      program_(dict.getOrDefault<word>("profileProgram", "algebra")) {
+NativeAlgebraMonitor::NativeAlgebraMonitor(
+    const dictionary& dict
+) :
+    observation_(FieldProgramObservation::create(dict)),
+    program_(dict.getOrDefault<word>("profileProgram", "algebra"))
+{
     const auto profileEvery = dict.getOrDefault<label>("profileEvery", 0);
-    if (profileEvery < 0) {
+    if (profileEvery < 0)
+    {
         throw std::invalid_argument(
-            "FoamNordic profileEvery must not be negative.");
+            "FoamNordic profileEvery must not be negative."
+        );
     }
     profileEvery_ = static_cast<std::uint64_t>(profileEvery);
 }
 
-NativeAlgebraMonitor::~NativeAlgebraMonitor() noexcept {
+NativeAlgebraMonitor::~NativeAlgebraMonitor() noexcept
+{
     shutdown();
 }
 
-void NativeAlgebraMonitor::record(
+void
+NativeAlgebraMonitor::record(
     const fvMesh& mesh,
     const Time& time,
     const std::uint64_t exchangeIndex,
-    const std::uint64_t elapsedNanoseconds) {
-    if (stopped_) {
+    const std::uint64_t elapsedNanoseconds
+)
+{
+    if (stopped_)
+    {
         return;
     }
-    if (profileEvery_ != 0 && profileSequence_++ % profileEvery_ == 0) {
+    if (profileEvery_ != 0 && profileSequence_++ % profileEvery_ == 0)
+    {
         ++profileSamples_;
         evaluateAndCommitNanoseconds_ += elapsedNanoseconds;
     }
-    if (observation_) {
+    if (observation_)
+    {
         observation_->publish(
             mesh,
             time,
             exchangeIndex,
             topology_.observe(mesh),
-            static_cast<double>(elapsedNanoseconds) / 1.0e9);
+            static_cast<double>(elapsedNanoseconds) / 1.0e9
+        );
     }
 }
 
-void NativeAlgebraMonitor::shutdown() noexcept {
-    if (stopped_) {
+void
+NativeAlgebraMonitor::shutdown() noexcept
+{
+    if (stopped_)
+    {
         return;
     }
     stopped_ = true;
-    if (observation_) {
+    if (observation_)
+    {
         observation_->shutdown();
         observation_.reset();
     }
     writeNativeAlgebraTelemetry(
-        program_, profileSamples_, evaluateAndCommitNanoseconds_);
+        program_,
+        profileSamples_,
+        evaluateAndCommitNanoseconds_
+    );
 }
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam

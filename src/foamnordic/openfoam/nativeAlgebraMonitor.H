@@ -22,17 +22,21 @@
 #include <cstdint>
 #include <memory>
 
-namespace Foam::foamNordic {
+namespace Foam
+{
+namespace foamNordic
+{
 
-class NativeAlgebraMonitor final {
+class NativeAlgebraMonitor final
+{
     std::unique_ptr<FieldProgramObservation> observation_;
     MeshTopologySequence topology_;
     word program_;
-    std::uint64_t profileEvery_{0};
-    std::uint64_t profileSequence_{0};
-    std::uint64_t profileSamples_{0};
-    std::uint64_t evaluateAndCommitNanoseconds_{0};
-    bool stopped_{false};
+    std::uint64_t profileEvery_ { 0 };
+    std::uint64_t profileSequence_ { 0 };
+    std::uint64_t profileSamples_ { 0 };
+    std::uint64_t evaluateAndCommitNanoseconds_ { 0 };
+    bool stopped_ { false };
 
 public:
     explicit NativeAlgebraMonitor(const dictionary& dict);
@@ -45,10 +49,12 @@ public:
         const fvMesh& mesh,
         const Time& time,
         std::uint64_t exchangeIndex,
-        std::uint64_t elapsedNanoseconds);
+        std::uint64_t elapsedNanoseconds
+    );
     void shutdown() noexcept;
 };
 
-}  // namespace Foam::foamNordic
+} // End namespace foamNordic
+} // End namespace Foam
 
 #endif
