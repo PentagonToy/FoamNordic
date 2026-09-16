@@ -2,6 +2,17 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
+## [1.0.9] - Unreleased
+
+### Data and API
+
+- `fno.Dataset` writes lossless indexed FData containers from reconstructed or decomposed OpenFOAM cases with bounded field-by-field compression, selective loading, optional coordinates, disposable OpenFOAM derivation of `gradX`, `C`, and configured or `cubeRootVol` `delta`, and binary OpenFOAM processor addressing.
+- The Python reference now groups the shallow public namespace by workload, execution, artefacts, results, and reproducibility. Public keyword options follow a consistent declaration, execution, and safety order.
+
+### OpenFOAM development
+
+- OpenFOAM-linked integration sources, probes and external adapter examples now follow a scoped OpenFOAM source layout, with a reproducible formatter and developer guide. Standalone runtime, transport, backend and BindNordic code retain their existing modern C++ style, and no runtime or numerical contract changes.
+
 ## [1.0.8] - 2026-09-14
 
 ### Documentation and development

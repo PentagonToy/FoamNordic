@@ -6,9 +6,12 @@ This rule defines the architectural boundary of the workspace.
 
 **FoamNordic** owns OpenFOAM semantics, field binding, MPI and Slurm placement, transport, packing, process lifecycle, observations, and atomic solver updates.
 
-**BindNordic** owns FNOM, tensor contracts, scalers, model persistence, backend evaluation, compiled estimators, and model caches.
+**BindNordic** owns FNOM and FData containers, tensor contracts, scalers, model persistence, backend evaluation, compiled estimators, and model caches.
 
 ModelHost and Smedja remain in FoamNordic because they depend on solver state and runtime lifecycle. Their model evaluation and scaler operations delegate to BindNordic. BindNordic tensors contain only model data and its name, dtype and shape; rank, exchange, session and simulation time remain FoamNordic context.
+
+> [!NOTE]
+> BindNordic owns portable `FData` and its atomic, bounded chunk writer; FoamNordic `Postprocess.dataset` owns OpenFOAM case parsing and global cell ordering.
 
 The dependency is one-way: FoamNordic may depend on BindNordic, but BindNordic must not depend on FoamNordic. Users continue to work through the FoamNordic API and do not need to import BindNordic directly.
 

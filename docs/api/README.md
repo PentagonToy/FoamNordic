@@ -10,11 +10,12 @@ Python describes experiments before launch and inspects compact results during o
 | [Models and FNOM](model-artifact.md) | `Tensor`, `Export`, `Models` | ONNX, sklearn, Equinox, tables, preprocessing, inspection and validation |
 | [Numerics](numerics.md) | `Field`, `Math`, `Context`, `Random` | Array algebra, symbolic OpenFOAM expressions, native graphs and random keys |
 | [Postprocessing](postprocess.md) | `Postprocess` | Stored fields, statistics and case comparison |
+| [Datasets](dataset.md) | `Dataset` | Lossless OpenFOAM field histories for machine learning and analysis |
 | [Command-line interface](command-line.md) | `foamnordic` | Native installation, diagnostics, paths, FNOM tools and safe cleanup |
 
 Public declarations are compiled before the solver starts. Explicit transport requests never silently fall back, observations cannot gate solver progress, and bulk field-program tensors do not pass through the notebook. Low-level contracts are documented under [architecture](../architecture/README.md); measured behaviour is kept under [benchmarks](../benchmarks/README.md). Wheel publication is a maintainer workflow documented in [others](../../others/release/publishing.md).
 
-The interactive top-level namespace contains only the declarations used to define a workload: `OpenFOAM`, `Closure`, `Transform`, `Observe`, `Longship`, `Operator`, `Field`, `Math`, `Context`, `Slurm`, `Export`, `Models`, `Tensor`, `Random`, `Runtime`, and `Postprocess`. Lifecycle result types live under `Runtime`; model artefact types live under `Models`. Earlier lowercase modules and helper functions remain importable for compatibility but are not part of canonical interactive discovery, must not appear in new examples, and may be removed only in a declared major release.
+The interactive top-level namespace contains only the declarations used to define a workload or consume its results: `OpenFOAM`, `Closure`, `Transform`, `Observe`, `Longship`, `Operator`, `Field`, `Math`, `Context`, `Slurm`, `Export`, `Models`, `Tensor`, `Random`, `Runtime`, `Postprocess`, and `Dataset`. Lifecycle result types live under `Runtime`; model artefact types live under `Models`. Earlier lowercase modules and helper functions remain importable for compatibility but are not part of canonical interactive discovery, must not appear in new examples, and may be removed only in a declared major release.
 
 ## Reference conventions
 

@@ -4,7 +4,7 @@ FoamNordic is abbreviated as **FNO** in tables and other space-constrained recor
 
 | Area | Use it for |
 | --- | --- |
-| [Python API](api/README.md) | Cases, closures, models, Slurm, observations, and postprocessing |
+| [Python API](api/README.md) | Cases, closures, models, Slurm, observations, postprocessing, and datasets |
 | [Architecture](architecture/README.md) | Native runtime, transport, FNOM, OpenFOAM, and lifecycle contracts |
 | [Developer guide](developer/README.md) | Source ownership, extension points, change routes, and verification |
 | [Benchmarks](benchmarks/README.md) | Numerical parity, performance measurements, and remaining validation gates |
@@ -20,4 +20,5 @@ The API documents describe supported use, architecture documents explain ownersh
 | Integrate another OpenFOAM solver | [OpenFOAM architecture](architecture/openfoam.md) | [Lifecycle](architecture/lifecycle.md), [transport](architecture/transport.md) |
 | Modify an exchange, closure, or backend | [Developer guide](developer/README.md) | [Field programmes](developer/field-programs.md), [native runtime](developer/native-runtime.md) |
 | Inspect completed results | [Postprocess API](api/postprocess.md) | [OpenFOAM validation](benchmarks/openfoam.md) |
+| Build an ML dataset from OpenFOAM fields | [Dataset API](api/dataset.md) | [FNOM artefacts](api/model-artifact.md), [Numerics](api/numerics.md) |
 | Install or diagnose the runtime | [Command-line interface](api/command-line.md) | [Native runtime](architecture/runtime.md) |

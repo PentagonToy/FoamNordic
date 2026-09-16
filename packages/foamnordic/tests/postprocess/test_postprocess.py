@@ -130,7 +130,7 @@ def test_strict_case_comparison_returns_physical_metrics() -> None:
 
 
 def test_public_namespace_is_compact() -> None:
-    assert dir(fno.Postprocess) == ["Case", "compare"]
+    assert dir(fno.Postprocess) == ["Case", "compare", "dataset"]
     assert fno.Postprocess is fno.postprocess
 
 
