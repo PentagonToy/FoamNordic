@@ -11,7 +11,7 @@ The top-level namespace is intentionally small. Grouped namespaces collect relat
 | Workload | `OpenFOAM`, `Field`, `Context`, `Math`, `Operator`, `Closure`, `Transform`, `Observe` | Declare case inputs, field programmes, and monitoring |
 | Execution | `Longship`, `Slurm`, `Runtime` | Compile, place, launch, control, and inspect a run |
 | Model artefacts | `Tensor`, `Export`, `Models` | Export, inspect, validate, and deploy FNOM artefacts |
-| Results | `Postprocess`, `Dataset` | Read fields, compare runs, and prepare ML data |
+| Results | `Postprocess` | Read fields and compare runs |
 | Reproducibility | `Random` | Declare deterministic stochastic programmes |
 
 Lowercase modules and older helper names remain importable only for compatibility. New code should use the names above.
@@ -24,7 +24,6 @@ Lowercase modules and older helper names remain importable only for compatibilit
 | Build symbolic field programmes | [Numerics](numerics.md) | `Field`, `Context`, `Math`, `Random` |
 | Export or inspect a model or table | [Models and FNOM](model-artifact.md) | `Tensor`, `Export`, `Models` |
 | Read, summarise, or compare stored fields | [Postprocessing](postprocess.md) | `Postprocess` |
-| Create a lossless field-history container | [Datasets](dataset.md) | `Dataset` |
 | Install, inspect, or maintain a runtime | [Command-line interface](command-line.md) | `foamnordic` |
 
 ## Reference conventions

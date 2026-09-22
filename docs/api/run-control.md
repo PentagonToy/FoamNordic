@@ -49,7 +49,7 @@ case = fno.OpenFOAM.Case(
 case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
 ```
 
-`OpenFOAM.setup(of_cmd="openfoam/2512")` resolves the module shorthand to `module load openfoam/2512` inside generated shell commands. It also supplies the toolchain used by standalone `Dataset.parse(...)` derivation. A `Case` may override either setting. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
+`OpenFOAM.setup(of_cmd="openfoam/2512")` resolves the module shorthand to `module load openfoam/2512` inside generated shell commands. A `Case` may override either setting. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
 
 ### `OpenFOAM.setup`
 
@@ -90,6 +90,8 @@ case.initialize(*, ranks=None, mesh=None, validate_mesh=False)
 | `ranks` | `int \| None` | `None` | Positive integer; retains the constructor value when omitted |
 | `mesh` | `str \| None` | `None` | `None` or `"blockMesh"` |
 | `validate_mesh` | `bool` | `False` | Runs `checkMesh` during isolated preparation when true |
+
+For parallel runs, FoamNordic creates `system/decomposeParDict` with `scotch` when it is absent. An existing dictionary is copied into the isolated run and its literal `numberOfSubdomains` is updated to `ranks`. Existing `simple` and `hierarchical` policies are retained only when the product of their `n (nx ny nz)` factors equals `ranks`; otherwise FoamNordic reports the mismatch and uses `scotch` for that run without changing the source case.
 
 ### Case inspection
 

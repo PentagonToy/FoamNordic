@@ -10,7 +10,7 @@ These adapters enter an OpenFOAM model at its native correction or source-evalua
 | `kEqnFjord` | One-equation SGS correction | `k`, `nut` |
 | `progressRateFjord` | External progress-variable reaction-rate hook | `omega_c` |
 
-`nutFjord` and `kEqnFjord` are registered for incompressible and compressible LES models. A fully symbolic `nutFjord` function is compiled once and evaluated directly inside OpenFOAM; model-backed and otherwise unsupported functions retain the resident ModelHost path. `progressRateFjord` is an unregistered hook: a solver project such as FjordFoam registers it in its own model hierarchy and decides how `omega_c` enters its equations.
+`nutFjord` and `kEqnFjord` are registered for incompressible and compressible LES models. A fully symbolic `nutFjord` function is compiled once and evaluated directly inside OpenFOAM; model-backed and otherwise unsupported functions retain the resident ModelHost path. `progressRateFjord` is an unregistered hook: a solver project such as EldrFoam registers it in its own model hierarchy and decides how `omega_c` enters its equations.
 
 `kEqnFjord` accepts either a model that directly updates `k` and `nut`, or a mathematical `Operator.function` containing one `Field.transport()` call. The latter is compiled once into OpenFOAM expressions and a native finite-volume solve; it does not launch a ModelHost or exchange fields during correctors. The earlier `nut`, `kProduction`, and `kDissipationCoeff` resident contract remains accepted for compatibility.
 

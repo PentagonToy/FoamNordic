@@ -97,6 +97,8 @@ def write_batch(
     )
     longship_log, host_log, solver_log = sailing_paths(work_dir, longship.name)
     if host is None:
+        allocation_tasks = scheduler.ntasks
+        allocation_cpus_per_task = scheduler.cpus_per_task
         launch_body = f""": >> {quote_command((host_log,))}
 exec srun \\
   --nodes={scheduler.nodes} \\
@@ -109,6 +111,8 @@ exec srun \\
   --exclusive \\
   {quote_command(solver)}"""
     else:
+        allocation_tasks = scheduler.nodes
+        allocation_cpus_per_task = int(runtime["allocation_cpus_per_node"])
         if not ready:
             raise ValueError("coupled Slurm launch requires readiness markers")
         ready_arguments = " \\\n".join(
@@ -142,10 +146,8 @@ exec srun \\
                 "PARTITION": scheduler.partition,
                 "TIME_LIMIT": scheduler.time,
                 "NODES": scheduler.nodes,
-                "ALLOCATION_TASKS": (
-                    int(runtime["allocation_cpus_per_node"]) * scheduler.nodes
-                ),
-                "ALLOCATION_CPUS_PER_TASK": 1,
+                "ALLOCATION_TASKS": allocation_tasks,
+                "ALLOCATION_CPUS_PER_TASK": allocation_cpus_per_task,
                 "MEMORY_DIRECTIVE": memory,
                 "GRES_DIRECTIVE": gres_directive,
                 "MEMORY_SANITIZER": memory_sanitizer,

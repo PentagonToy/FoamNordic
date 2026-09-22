@@ -85,8 +85,7 @@ def setup(*, of_cmd: str | None = None, shell: str = "bash") -> None:
     """Set the default OpenFOAM shell environment for later declarations.
 
     ``of_cmd="openfoam/2512"`` is interpreted as ``module load
-    openfoam/2512``. Cases snapshot these defaults when declared; standalone
-    Dataset derivation uses the active defaults immediately.
+    openfoam/2512``. Cases snapshot these defaults when declared.
     """
 
     _toolchain(of_cmd, shell)

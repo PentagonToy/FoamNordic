@@ -1,6 +1,8 @@
 import tempfile
 from pathlib import Path
+import sys
 
+import joblib
 import numpy as np
 import pytest
 from bindnordic.models.artifact import (
@@ -12,6 +14,7 @@ from bindnordic.models.artifact import (
     _write_bundle,
 )
 from bindnordic.models.schema import model_format
+from bindnordic.models.payloads import write_joblib
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
@@ -64,6 +67,24 @@ def test_named_input_formats_are_joblib_only():
                 [("y", 1)],
                 input_format="polars",
             )
+
+
+def test_session_defined_joblib_model_is_portable(tmp_path: Path) -> None:
+    class SessionEstimator:
+        def predict(self, values):
+            return values
+
+    SessionEstimator.__module__ = "__main__"
+    main = sys.modules["__main__"]
+    setattr(main, "SessionEstimator", SessionEstimator)
+    path = tmp_path / "model.joblib"
+    try:
+        write_joblib(SessionEstimator(), path)
+    finally:
+        delattr(main, "SessionEstimator")
+
+    restored = joblib.load(path)
+    assert restored.predict([1.0, 2.0]) == [1.0, 2.0]
 
 
 def test_invalid_bundle_size_is_rejected():

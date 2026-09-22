@@ -4,13 +4,14 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 ## [1.0.9] - Unreleased
 
-### Data and API
+### Python API
 
-- `fno.Dataset` writes lossless indexed FNOD containers from reconstructed or decomposed OpenFOAM cases with bounded field-by-field compression, selective loading, optional coordinates, disposable OpenFOAM derivation of `gradX`, `C`, and configured or `cubeRootVol` `delta`, and binary OpenFOAM processor addressing.
+- Dataset construction, reconstruction, filtering, and storage are delegated to StackNordic; FoamNordic retains stored-field access, summary statistics, and run comparison.
 - The Python reference now groups the shallow public namespace by workload, execution, artefacts, results, and reproducibility. Public keyword options follow a consistent declaration, execution, and safety order.
 
 ### OpenFOAM development
 
+- Parallel case preparation creates a missing `decomposeParDict`, updates compatible existing policies to `Case.ranks`, and reports invalid `simple` or `hierarchical` factor products before using `scotch` in the isolated run.
 - OpenFOAM-linked integration sources, probes and external adapter examples now follow a scoped OpenFOAM source layout, with a reproducible formatter and developer guide. Standalone runtime, transport, backend and BindNordic code retain their existing modern C++ style, and no runtime or numerical contract changes.
 
 ## [1.0.8] - 2026-09-14

@@ -27,11 +27,46 @@ def decomposition_subdomains(path: Path) -> int | None:
     return int(match.group(1)) if match is not None else None
 
 
-def prepare_decomposition(path: Path, ranks: int) -> bool:
-    """Keep a compatible policy or install a portable run-local policy."""
+def _decomposition_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
-    if decomposition_subdomains(path) == ranks:
-        return False
+
+def _without_comments(text: str) -> str:
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    return re.sub(r"//.*$", "", text, flags=re.MULTILINE)
+
+
+def _decomposition_method(text: str) -> str | None:
+    match = re.search(
+        r"\bmethod\s+([A-Za-z][A-Za-z0-9_]*)\s*;",
+        _without_comments(text),
+    )
+    return match.group(1) if match is not None else None
+
+
+def _decomposition_factors(text: str, method: str) -> tuple[int, int, int] | None:
+    clean = _without_comments(text)
+    block = re.search(
+        rf"\b{re.escape(method)}Coeffs\s*\{{(?P<body>.*?)\}}",
+        clean,
+        flags=re.DOTALL,
+    )
+    if block is None:
+        return None
+    factors = re.search(
+        r"\bn\s*\(\s*([0-9]+)\s+([0-9]+)\s+([0-9]+)\s*\)\s*;",
+        block.group("body"),
+    )
+    if factors is None:
+        return None
+    return (
+        int(factors.group(1)),
+        int(factors.group(2)),
+        int(factors.group(3)),
+    )
+
+
+def _portable_decomposition(path: Path, ranks: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         render_template(
@@ -48,6 +83,50 @@ def prepare_decomposition(path: Path, ranks: int) -> bool:
         ),
         encoding="utf-8",
     )
+
+
+def prepare_decomposition(path: Path, ranks: int) -> bool:
+    """Prepare a rank-compatible policy inside the isolated run case."""
+
+    if not path.is_file():
+        _portable_decomposition(path, ranks)
+        return True
+
+    text = _decomposition_text(path)
+    method = _decomposition_method(text)
+    if method in {"simple", "hierarchical"}:
+        factors = _decomposition_factors(text, method)
+        factor_count = (
+            None if factors is None else factors[0] * factors[1] * factors[2]
+        )
+        if factor_count != ranks:
+            declared = "missing" if factors is None else " x ".join(map(str, factors))
+            print(
+                f"[FoamNordic] {method} decomposition n=({declared}) does not "
+                f"match ranks={ranks}; using scotch for the isolated run."
+            )
+            _portable_decomposition(path, ranks)
+            return True
+
+    current = decomposition_subdomains(path)
+    if current == ranks:
+        return False
+
+    if current is not None:
+        updated = re.sub(
+            r"(\bnumberOfSubdomains\s+)[0-9]+(\s*;)",
+            rf"\g<1>{ranks}\g<2>",
+            text,
+            count=1,
+        )
+        path.write_text(updated, encoding="utf-8")
+        return True
+
+    print(
+        "[FoamNordic] decomposeParDict has no literal numberOfSubdomains; "
+        "using scotch for the isolated run."
+    )
+    _portable_decomposition(path, ranks)
     return True
 
 

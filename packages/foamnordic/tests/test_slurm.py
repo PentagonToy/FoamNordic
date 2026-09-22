@@ -138,7 +138,8 @@ def test_coupled_batch_reserves_native_sidecar_task() -> None:
             30.0,
         )
         script = batch.read_text(encoding="utf-8")
-    assert "#SBATCH --ntasks=3" in script
+    assert "#SBATCH --ntasks=1" in script
+    assert "#SBATCH --cpus-per-task=3" in script
     assert "--host srun --nodes=1 --ntasks=1" in script
     assert "--solver srun --nodes=1 --ntasks=2" in script
     assert "--gres=" not in script
@@ -194,8 +195,8 @@ def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate() -> None:
     assert values["solver_cpus"] == 16
     assert values["model_cpus"] == 8
     assert values["shm"] == 512 * 1024**2
-    assert "#SBATCH --ntasks=24" in script
-    assert "#SBATCH --cpus-per-task=1" in script
+    assert "#SBATCH --ntasks=1" in script
+    assert "#SBATCH --cpus-per-task=24" in script
     assert values["total_memory"] == int(40.5 * 1024**3)
     assert "#SBATCH --mem=41472M" in script
     assert "--host srun --nodes=1 --ntasks=1" in script
@@ -336,7 +337,8 @@ def test_multi_node_batch_waits_for_every_attached_host() -> None:
         ).read_text(encoding="utf-8")
 
     assert "#SBATCH --nodes=2" in script
-    assert "#SBATCH --ntasks=20" in script
+    assert "#SBATCH --ntasks=2" in script
+    assert "#SBATCH --cpus-per-task=10" in script
     assert "--ready" in script
     assert "closure.ready.node0" in script
     assert "closure.ready.node1" in script

@@ -32,3 +32,17 @@ adapters:
     outputs:
       nut:
         kind: scalar
+
+  progressRateFjord:
+    category: combustion_model
+    native_execution: []
+    inputs:
+      progress:
+        kind: scalar
+      variance:
+        kind: scalar
+      temperature:
+        kind: scalar
+    outputs:
+      omega_c:
+        kind: scalar

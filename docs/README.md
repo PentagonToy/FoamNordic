@@ -20,5 +20,4 @@ The API documents supported use, architecture documents ownership and implementa
 | Integrate an OpenFOAM solver | [OpenFOAM architecture](architecture/openfoam.md) | [Lifecycle](architecture/lifecycle.md), [Transport](architecture/transport.md) |
 | Modify an exchange, closure, or backend | [Developer guide](developer/README.md) | [Field programmes](developer/field-programs.md), [Native runtime](developer/native-runtime.md) |
 | Inspect stored results | [Postprocessing](api/postprocess.md) | [OpenFOAM validation](benchmarks/openfoam.md) |
-| Build an ML dataset | [Datasets](api/dataset.md) | [Models and FNOM](api/model-artifact.md) |
 | Install or diagnose the runtime | [Command-line interface](api/command-line.md) | [Native runtime](architecture/runtime.md) |

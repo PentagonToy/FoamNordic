@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+
+
 def _copy_path(value: object, destination: Path, label: str) -> bool:
     if not isinstance(value, (str, os.PathLike)):
         return False
@@ -48,7 +50,13 @@ def write_joblib(model: object, destination: str | Path) -> int:
         raise ImportError("Joblib is required to serialize this model") from error
     if not callable(getattr(model, "predict", None)) and not callable(model):
         raise TypeError("Joblib models must define predict() or be callable")
-    joblib.dump(model, selected, compress=0, protocol=5)
+    if type(model).__module__ in {"__main__", "__mp_main__"}:
+        import cloudpickle
+
+        with selected.open("wb") as stream:
+            cloudpickle.dump(model, stream, protocol=5)
+    else:
+        joblib.dump(model, selected, compress=0, protocol=5)
     return selected.stat().st_size
 
 

@@ -43,12 +43,10 @@ Export = export
 Models = models
 Runtime = runtime
 Postprocess = postprocess
-Dataset = postprocess.dataset
 
 __all__ = [
     "Closure",
     "Context",
-    "Dataset",
     "Export",
     "Field",
     "Longship",

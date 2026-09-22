@@ -35,6 +35,16 @@ def test_contract_mappings_are_immutable() -> None:
         contract.outputs["later"] = contract.outputs["nut"]  # type: ignore[index]
 
 
+def test_progress_rate_contract_owns_logical_combustion_fields() -> None:
+    contract = adapter_contract("progressRateFjord")
+
+    assert contract is not None
+    assert contract.category == "combustion_model"
+    assert tuple(contract.inputs) == ("progress", "variance", "temperature")
+    assert tuple(contract.outputs) == ("omega_c",)
+    assert all(layout.kind == "scalar" for layout in contract.inputs.values())
+
+
 def test_model_closure_infers_builtin_semantic_bindings(mocker) -> None:
     load = mocker.patch("foamnordic.contracts.bindings.load")
     load.return_value = FnomArtifact(

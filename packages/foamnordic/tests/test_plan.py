@@ -262,7 +262,7 @@ def _parallel_case(root: Path, ranks: int = 2) -> fno.Longship:
     )
 
 
-def test_parallel_preparation_normalizes_incompatible_policy(mocker) -> None:
+def test_parallel_preparation_normalizes_incompatible_policy(mocker, capsys) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         longship = _parallel_case(root)
@@ -285,6 +285,11 @@ def test_parallel_preparation_normalizes_incompatible_policy(mocker) -> None:
         assert "numberOfSubdomains 2" in dictionary
         assert "method          scotch" in dictionary
         assert "hierarchicalCoeffs" not in dictionary
+        assert (
+            "[FoamNordic] hierarchical decomposition n=(2 x 2 x 2) does not "
+            "match ranks=2; using scotch for the isolated run."
+            in capsys.readouterr().out
+        )
         command = " ".join(run.call_args.args[0])
         assert "numberOfSubdomains -set 2" in command
         assert "decomposePar" in command
@@ -304,6 +309,37 @@ def test_parallel_preparation_preserves_compatible_policy() -> None:
 
         assert not changed
         assert dictionary.read_text(encoding="utf-8") == original
+
+
+def test_parallel_preparation_updates_rank_and_preserves_valid_policy() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        dictionary = Path(directory) / "decomposeParDict"
+        dictionary.write_text(
+            "numberOfSubdomains 8;\n"
+            "method simple;\n"
+            "simpleCoeffs { n (2 2 1); delta 0.001; }\n",
+            encoding="utf-8",
+        )
+
+        changed = _prepare_decomposition(dictionary, 4)
+        updated = dictionary.read_text(encoding="utf-8")
+
+        assert changed
+        assert "numberOfSubdomains 4;" in updated
+        assert "method simple;" in updated
+        assert "simpleCoeffs { n (2 2 1); delta 0.001; }" in updated
+
+
+def test_parallel_preparation_creates_missing_dictionary() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        dictionary = Path(directory) / "system/decomposeParDict"
+
+        changed = _prepare_decomposition(dictionary, 6)
+        created = dictionary.read_text(encoding="utf-8")
+
+        assert changed
+        assert "numberOfSubdomains 6;" in created
+        assert "method          scotch;" in created
 
 
 def test_parallel_preparation_rejects_wrong_processor_count(mocker) -> None:
@@ -941,7 +977,7 @@ def test_prepare_case_allocates_one_endpoint_per_closure_stage(mocker) -> None:
             outputs={"H2": fno.Field("H2")},
         )
         longship = fno.Longship(case=case, closures=(closure,))
-        _mock_patch_10 = mocker.patch(
+        preparation = mocker.patch(
             "foamnordic.execution.case_staging.subprocess.run"
         )
         try:
@@ -951,7 +987,7 @@ def test_prepare_case_allocates_one_endpoint_per_closure_stage(mocker) -> None:
                 root / "libfoamnordicOpenFOAM.so",
             )
         finally:
-            mocker.stop(_mock_patch_10)
+            mocker.stop(preparation)
 
         assert len(programs) == 2
         assert tuple(item.program.name for item in programs) == (
@@ -964,6 +1000,11 @@ def test_prepare_case_allocates_one_endpoint_per_closure_stage(mocker) -> None:
         )
         assert str(programs[0].socket) in rendered
         assert str(programs[1].socket) in rendered
+        command = " ".join(preparation.call_args.args[0])
+        library_directory = root.resolve()
+        assert f"FOAM_USER_LIBBIN={library_directory}" in command
+        assert f"PATH={library_directory.parent / 'bin'}:" in command
+        assert f"LD_LIBRARY_PATH={library_directory}:" in command
 
 
 def test_function_operator_is_declarative_and_transform_launchable() -> None:

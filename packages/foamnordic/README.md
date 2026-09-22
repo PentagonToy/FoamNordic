@@ -28,7 +28,7 @@ post = result.postprocess
 | Workload | `OpenFOAM`, `Field`, `Context`, `Math`, `Operator`, `Closure`, `Transform`, `Observe` |
 | Execution | `Longship`, `Slurm`, `Runtime` |
 | Model artefacts | `Tensor`, `Export`, `Models` |
-| Results | `Postprocess`, `Dataset` |
+| Results | `Postprocess` |
 | Reproducibility | `Random` |
 
 Compatibility aliases remain importable but are omitted from interactive discovery. Filesystem arguments accept strings, `pathlib.Path`, and text `PathLike` objects.

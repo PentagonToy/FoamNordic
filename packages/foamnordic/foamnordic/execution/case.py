@@ -216,10 +216,27 @@ def prepare_case(
     # absolute executable selected by an advanced user.
     application = quote_command((Path(longship.case.application).name,))
     mesh_commands = _mesh_commands(longship, case_dir)
-    commands = [
-        *mesh_commands,
-        f"foamDictionary {control_path} -entry application -set {application}",
-    ]
+    commands: list[str] = []
+    if longship.field_programs:
+        if openfoam_library is None:
+            raise RuntimeError(
+                "field-program case preparation requires the selected "
+                "OpenFOAM integration library"
+            )
+        library_directory = openfoam_library.resolve().parent
+        application_directory = library_directory.parent / "bin"
+        commands.append(
+            f"export FOAM_USER_LIBBIN={quote_command((library_directory,))} "
+            f"PATH={quote_command((application_directory,))}:\"${{PATH}}\" "
+            f"LD_LIBRARY_PATH={quote_command((library_directory,))}:"
+            '"${LD_LIBRARY_PATH:-}"'
+        )
+    commands.extend(
+        (
+            *mesh_commands,
+            f"foamDictionary {control_path} -entry application -set {application}",
+        )
+    )
     for transform, transform_dictionary in transform_dictionaries:
         function_name = quote_command((f"functions/{transform.name}",))
         dictionary = quote_command((transform_dictionary,))
@@ -233,11 +250,7 @@ def prepare_case(
         )
     commands.extend(scheme_commands(longship, case_dir, work_dir))
     if longship.field_programs:
-        if openfoam_library is None:
-            raise RuntimeError(
-                "field-program case preparation requires the selected "
-                "OpenFOAM integration library"
-            )
+        assert openfoam_library is not None
         library_value = str(openfoam_library.resolve()).replace('"', '\\"')
         libraries = quote_command((f'("{library_value}")',))
         commands.append(
