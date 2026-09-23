@@ -1693,6 +1693,13 @@ def test_scheduler_directive_values_reject_whitespace() -> None:
         )
 
 
+def test_scheduler_requires_time() -> None:
+    with pytest.raises(TypeError, match="time is required"):
+        fno.Slurm(
+            openfoam=fno.Slurm.openfoam(nodes=1, ntasks=1),
+        )
+
+
 def test_case_accepts_explicit_openfoam_shell_command() -> None:
     case = fno.openfoam.Case(
         case_dir="case",

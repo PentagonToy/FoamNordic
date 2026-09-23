@@ -247,7 +247,7 @@ Solver and model resources are separate. Coupled jobs place a resident model wor
 ### `Slurm`
 
 ```python
-fno.Slurm(account, partition, time, *, openfoam, model=None)
+fno.Slurm(account=None, partition=None, time=None, *, openfoam, model=None)
 fno.Slurm.openfoam(*, nodes, ntasks, cpus_per_task=1, mem_per_cpu=None)
 fno.Slurm.model(
     *,
@@ -260,8 +260,8 @@ fno.Slurm.model(
 
 | Parameter | Applies to | Default | Constraint |
 | --- | --- | --- | --- |
-| `account` | `Slurm` | required | Non-empty Slurm account without whitespace |
-| `partition` | `Slurm` | required | Non-empty Slurm partition without whitespace |
+| `account` | `Slurm` | `None` | Non-empty Slurm account without whitespace; omission uses the cluster default account |
+| `partition` | `Slurm` | `None` | Non-empty Slurm partition without whitespace; omission delegates selection to the cluster |
 | `time` | `Slurm` | required | Non-empty Slurm time limit without whitespace |
 | `openfoam` | `Slurm` | required | Value returned by `Slurm.openfoam()` |
 | `model` | `Slurm` | `None` | Value returned by `Slurm.model()`; one ModelHost task is placed on each OpenFOAM node |
@@ -273,6 +273,8 @@ fno.Slurm.model(
 | `gres_count` | Model resources | `None` | Positive GPU count per ModelHost node; declared together with `gres_model` |
 
 Declaring model memory requires `mem_per_cpu` on the OpenFOAM resources as well, because both steps share the allocation request. Omitting `model` retains the default one-CPU ModelHost resources without emitting an explicit model resource section.
+
+When `account` or `partition` is `None`, FoamNordic omits the corresponding `#SBATCH` directive. This permits clusters with a default account, a default partition or submission-time partition selection to apply their native policy. Clusters that require explicit accounting or queue selection must still receive those values.
 
 Model GRES resources are reserved on every OpenFOAM node and assigned only to the ModelHost step. For example, `gres_model="gh200", gres_count=1` renders `--gres=gpu:gh200:1` for the allocation and ModelHost launch.
 

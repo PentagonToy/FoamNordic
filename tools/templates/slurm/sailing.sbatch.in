@@ -1,8 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=@JOB_NAME@              # Job name
-#SBATCH --account=@ACCOUNT@                # Billing project
-#SBATCH --partition=@PARTITION@            # Job partition (queue)
-#SBATCH --time=@TIME_LIMIT@                 # Maximum job duration
+@ACCOUNT_DIRECTIVE@@PARTITION_DIRECTIVE@#SBATCH --time=@TIME_LIMIT@                 # Maximum job duration
 #SBATCH --nodes=@NODES@                     # Number of allocated nodes
 #SBATCH --ntasks=@ALLOCATION_TASKS@         # OpenFOAM and model CPU slots
 #SBATCH --cpus-per-task=@ALLOCATION_CPUS_PER_TASK@ # Allocation accounting unit

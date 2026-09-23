@@ -95,6 +95,19 @@ def write_batch(
     memory_sanitizer = (
         "unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE"
     )
+    account_directive = (
+        ""
+        if scheduler.account is None
+        else f"#SBATCH --account={scheduler.account}                # Billing project\n"
+    )
+    partition_directive = (
+        ""
+        if scheduler.partition is None
+        else (
+            f"#SBATCH --partition={scheduler.partition}"
+            "            # Job partition (queue)\n"
+        )
+    )
     longship_log, host_log, solver_log = sailing_paths(work_dir, longship.name)
     if host is None:
         allocation_tasks = scheduler.ntasks
@@ -142,8 +155,8 @@ exec srun \\
             "sailing.sbatch.in",
             {
                 "JOB_NAME": job_name,
-                "ACCOUNT": scheduler.account,
-                "PARTITION": scheduler.partition,
+                "ACCOUNT_DIRECTIVE": account_directive,
+                "PARTITION_DIRECTIVE": partition_directive,
                 "TIME_LIMIT": scheduler.time,
                 "NODES": scheduler.nodes,
                 "ALLOCATION_TASKS": allocation_tasks,

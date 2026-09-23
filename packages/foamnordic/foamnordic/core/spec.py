@@ -555,8 +555,8 @@ class SlurmModel:
 class Slurm:
     """Slurm resources using native ``#SBATCH`` terminology."""
 
-    account: str
-    partition: str
+    account: str | None
+    partition: str | None
     time: str
     _openfoam: SlurmOpenFOAM
     _model: SlurmModel
@@ -564,21 +564,24 @@ class Slurm:
 
     def __init__(
         self,
-        account: str,
-        partition: str,
-        time: str,
+        account: str | None = None,
+        partition: str | None = None,
+        time: str | None = None,
         *,
         openfoam: SlurmOpenFOAM,
         model: SlurmModel | None = None,
     ) -> None:
-        for value, label in (
-            (account, "account"),
-            (partition, "partition"),
-            (time, "time"),
-        ):
+        if time is None:
+            raise TypeError("time is required")
+        for value, label in ((account, "account"), (partition, "partition")):
+            if value is None:
+                continue
             require_nonempty(value, label)
             if any(character.isspace() for character in value):
                 raise ValueError(f"{label} must not contain whitespace")
+        require_nonempty(time, "time")
+        if any(character.isspace() for character in time):
+            raise ValueError("time must not contain whitespace")
         if not isinstance(openfoam, SlurmOpenFOAM):
             raise TypeError("openfoam must be created by Slurm.openfoam()")
         if model is not None and not isinstance(model, SlurmModel):

@@ -497,7 +497,7 @@ def launch(
         plan_digest=plan.digest,
         name=longship.name,
         job_file=internal_path(work_dir, "job.id"),
-        partition=longship.scheduler.partition,
+        partition=longship.scheduler.partition or "auto",
         force_cancel=lambda: force_cancel(work_dir),
         observation_sources=longship.case.ranks,
         environment=_submission_environment(),

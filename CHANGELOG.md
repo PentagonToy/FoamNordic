@@ -8,6 +8,7 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 - Dataset construction, reconstruction, filtering, and storage are delegated to StackNordic; FoamNordic retains stored-field access, summary statistics, and run comparison.
 - The Python reference now groups the shallow public namespace by workload, execution, artefacts, results, and reproducibility. Public keyword options follow a consistent declaration, execution, and safety order.
+- `Slurm` accepts omitted `account` and `partition` values so cluster-side accounting and partition-selection policies can remain authoritative.
 
 ### OpenFOAM development
 

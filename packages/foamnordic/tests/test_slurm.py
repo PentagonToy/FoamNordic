@@ -106,6 +106,8 @@ def test_solver_only_batch_has_no_closure_host() -> None:
     assert "--host srun" not in script
     assert ": >>" in script
     assert "--ntasks=2" in script
+    assert "#SBATCH --account=project_example" in script
+    assert "#SBATCH --partition=small" in script
     assert "#SBATCH --ntasks=2" in script
     assert "#SBATCH --cpus-per-task=1" in script
     assert "#SBATCH --mem-per-cpu=1G" in script
@@ -117,6 +119,40 @@ def test_solver_only_batch_has_no_closure_host() -> None:
     assert "#SBATCH --open-mode=append" in script
     assert "███████╗" not in script
     assert batch.parent.name == "slurm"
+
+
+def test_batch_omits_optional_account_and_partition() -> None:
+    longship = fno.Longship(
+        name="cluster-defaults",
+        case=fno.OpenFOAM.Case(
+            case_dir="case",
+            run_dir="workspace",
+            ranks=1,
+        ),
+        scheduler=fno.Slurm(
+            time="00:15:00",
+            openfoam=fno.Slurm.openfoam(nodes=1, ntasks=1),
+        ),
+    )
+
+    with tempfile.TemporaryDirectory() as directory:
+        script = write_batch(
+            longship,
+            {"solver_tasks_per_node": 1},
+            Path(directory),
+            None,
+            ("pimpleFoam",),
+            None,
+            120.0,
+            30.0,
+        ).read_text(encoding="utf-8")
+
+    assert "#SBATCH --account=" not in script
+    assert "#SBATCH --partition=" not in script
+    assert "#SBATCH --time=00:15:00" in script
+    assert longship.scheduler is not None
+    assert longship.scheduler.to_plan()["account"] is None
+    assert longship.scheduler.to_plan()["partition"] is None
 
 
 @pytest.mark.skipif(
