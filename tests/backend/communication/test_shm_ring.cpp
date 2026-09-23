@@ -197,6 +197,87 @@ void test_named_cross_process_harbor() {
     require(WIFEXITED(status) && WEXITSTATUS(status) == 0, "SHM test peer failed.");
 }
 
+void test_named_cross_process_batched_replies() {
+    constexpr std::uint64_t exchanges = 500;
+    constexpr std::size_t outputs = 9;
+    const auto name = std::string("/foamnordic-batches-") + std::to_string(::getpid());
+    auto wake_channels = foamnordic::fjord::local_channel_pair();
+    auto parent_channel = foamnordic::fjord::create_shared_memory_channel(
+        name, std::move(wake_channels.first),
+        foamnordic::fjord::SharedMemoryRole::initiator, 2, 64);
+    const auto child = ::fork();
+    require(child >= 0, "Could not fork batched POSIX SHM test peer.");
+    if (child == 0) {
+        try {
+            ::alarm(30);
+            foamnordic::fjord::Harbor worker(
+                foamnordic::fjord::connect_shared_memory_channel(
+                    name, std::move(wake_channels.second),
+                    foamnordic::fjord::SharedMemoryRole::responder));
+            static_cast<void>(worker.accept_session({
+                1, foamnordic::fjord::Capability::shm, 0, 1, 4096,
+            }));
+            const std::vector<double> values(32, 0.5);
+            for (std::uint64_t exchange = 1; exchange <= exchanges; ++exchange) {
+                const auto request = worker.receive();
+                require(request.time_index == exchange, "SHM request order changed.");
+                std::vector<foamnordic::fjord::TensorView> views;
+                views.reserve(outputs);
+                for (std::size_t index = 0; index < outputs; ++index) {
+                    views.push_back({
+                        "species_" + std::to_string(index),
+                        foamnordic::fjord::Element::float64,
+                        {values.size()},
+                        foamnordic::fjord::as_bytes(std::span(values)),
+                        exchange,
+                        0.3,
+                    });
+                }
+                worker.publish(exchange, views);
+            }
+            _exit(0);
+        } catch (const std::exception& error) {
+            ::write(STDERR_FILENO, error.what(), std::strlen(error.what()));
+            ::write(STDERR_FILENO, "\n", 1);
+            _exit(2);
+        }
+    }
+
+    wake_channels.second.reset();
+    ::alarm(30);
+    foamnordic::fjord::Harbor parent(std::move(parent_channel));
+    static_cast<void>(parent.connect_session({
+        81, foamnordic::fjord::Capability::shm, 0, 1, 4096,
+    }));
+    const std::array<double, 1> request_value{0.25};
+    for (std::uint64_t exchange = 1; exchange <= exchanges; ++exchange) {
+        parent.send({
+            "request", foamnordic::fjord::Element::float64, {1},
+            foamnordic::fjord::as_bytes(std::span(request_value)), exchange, 0.3,
+        });
+        for (std::size_t index = 0; index < outputs; ++index) {
+            const auto reply = parent.receive_message();
+            require(
+                reply.kind == foamnordic::fjord::RuneKind::tensor
+                    && reply.tensor
+                    && reply.tensor->name == "species_" + std::to_string(index)
+                    && reply.tensor->time_index == exchange
+                    && reply.tensor->bytes.size() == 32 * sizeof(double),
+                "SHM batched response was missing or corrupt.");
+        }
+        const auto complete = parent.receive_message();
+        require(
+            complete.kind == foamnordic::fjord::RuneKind::complete
+                && complete.exchange_index == exchange
+                && complete.tensor_count == outputs,
+            "SHM batched response did not complete.");
+    }
+    int status = 0;
+    require(::waitpid(child, &status, 0) == child, "Could not wait for batched SHM peer.");
+    ::alarm(0);
+    require(WIFEXITED(status) && WEXITSTATUS(status) == 0, "Batched SHM peer failed.");
+}
+
 void test_blocking_uds_to_shm_upgrade() {
     const auto name = std::string("/foamnordic-upgrade-") + std::to_string(::getpid());
     auto channels = foamnordic::fjord::local_channel_pair();
@@ -258,5 +339,6 @@ int main() {
     test_capacity_and_backpressure();
     test_concurrent_wraparound();
     test_named_cross_process_harbor();
+    test_named_cross_process_batched_replies();
     test_blocking_uds_to_shm_upgrade();
 }

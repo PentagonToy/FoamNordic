@@ -14,6 +14,10 @@ This changelog records user-visible changes in reverse chronological order. Inte
 - Parallel case preparation creates a missing `decomposeParDict`, updates compatible existing policies to `Case.ranks`, and reports invalid `simple` or `hierarchical` factor products before using `scotch` in the isolated run.
 - OpenFOAM-linked integration sources, probes and external adapter examples now follow a scoped OpenFOAM source layout, with a reproducible formatter and developer guide. Standalone runtime, transport, backend and BindNordic code retain their existing modern C++ style, and no runtime or numerical contract changes.
 
+### Runtime reliability
+
+- Shared-memory field exchanges register for data and space wake-ups atomically, preventing a missed notification from leaving a solver rank waiting indefinitely during model output publication.
+
 ## [1.0.8] - 2026-09-14
 
 ### Documentation and development

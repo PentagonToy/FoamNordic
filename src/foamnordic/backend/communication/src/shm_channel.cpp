@@ -226,6 +226,7 @@ private:
     }
 
     void notify(std::atomic<std::uint32_t>& waiter, std::byte token) {
+        // Paired with waiter registration before the reader checks the ring.
         if (waiter.exchange(0, std::memory_order_acq_rel) != 0) {
 #if defined(__linux__)
             (void)token;
@@ -286,7 +287,10 @@ private:
 
     bool wait_for_data(std::optional<std::chrono::milliseconds> timeout) {
         auto& waiter = mapping_->header()->data_waiter[inbound_index_];
-        waiter.store(1, std::memory_order_release);
+        // The RMW orders registration against the producer's exchange(0).
+        // A plain store permits both peers to miss each other's update and
+        // sleep after data (or space) has already become available.
+        waiter.exchange(1, std::memory_order_acq_rel);
         if (inbound_.readable()) {
             waiter.store(0, std::memory_order_release);
             return true;
@@ -296,7 +300,7 @@ private:
 
     void wait_for_space() {
         auto& waiter = mapping_->header()->space_waiter[outbound_index_];
-        waiter.store(1, std::memory_order_release);
+        waiter.exchange(1, std::memory_order_acq_rel);
         if (outbound_.writable()) {
             waiter.store(0, std::memory_order_release);
             return;
