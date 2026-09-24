@@ -68,7 +68,7 @@ def test_missing_empty_or_duplicate_section(release_root: Path, changelog: str) 
 
 def test_repository() -> None:
     notes = module.release_notes(SCRIPT.parents[2])
-    assert "`Field.transport()`" in notes
-    assert "`fno.Export.table()`" in notes
-    assert "## [1.0.7]" not in notes
-    assert "consolidates the native runtime" not in notes
+    assert "`Field.runtime()`" in notes
+    assert "`Slurm` accepts omitted" in notes
+    assert "## [1.0.8]" not in notes
+    assert "`fno.Export.table()`" not in notes

@@ -226,22 +226,34 @@ void AtomicFieldExchange::execute(
                 "The native model worker rejected the active exchange.");
         }
         if (message.kind == fjord::RuneKind::tensor) {
-            if (!message.tensor || message.tensor->time_index != exchange_index
-                || message.tensor->solver_time_index
-                       != input_fields.begin()->second.solver_time_index
-                || message.tensor->topology_generation
-                       != input_fields.begin()->second.topology_generation
-                || std::abs(
-                       message.tensor->physical_time - physical_time)
-                       > 1.0e-12
-                || std::find(
-                       contract_.outputs.begin(),
-                       contract_.outputs.end(),
-                       message.tensor->name)
-                       == contract_.outputs.end()
-                || prepared.contains(message.tensor->name)) {
+            if (!message.tensor) {
                 throw std::runtime_error(
-                    "FoamNordic received an unexpected or duplicate prepared output.");
+                    "FoamNordic received an empty prepared output.");
+            }
+            const auto& tensor = *message.tensor;
+            if (tensor.time_index != exchange_index
+                || tensor.solver_time_index
+                       != input_fields.begin()->second.solver_time_index
+                || tensor.topology_generation
+                       != input_fields.begin()->second.topology_generation
+                || std::abs(tensor.physical_time - physical_time) > 1.0e-12) {
+                throw std::runtime_error(
+                    "FoamNordic received out-of-sync output metadata for: "
+                    + tensor.name);
+            }
+            if (std::find(
+                    contract_.outputs.begin(),
+                    contract_.outputs.end(),
+                    tensor.name)
+                == contract_.outputs.end()) {
+                throw std::runtime_error(
+                    "FoamNordic received an undeclared prepared output: "
+                    + tensor.name);
+            }
+            if (prepared.contains(tensor.name)) {
+                throw std::runtime_error(
+                    "FoamNordic received a duplicate prepared output: "
+                    + tensor.name);
             }
             prepared.emplace(message.tensor->name, std::move(*message.tensor));
             continue;

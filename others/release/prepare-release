@@ -101,7 +101,6 @@ replacements = {
     "CMakeLists.txt": (f'project(FoamNordic VERSION {old} LANGUAGES CXX)', f'project(FoamNordic VERSION {new} LANGUAGES CXX)'),
     "packages/foamnordic/buildkit/CMakeLists.txt": (f'project(FoamNordicBuildKit VERSION {old} LANGUAGES CXX)', f'project(FoamNordicBuildKit VERSION {new} LANGUAGES CXX)'),
     "packages/foamnordic/tests/test_cli.py": (old, new),
-    "others/release/publishing.md": (old, new),
 }
 
 for filename, (before, after) in replacements.items():

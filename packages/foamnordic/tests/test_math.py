@@ -12,11 +12,16 @@ def test_grouped_field_vocabulary_is_compact_and_strict() -> None:
     assert fno.Field.field("U") == fno.field("U")
     assert fno.Field.grad("U").canonical == "grad(U)"
     assert fno.Field.delta().canonical == "delta"
+    assert fno.Field.runtime("absolute_enthalpy", kind="scalar").canonical == (
+        "absolute_enthalpy"
+    )
     assert fno.Context.delta_time().canonical == "deltaTime"
     assert fno.Field.coordinate("x").canonical == "x"
     assert fno.Field.div("phi", "U").canonical == "div(phi,U)"
     with pytest.raises(ValueError, match="x, y, or z"):
         fno.Field.coordinate("X")
+    with pytest.raises(ValueError, match="runtime field kind"):
+        fno.Field.runtime("state", kind="matrix")
 
 
 def test_openfoam_operations_build_nested_expression_trees() -> None:

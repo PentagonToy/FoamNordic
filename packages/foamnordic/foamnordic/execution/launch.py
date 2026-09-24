@@ -38,12 +38,42 @@ def _programs(longship: Longship):
     return longship.field_programs
 
 
-def _submission_environment() -> dict[str, str]:
+def _model_project_roots(longship: Longship) -> tuple[Path, ...]:
+    """Find Python project roots that own resident model artefacts."""
+
+    roots: list[Path] = []
+    markers = ("pyproject.toml", "setup.py", "setup.cfg", ".git")
+    for program in _programs(longship):
+        if program.artifact is None:
+            continue
+        artifact = program.artifact.expanduser().resolve()
+        for parent in artifact.parents:
+            if any((parent / marker).exists() for marker in markers):
+                if parent not in roots:
+                    roots.append(parent)
+                break
+    return tuple(roots)
+
+
+def _runtime_environment(longship: Longship | None = None) -> dict[str, str]:
+    """Copy the caller environment and expose model-owned Python projects."""
+
+    environment = dict(os.environ)
+    roots = () if longship is None else _model_project_roots(longship)
+    if roots:
+        inherited = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = os.pathsep.join(
+            str(path) for path in (*roots, *((inherited,) if inherited else ()))
+        )
+    return environment
+
+
+def _submission_environment(longship: Longship | None = None) -> dict[str, str]:
     """Copy the caller environment without a parent Slurm allocation."""
 
     return {
         key: value
-        for key, value in os.environ.items()
+        for key, value in _runtime_environment(longship).items()
         if not key.startswith(_INHERITED_SLURM_PREFIXES)
     }
 
@@ -468,6 +498,7 @@ def launch(
             name=longship.name,
             observation_sources=longship.case.ranks,
             cleanup_paths=pin_cleanup,
+            environment=_runtime_environment(longship),
         )
 
     for command in ("sbatch", "squeue", "sacct", "scancel"):
@@ -500,7 +531,7 @@ def launch(
         partition=longship.scheduler.partition or "auto",
         force_cancel=lambda: force_cancel(work_dir),
         observation_sources=longship.case.ranks,
-        environment=_submission_environment(),
+        environment=_submission_environment(longship),
         orphan_timeout=orphan_timeout,
         cleanup_paths=pin_cleanup,
     )

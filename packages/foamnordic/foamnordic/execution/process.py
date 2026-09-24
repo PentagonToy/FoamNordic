@@ -77,6 +77,7 @@ def launch_local(
     name: str = "foamnordic",
     observation_sources: int = 1,
     cleanup_paths: Sequence[Path] = (),
+    environment: Mapping[str, str] | None = None,
 ) -> Run:
     """Launch one local host-and-solver plan under the native supervisor."""
 
@@ -117,6 +118,7 @@ def launch_local(
         name=name,
         cleanup_paths=(*ready_files, *cleanup_paths),
         observation_sources=observation_sources,
+        environment=environment,
     )
 
 

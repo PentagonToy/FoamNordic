@@ -12,7 +12,12 @@ import pytest
 from foamnordic.core.managed import generated_kind, mark_generated
 from foamnordic.core.native_plan import available as native_available
 from foamnordic.execution.host_group import main as run_host_group
-from foamnordic.execution.launch import _openfoam_library, _submission_environment
+from foamnordic.execution.launch import (
+    _model_project_roots,
+    _openfoam_library,
+    _runtime_environment,
+    _submission_environment,
+)
 from foamnordic.execution.process import launch_process, longship_executable
 
 import foamnordic as fno
@@ -290,6 +295,38 @@ def test_submission_environment_does_not_mutate_or_inherit_slurm(mocker) -> None
     finally:
         mocker.stop(_mock_patch_5)
     assert environment == {"FOAMNORDIC_KEEP": "yes"}
+
+
+def test_model_project_root_is_inherited_by_resident_processes(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "pyproject.toml").touch()
+        artifact = root / "models/reaction.fnom"
+        artifact.parent.mkdir()
+        fno.export.onnx(
+            b"fixture",
+            path=artifact,
+            inputs={
+                "velocity_grad": fno.Tensor.tensor(),
+                "filter_width": fno.Tensor.scalar(),
+            },
+            outputs={"eddy_viscosity": fno.Tensor.scalar()},
+        )
+        case = fno.OpenFOAM.Case(case_dir=root / "case", run_dir=root / "runs")
+        closure = fno.Closure(name="nutFjord", artifact=artifact)
+        longship = fno.Longship(case=case, closures=(closure,))
+        monkeypatch.setattr(
+            os,
+            "environ",
+            {"PYTHONPATH": "/existing/python"},
+        )
+        environment = _runtime_environment(longship)
+
+        assert _model_project_roots(longship) == (root.resolve(),)
+        assert environment["PYTHONPATH"].split(os.pathsep) == [
+            str(root.resolve()),
+            "/existing/python",
+        ]
 
 
 @pytest.mark.skipif(

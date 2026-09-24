@@ -2,22 +2,27 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
-## [1.0.9] - Unreleased
+## [1.0.9] - 2026-09-27
 
 ### Python API
 
 - Dataset construction, reconstruction, filtering, and storage are delegated to StackNordic; FoamNordic retains stored-field access, summary statistics, and run comparison.
+- `Field.runtime()` declares the layout of a solver-adapter field that is created at run time and is therefore absent from the source case.
 - The Python reference now groups the shallow public namespace by workload, execution, artefacts, results, and reproducibility. Public keyword options follow a consistent declaration, execution, and safety order.
 - `Slurm` accepts omitted `account` and `partition` values so cluster-side accounting and partition-selection policies can remain authoritative.
 
 ### OpenFOAM development
 
 - Parallel case preparation creates a missing `decomposeParDict`, updates compatible existing policies to `Case.ranks`, and reports invalid `simple` or `hierarchical` factor products before using `scotch` in the isolated run.
+- Custom integration templates using `@FOAMNORDIC_MODEL_EXECUTION@` accept logical output names because the rendered execution block already contains the corresponding `outputKeys` mapping.
 - OpenFOAM-linked integration sources, probes and external adapter examples now follow a scoped OpenFOAM source layout, with a reproducible formatter and developer guide. Standalone runtime, transport, backend and BindNordic code retain their existing modern C++ style, and no runtime or numerical contract changes.
 
 ### Runtime reliability
 
+- ModelHost automatically inherits the nearest Python project root that owns an FNOM artefact, allowing Joblib models with project-defined estimator classes to load consistently in local and Slurm runs.
 - Shared-memory field exchanges register for data and space wake-ups atomically, preventing a missed notification from leaving a solver rank waiting indefinitely during model output publication.
+- Consolidated ModelHost processes serialise Python model initialisation so concurrent Joblib or framework imports cannot observe partially initialised modules; model evaluation remains concurrent after loading.
+- Slurm launches select PMIx for multi-rank OpenFOAM solver steps when the cluster advertises it, while retaining the cluster default for ModelHost and environments without PMIx.
 
 ## [1.0.8] - 2026-09-14
 

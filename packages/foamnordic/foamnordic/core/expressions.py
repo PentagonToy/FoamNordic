@@ -35,6 +35,9 @@ _ARITIES = {
 }
 _FIELD_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:]*$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z_*][A-Za-z0-9_.*:]*$")
+_FIELD_KINDS = frozenset(
+    {"scalar", "vector", "spherical_tensor", "symm_tensor", "tensor"}
+)
 
 
 def _field_name(value: str) -> str:
@@ -60,6 +63,7 @@ class FieldExpression:
     field_name: str | None = None
     arguments: tuple["FieldExpression", ...] = ()
     patch_name: str | None = None
+    layout_kind: str | None = None
 
     def _binary(self, operation_name: str, other: object) -> "FieldExpression":
         return operation(operation_name, self, other)
@@ -140,6 +144,11 @@ class FieldExpression:
                     "patch_name",
                     _field_name(self.patch_name),
                 )
+            if self.layout_kind is not None and self.layout_kind not in _FIELD_KINDS:
+                raise ValueError(
+                    "runtime field kind must be scalar, vector, spherical_tensor, "
+                    "symm_tensor, or tensor"
+                )
             return
 
         if operation == "constant":
@@ -156,6 +165,8 @@ class FieldExpression:
 
         if self.patch_name is not None:
             raise ValueError("patch selection is only valid for stored fields")
+        if self.layout_kind is not None:
+            raise ValueError("runtime layout is only valid for fields")
 
         if operation == "filter_width":
             if self.field_name is not None or self.arguments:
@@ -357,6 +368,12 @@ class Field:
     fields = staticmethod(fields)
     grad = staticmethod(grad)
     delta = staticmethod(filter_width)
+
+    @staticmethod
+    def runtime(name: str, *, kind: str) -> FieldExpression:
+        """Bind a runtime field supplied by an external solver adapter."""
+
+        return FieldExpression("field", name, layout_kind=kind)
 
     @staticmethod
     def coordinate(axis: str) -> FieldExpression:

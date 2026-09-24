@@ -1035,6 +1035,13 @@ def test_function_closure_infers_k_equation_expression_widths(mocker) -> None:
     assert _expression_layout(longship, fno.Field("k")).transport_width == 1
     assert _expression_layout(longship, fno.Field.grad("U")).transport_width == 9
     assert _expression_layout(longship, fno.Field.delta()).transport_width == 1
+    assert (
+        _expression_layout(
+            longship,
+            fno.Field.runtime("absolute_enthalpy", kind="scalar"),
+        ).transport_width
+        == 1
+    )
     assert _expression_layout(longship, fno.Context.delta_time()).transport_width == 1
     assert (
         _expression_layout(
@@ -1858,6 +1865,40 @@ def test_custom_template_requires_output_keys_for_renamed_ports() -> None:
                 "unix:///tmp/mapped.sock",
                 True,
             )
+
+
+def test_model_execution_template_accepts_renamed_output_ports() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        template = Path(directory) / "closure.in"
+        template.write_text(
+            "@FOAMNORDIC_MODEL_EXECUTION@\n",
+            encoding="utf-8",
+        )
+        case = fno.openfoam.Case(
+            case_dir="source",
+            run_dir="workspace",
+            integration=fno.openfoam.DictionaryTemplate(
+                source=template,
+                destination="constant/modelProperties",
+            ),
+        )
+        closure = fno.Closure(
+            name="mapped",
+            artifact="mapped.fnom",
+            inputs={"velocity": fno.field("U")},
+            outputs={"prediction": fno.field("nut")},
+        )
+        destination, rendered = render_dictionary(
+            fno.Longship(case=case, closures=(closure,)),
+            closure,
+            "unix:///tmp/mapped.sock",
+            True,
+        )
+        assert destination == Path("constant/modelProperties")
+        assert "outputs\n" in rendered
+        assert "nut" in rendered
+        assert "outputKeys\n" in rendered
+        assert "prediction" in rendered
 
 
 def test_case_and_scheduler_rank_mismatch_is_rejected() -> None:

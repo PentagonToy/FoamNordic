@@ -65,6 +65,9 @@ def expression_layout(
 ) -> FieldLayout:
     """Infer the physical and packed layout of an OpenFOAM expression."""
 
+    if expression.layout_kind is not None:
+        return field_layout(expression.layout_kind)
+
     if expression.operation == "field":
         return field_layout_for(longship, expression)
     if expression.operation in {"filter_width", "delta_time", "constant"}:

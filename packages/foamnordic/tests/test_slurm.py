@@ -9,9 +9,53 @@ import pytest
 from foamnordic.core.native_plan import available as native_available
 from foamnordic.execution.node_host import _node_index, _rewrite_ready_file
 from foamnordic.execution.resources import resource_values
-from foamnordic.execution.slurm import write_batch, write_submission_wrapper
+from foamnordic.execution.slurm import (
+    _solver_mpi_directive,
+    write_batch,
+    write_submission_wrapper,
+)
 
 import foamnordic as fno
+
+
+def test_solver_mpi_directive_selects_available_pmix(mocker) -> None:
+    mocker.patch(
+        "foamnordic.execution.slurm.shutil.which", return_value="/usr/bin/srun"
+    )
+    mocker.patch(
+        "foamnordic.execution.slurm.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            ["srun", "--mpi=list"],
+            0,
+            stdout=(
+                "MPI plugin types are...\n"
+                "\tnone\n"
+                "\tpmix\n"
+                "\tpmi2\n"
+                "specific pmix plugin versions available: pmix_v4\n"
+            ),
+        ),
+    )
+
+    assert _solver_mpi_directive(16) == "  --mpi=pmix \\\n"
+
+
+def test_solver_mpi_directive_preserves_cluster_default_without_pmix(mocker) -> None:
+    mocker.patch(
+        "foamnordic.execution.slurm.shutil.which", return_value="/usr/bin/srun"
+    )
+    run = mocker.patch(
+        "foamnordic.execution.slurm.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            ["srun", "--mpi=list"],
+            0,
+            stdout="MPI plugin types are...\n\tnone\n\tpmi2\n",
+        ),
+    )
+
+    assert _solver_mpi_directive(16) == ""
+    assert _solver_mpi_directive(1) == ""
+    run.assert_called_once()
 
 
 @pytest.mark.skipif(
@@ -158,7 +202,11 @@ def test_batch_omits_optional_account_and_partition() -> None:
 @pytest.mark.skipif(
     not native_available(), reason="nanobind extension is not installed"
 )
-def test_coupled_batch_reserves_native_sidecar_task() -> None:
+def test_coupled_batch_reserves_native_sidecar_task(mocker) -> None:
+    mocker.patch(
+        "foamnordic.execution.slurm._solver_mpi_directive",
+        return_value="  --mpi=pmix \\\n",
+    )
     longship = _longship(coupled=True)
     runtime = longship.compile().as_dict()["runtime"]
     with tempfile.TemporaryDirectory() as directory:
@@ -178,6 +226,9 @@ def test_coupled_batch_reserves_native_sidecar_task() -> None:
     assert "#SBATCH --cpus-per-task=3" in script
     assert "--host srun --nodes=1 --ntasks=1" in script
     assert "--solver srun --nodes=1 --ntasks=2" in script
+    host_step, solver_step = script.split("--solver srun", 1)
+    assert "--mpi=pmix" not in host_step
+    assert "--mpi=pmix" in solver_step
     assert "--gres=" not in script
 
 

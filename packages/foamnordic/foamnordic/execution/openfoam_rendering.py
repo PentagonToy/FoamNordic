@@ -260,6 +260,7 @@ def render_dictionary(
         integration is not None
         and mapped_outputs
         and "@FOAMNORDIC_OUTPUT_KEYS@" not in template
+        and "@FOAMNORDIC_MODEL_EXECUTION@" not in template
     ):
         raise ValueError(
             "an integration template with logical output names must place "

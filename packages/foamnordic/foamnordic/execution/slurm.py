@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import time
 from collections.abc import Mapping, Sequence
@@ -25,6 +26,29 @@ def _template(name: str) -> str:
 
 def _render(name: str, variables: Mapping[str, object]) -> str:
     return render_template(_template(name), variables, kind="Slurm")
+
+
+def _solver_mpi_directive(ntasks: int) -> str:
+    if ntasks <= 1 or shutil.which("srun") is None:
+        return ""
+    try:
+        completed = subprocess.run(
+            ["srun", "--mpi=list"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    mpi_types = {
+        line.strip()
+        for line in completed.stdout.splitlines()
+        if line.strip() and " " not in line.strip()
+    }
+    return "  --mpi=pmix \\\n" if "pmix" in mpi_types else ""
 
 
 def write_batch(
@@ -109,12 +133,13 @@ def write_batch(
         )
     )
     longship_log, host_log, solver_log = sailing_paths(work_dir, longship.name)
+    solver_mpi = _solver_mpi_directive(scheduler.ntasks)
     if host is None:
         allocation_tasks = scheduler.ntasks
         allocation_cpus_per_task = scheduler.cpus_per_task
         launch_body = f""": >> {quote_command((host_log,))}
 exec srun \\
-  --nodes={scheduler.nodes} \\
+{solver_mpi}  --nodes={scheduler.nodes} \\
   --ntasks={scheduler.ntasks} \\
   --ntasks-per-node={runtime['solver_tasks_per_node']} \\
   --cpus-per-task={scheduler.cpus_per_task} \\
@@ -143,7 +168,7 @@ exec srun \\
 {host_gres}    --exact --exclusive \\
     {quote_command(host)} \\
   --solver srun --nodes={scheduler.nodes} --ntasks={scheduler.ntasks} \\
-    --ntasks-per-node={runtime['solver_tasks_per_node']} \\
+{solver_mpi}    --ntasks-per-node={runtime['solver_tasks_per_node']} \\
     --cpus-per-task={scheduler.cpus_per_task} --cpu-bind=none \\
 {solver_gres}    --exact --exclusive \\
     {quote_command(solver)}"""

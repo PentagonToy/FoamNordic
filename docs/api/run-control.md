@@ -142,6 +142,8 @@ closure = fno.Closure(
 
 `Transform` is a generic stored-field operation. `Closure` requires a solver-side equation adapter. FNOM selects ONNX, compiled, Joblib, Equinox, or a native table without changing this interface.
 
+Use `Field.runtime(name, kind=...)` only for a field supplied by a custom solver adapter and therefore unavailable while FoamNordic inspects the source case. `kind` is one of `scalar`, `vector`, `spherical_tensor`, `symm_tensor`, or `tensor`. Ordinary stored fields should continue to use `Field(name)` so their layout is validated from the case.
+
 One physical closure may contain a later solver-mediated field update without introducing another top-level workflow object. `update()` is immutable: it returns a new declaration and leaves the original closure unchanged. Each stage receives its own resident worker, while the custom OpenFOAM integration template fixes the actual solver call sites and places `@FOAMNORDIC_UPDATE_0_BODY@` where the first update is invoked.
 
 ```python

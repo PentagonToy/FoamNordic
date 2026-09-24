@@ -1,6 +1,6 @@
 [project]
 name = "bindnordic"
-version = "1.0.8"
+version = "1.0.9"
 description = "Internal model and file-format component of FoamNordic"
 requires-python = ">=3.11,<3.13"
 dependencies = [

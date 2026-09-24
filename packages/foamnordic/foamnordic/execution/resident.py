@@ -7,6 +7,7 @@ import inspect
 import json
 import os
 import sys
+import threading
 from collections.abc import Mapping, Sequence
 from io import BytesIO
 from pathlib import Path
@@ -32,6 +33,7 @@ except ImportError:
 
 
 _JOBLIB_MMAP_THRESHOLD = 16 * 1024 * 1024
+_MODEL_LOAD_LOCK = threading.Lock()
 
 
 def _manifest(path: Path) -> dict[str, object]:
@@ -300,27 +302,33 @@ def run_program(
         return 0
     outputs = _output_contract(manifest)
     dtype = str(manifest["inputs"][0][2])
-    if model_format == "joblib":
-        runtime = str(manifest.get("runtime") or "sklearn")
-        evaluator = _joblib_evaluator(
-            payload,
-            outputs,
-            runtime,
-            model_threads,
-            input_names=tuple(str(item[0]) for item in manifest["inputs"]),
-            input_format=str(manifest.get("input_format") or "numpy"),
-        )
-    elif model_format == "equinox":
-        evaluator = _equinox_evaluator(
-            payload,
-            outputs,
-            dtype,
-            Key.from_plan(json.loads(arguments.key)),
-            arguments.program,
-            threads=model_threads,
-        )
-    else:
-        raise ValueError(f"managed Python worker does not support {model_format!r}")
+    # Python imports are process-global and are not guaranteed to be safe when
+    # two resident programs initialize the same framework concurrently.  Keep
+    # model construction serial; inference starts concurrently after loading.
+    with _MODEL_LOAD_LOCK:
+        if model_format == "joblib":
+            runtime = str(manifest.get("runtime") or "sklearn")
+            evaluator = _joblib_evaluator(
+                payload,
+                outputs,
+                runtime,
+                model_threads,
+                input_names=tuple(str(item[0]) for item in manifest["inputs"]),
+                input_format=str(manifest.get("input_format") or "numpy"),
+            )
+        elif model_format == "equinox":
+            evaluator = _equinox_evaluator(
+                payload,
+                outputs,
+                dtype,
+                Key.from_plan(json.loads(arguments.key)),
+                arguments.program,
+                threads=model_threads,
+            )
+        else:
+            raise ValueError(
+                f"managed Python worker does not support {model_format!r}"
+            )
     runtime_label = (
         f" ({manifest['runtime']})" if manifest.get("runtime") is not None else ""
     )
