@@ -113,6 +113,6 @@ fno.Postprocess.compare(reference, candidate, *, fields, time_idx=None,
                         physical_time=None, mesh="strict", verbose=False)
 ```
 
-The returned metrics are `mae`, `rmse`, `max_abs`, and `relative_l2`. `mesh="strict"` verifies matching reconstructed or decomposed mesh files before comparison; `mesh="shape"` checks array shape only.
+The returned metrics are `mae`, `rmse`, `max_abs`, and `relative_l2`. `mesh="strict"` verifies matching reconstructed or decomposed mesh files at the selected time, resolving each mesh object from its latest stored instance at or before that time (with `constant/polyMesh` as the fallback); `mesh="shape"` checks array shape only.
 
 Dataset construction, reconstruction, filtering, format conversion, and extended analysis belong to StackNordic.

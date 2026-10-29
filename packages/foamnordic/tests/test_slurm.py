@@ -235,7 +235,10 @@ def test_coupled_batch_reserves_native_sidecar_task(mocker) -> None:
 @pytest.mark.skipif(
     not native_available(), reason="nanobind extension is not installed"
 )
-def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate() -> None:
+@pytest.mark.parametrize("solver_memory,model_memory", [("2G", "1G"), ("2048", "1024")])
+def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate(
+    solver_memory, model_memory
+) -> None:
     case = fno.openfoam.Case(
         case_dir="case",
         run_dir="workspace",
@@ -259,9 +262,9 @@ def test_explicit_resources_keep_solver_and_model_cpu_shapes_separate() -> None:
                 nodes=1,
                 ntasks=16,
                 cpus_per_task=1,
-                mem_per_cpu="2G",
+                mem_per_cpu=solver_memory,
             ),
-            model=fno.Slurm.model(cpus_per_task=8, mem_per_cpu="1G"),
+            model=fno.Slurm.model(cpus_per_task=8, mem_per_cpu=model_memory),
         ),
     )
     runtime = longship.compile().as_dict()["runtime"]

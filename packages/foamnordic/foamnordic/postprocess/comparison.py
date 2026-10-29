@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from ._field import MESH_FILES, digest, processor_directories
+from ._field import MESH_FILES, digest, mesh_file, processor_directories
 from .case import Case, field_names, reduced_values
 
 
@@ -18,22 +18,24 @@ def _require_same_file(reference: Path, candidate: Path, description: str) -> No
         raise ValueError(f"strict mesh comparison found different {description}")
 
 
-def _mesh_directory(reference: Path, candidate: Path, description: str) -> None:
+def _mesh_directory(
+    reference: Path, candidate: Path, physical_time: float, description: str
+) -> None:
     for name in MESH_FILES:
-        _require_same_file(reference / name, candidate / name, f"{description}/{name}")
+        _require_same_file(
+            mesh_file(reference, physical_time, name),
+            mesh_file(candidate, physical_time, name),
+            f"{description}/{name}",
+        )
 
 
-def _strict_mesh(reference: Path, candidate: Path) -> None:
+def _strict_mesh(reference: Path, candidate: Path, physical_time: float) -> None:
     reference_processors = processor_directories(reference)
     candidate_processors = processor_directories(candidate)
     if bool(reference_processors) != bool(candidate_processors):
         raise ValueError("cannot strictly compare reconstructed and decomposed cases")
     if not reference_processors:
-        _mesh_directory(
-            reference / "constant/polyMesh",
-            candidate / "constant/polyMesh",
-            "constant/polyMesh",
-        )
+        _mesh_directory(reference, candidate, physical_time, "polyMesh")
         return
     if len(reference_processors) != len(candidate_processors):
         raise ValueError("decomposed cases use different processor counts")
@@ -41,13 +43,13 @@ def _strict_mesh(reference: Path, candidate: Path) -> None:
         reference_processors, candidate_processors, strict=True
     ):
         name = reference_processor.name
-        reference_mesh = reference_processor / "constant/polyMesh"
-        candidate_mesh = candidate_processor / "constant/polyMesh"
-        _mesh_directory(reference_mesh, candidate_mesh, f"{name}/constant/polyMesh")
+        _mesh_directory(
+            reference_processor, candidate_processor, physical_time, f"{name}/polyMesh"
+        )
         _require_same_file(
-            reference_mesh / "cellProcAddressing",
-            candidate_mesh / "cellProcAddressing",
-            f"{name}/constant/polyMesh/cellProcAddressing",
+            mesh_file(reference_processor, physical_time, "cellProcAddressing"),
+            mesh_file(candidate_processor, physical_time, "cellProcAddressing"),
+            f"{name}/polyMesh/cellProcAddressing",
         )
 
 
@@ -101,7 +103,7 @@ def compare(
             f"{reference_time:g} != {candidate_time:g}"
         )
     if mesh == "strict":
-        _strict_mesh(reference_case.path, candidate_case.path)
+        _strict_mesh(reference_case.path, candidate_case.path, reference_time)
     result: dict[str, dict[str, float]] = {}
     rows: list[list[str]] = []
     for name in field_names(fields):

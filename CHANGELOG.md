@@ -2,8 +2,11 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
-## [1.0.10] - Unreleased
+## [1.0.10] - 2026-10-29
 
+- Slurm memory calculations interpret values without units as MiB, matching the scheduler when combining OpenFOAM and model memory requests.
+- Uniform stored fields use the mesh cell count at the selected physical time. Strict field comparisons resolve each mesh object and processor addressing from its latest instance at or before that time, including moving and topology-changing meshes.
+- The shared Nordic documentation site provides installation, first-run and API guides, with links from package metadata.
 - Tables and tutorials use `hedgehogs>=0.0.5` in place of Onsaemiro. Tutorial figures use Matplotlib axes and `hdg.plots.show()`; saved notebook outputs are retained.
 
 ## [1.0.9] - 2026-09-27

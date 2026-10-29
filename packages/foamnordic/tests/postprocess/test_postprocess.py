@@ -149,3 +149,56 @@ def test_result_postprocess_opens_the_isolated_case() -> None:
         )
         assert result.postprocess.path == (root / "case").resolve()
         np.testing.assert_allclose(result.postprocess.field("p"), [2.0])
+
+
+@pytest.mark.parametrize("decomposed", [False, True])
+def test_uniform_field_uses_latest_mesh_owner_before_selected_time(tmp_path, decomposed):
+    root = tmp_path / "processor0" if decomposed else tmp_path
+    _mesh(root, cells=3)
+    mesh = root / "0.5/polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh / "owner").write_text('FoamFile { note "nCells:4"; }\n')
+    future = root / "2/polyMesh"
+    future.mkdir(parents=True)
+    (future / "owner").write_text('FoamFile { note "nCells:9"; }\n')
+    field = root / "1/p"
+    field.parent.mkdir()
+    field.write_text(
+        "FoamFile { format ascii; class volScalarField; object p; }\n"
+        "dimensions [0 0 0 0 0 0 0];\n"
+        "internalField uniform 2;\nboundaryField {}\n"
+    )
+    np.testing.assert_array_equal(Case(tmp_path).field("p", physical_time=1), [2] * 4)
+
+
+@pytest.mark.parametrize("decomposed", [False, True])
+@pytest.mark.parametrize("changed", ["points", "owner", "cellProcAddressing"])
+def test_strict_comparison_checks_effective_mesh_instances(tmp_path, decomposed, changed):
+    if changed == "cellProcAddressing" and not decomposed:
+        pytest.skip("processor addressing only applies to decomposed cases")
+    cases = [tmp_path / "reference", tmp_path / "candidate"]
+    for case in cases:
+        root = case / "processor0" if decomposed else case
+        _mesh(root)
+        if decomposed:
+            (root / "constant/polyMesh/cellProcAddressing").write_text("same")
+        _scalar(root, "1", "p", [1, 2, 3])
+        mesh = root / "0.5/polyMesh"
+        mesh.mkdir(parents=True)
+        (mesh / changed).write_text(case.name)
+    with pytest.raises(ValueError, match="strict mesh comparison found different"):
+        compare(*cases, fields="p", physical_time=1)
+    # Array-only comparisons remain an explicit opt-in.
+    assert compare(*cases, fields="p", physical_time=1, mesh="shape")["p"]["mae"] == 0
+
+
+def test_strict_comparison_inherits_mesh_objects_and_ignores_future_updates(tmp_path):
+    cases = [tmp_path / "reference", tmp_path / "candidate"]
+    for case in cases:
+        _mesh(case)
+        _scalar(case, "1", "p", [1, 2, 3])
+        for time, token in [("0.5", "same"), ("2", case.name)]:
+            mesh = case / time / "polyMesh"
+            mesh.mkdir(parents=True)
+            (mesh / "points").write_text(token)
+    assert compare(*cases, fields="p", physical_time=1)["p"]["mae"] == 0

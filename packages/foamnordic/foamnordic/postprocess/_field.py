@@ -124,8 +124,18 @@ def _field_paths(case_dir: Path, physical_time: float, field_name: str) -> tuple
     return tuple(paths)
 
 
+def mesh_file(case_dir: Path, physical_time: float, name: str) -> Path:
+    """Resolve each mesh object from the latest stored instance at or before time."""
+    times = numeric_times(case_dir)
+    for value in sorted((time for time in times if time <= physical_time), reverse=True):
+        path = case_dir / times[value] / "polyMesh" / name
+        if path.is_file():
+            return path
+    return case_dir / "constant/polyMesh" / name
+
+
 def _cell_count(field_path: Path) -> int:
-    owner = field_path.parent.parent / "constant/polyMesh/owner"
+    owner = mesh_file(field_path.parent.parent, float(field_path.parent.name), "owner")
     if not owner.is_file():
         raise ValueError(
             f"Cannot expand uniform OpenFOAM field because mesh owner file is missing: {owner}"

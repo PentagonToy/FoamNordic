@@ -21,7 +21,7 @@ def memory_bytes(value: str | None) -> int | None:
     match = _MEMORY.fullmatch(value)
     if match is None:
         raise ValueError(f"unsupported Slurm memory value: {value!r}")
-    unit = (match.group(2) or "B").upper().removesuffix("B").removesuffix("I") or "B"
+    unit = (match.group(2) or "M").upper().removesuffix("B").removesuffix("I") or "B"
     return math.ceil(float(match.group(1)) * _UNITS[unit])
 
 

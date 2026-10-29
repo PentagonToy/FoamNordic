@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(FoamNordic VERSION 1.0.9 LANGUAGES CXX)
+project(FoamNordic VERSION 1.0.10 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)

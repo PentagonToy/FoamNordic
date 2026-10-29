@@ -12,23 +12,22 @@ Release CI runs the complete Python suite once on each supported platform with P
 
 ## Clean-install gate
 
-Use a fresh virtual environment outside the source checkout. Select the exact wheel for that interpreter and platform from the newly prepared wheelhouse:
+Use the designated validation environment outside the source checkout, or create a fresh environment when authorised. Keep the regular user environment unchanged. Select the exact wheel for that interpreter and platform from the newly prepared wheelhouse:
 
 ```console
-VERSION=1.0.9
-python3 -m venv test-install
-source test-install/bin/activate
-python -m pip install --upgrade pip
+VERSION=1.0.10
+python3 -m venv /absolute/path/to/authorised-test-install
+source /absolute/path/to/authorised-test-install/bin/activate
 python -m pip install "foamnordic[ml] @ file:///absolute/path/to/wheelhouse/foamnordic-${VERSION}-<python>-<abi>-<platform>.whl"
 python -m pip check
 foamnordic --version
 foamnordic dir
 module load openfoam/2512  # use the target site's command; macOS: openfoam
-foamnordic build
+foamnordic build --build-dir /absolute/path/to/validation/build
 foamnordic doctor
 ```
 
-Replace the wheel placeholders with its actual filename. Use `ml-cuda12` instead of `ml` for Linux CUDA 12 validation. Confirm the candidate version, verify that `foamnordic` and `bindnordic` both come from the fresh installation, and build from the bundled kit without `--source`. Run a small OpenFOAM case to successful completion and record the platform, Python and OpenFOAM versions and result. Remove only test-owned artefacts after validation.
+Replace the wheel placeholders with its actual filename. Use `ml-cuda12` instead of `ml` for Linux CUDA 12 validation. Confirm the candidate version, verify that `foamnordic` and `bindnordic` both come from the fresh installation, and build from the bundled kit without `--source`. Run a small OpenFOAM case to successful completion and record the platform, Python and OpenFOAM versions and result. A source-tree smoke test using an existing native runtime does not replace this installed-wheel gate. Record the exact wheel hash, interpreter, installed package paths and runtime generation. Remove only test-owned artefacts after validation.
 
 If source or package metadata changes, rebuild and validate the resulting wheels again. Never rename a wheel to change its version.
 
