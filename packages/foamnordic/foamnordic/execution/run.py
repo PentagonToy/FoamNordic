@@ -172,10 +172,10 @@ class RunSummary:
     plan_digest: str | None = None
 
     def display(self) -> None:
-        import onsaemiro as osm
+        import hedgehogs as hdg
 
         if self.style == "expanded":
-            table = osm.Table(
+            table = hdg.Table(
                 title=f"{self.name} Result",
                 columns=["Property", "Value"],
                 mode="static",
@@ -198,7 +198,7 @@ class RunSummary:
                 table.add_row(row)
             table.show()
             return
-        table = osm.Table(
+        table = hdg.Table(
             title=f"{self.name} Summary",
             columns=["Job ID", "Name", "Status", "Partition", "Node", "Elapsed"],
             mode="static",

@@ -1,6 +1,6 @@
 # Design principles
 
-These rules define the stable architectural boundary of FoamNordic. Convenience features may reduce declaration work, but they must not move solver ownership into Python or hide a change in numerical semantics.
+Convenience features must preserve solver ownership and numerical semantics.
 
 ## Ownership
 
@@ -44,7 +44,7 @@ The compiled plan records field bindings, stages, resources, placement, random k
 
 ## Performance objective
 
-For representative coupled workloads, the engineering objective is an FNO-coupled to OF/FNO end-to-end wall-time ratio between $1.5\times$ and $1.8\times$ under the same case, mesh, decomposition and allocation. This is a design target rather than a runtime guarantee; every benchmark must identify the model, transport, hardware and measurement method.
+The engineering target is an FNO-coupled/OF/FNO wall-time ratio of $1.5\times$–$1.8\times$ for matched cases, meshes, decompositions and allocations. This is a target, not a guarantee. Report model, transport, hardware and measurement method with each benchmark.
 
 ## Non-goals
 

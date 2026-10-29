@@ -91,7 +91,7 @@ case.initialize(*, ranks=None, mesh=None, validate_mesh=False)
 | `mesh` | `str \| None` | `None` | `None` or `"blockMesh"` |
 | `validate_mesh` | `bool` | `False` | Runs `checkMesh` during isolated preparation when true |
 
-For parallel runs, FoamNordic creates `system/decomposeParDict` with `scotch` when it is absent. An existing dictionary is copied into the isolated run and its literal `numberOfSubdomains` is updated to `ranks`. Existing `simple` and `hierarchical` policies are retained only when the product of their `n (nx ny nz)` factors equals `ranks`; otherwise FoamNordic reports the mismatch and uses `scotch` for that run without changing the source case.
+Parallel runs use `scotch` when `decomposeParDict` is absent. Existing dictionaries are copied and `numberOfSubdomains` is set to `ranks`. `simple` or `hierarchical` survives only when its `n` factors multiply to `ranks`; otherwise FoamNordic reports the mismatch and uses `scotch`. The source case stays unchanged.
 
 ### Case inspection
 
@@ -142,9 +142,9 @@ closure = fno.Closure(
 
 `Transform` is a generic stored-field operation. `Closure` requires a solver-side equation adapter. FNOM selects ONNX, compiled, Joblib, Equinox, or a native table without changing this interface.
 
-Use `Field.runtime(name, kind=...)` only for a field supplied by a custom solver adapter and therefore unavailable while FoamNordic inspects the source case. `kind` is one of `scalar`, `vector`, `spherical_tensor`, `symm_tensor`, or `tensor`. Ordinary stored fields should continue to use `Field(name)` so their layout is validated from the case.
+Use `Field.runtime(name, kind=...)` for adapter-created fields absent from the source case. Supported kinds are `scalar`, `vector`, `spherical_tensor`, `symm_tensor` and `tensor`. Use `Field(name)` for stored fields so FoamNordic validates their layout.
 
-One physical closure may contain a later solver-mediated field update without introducing another top-level workflow object. `update()` is immutable: it returns a new declaration and leaves the original closure unchanged. Each stage receives its own resident worker, while the custom OpenFOAM integration template fixes the actual solver call sites and places `@FOAMNORDIC_UPDATE_0_BODY@` where the first update is invoked.
+`closure.update()` returns a new declaration with another solver-mediated stage. Each stage has its own resident worker. The integration template owns call order and places `@FOAMNORDIC_UPDATE_0_BODY@` at the first update call site.
 
 ```python
 closure = fno.Closure(
@@ -174,7 +174,7 @@ closure = closure.update(
 )
 ```
 
-`Operator.table()` deliberately states that an FNOM artefact is a lookup table. FoamNordic checks this declaration against the manifest before launch. The ordered update list describes ownership and worker lifetime, not numerical composition: the solver adapter remains responsible for advancing equations between stages.
+`Operator.table()` requires a lookup-table FNOM manifest. The update list defines worker ownership and lifetime; the solver adapter advances equations between stages.
 
 Pure mathematical functions can use `Operator.function`; logical inputs become keyword arguments and returned mapping keys are logical outputs.
 
@@ -276,7 +276,7 @@ fno.Slurm.model(
 
 Declaring model memory requires `mem_per_cpu` on the OpenFOAM resources as well, because both steps share the allocation request. Omitting `model` retains the default one-CPU ModelHost resources without emitting an explicit model resource section.
 
-When `account` or `partition` is `None`, FoamNordic omits the corresponding `#SBATCH` directive. This permits clusters with a default account, a default partition or submission-time partition selection to apply their native policy. Clusters that require explicit accounting or queue selection must still receive those values.
+Omitted `account` and `partition` produce no corresponding `#SBATCH` directives. Cluster defaults apply; supply these values when the cluster requires them.
 
 Model GRES resources are reserved on every OpenFOAM node and assigned only to the ModelHost step. For example, `gres_model="gh200", gres_count=1` renders `--gres=gpu:gh200:1` for the allocation and ModelHost launch.
 
@@ -291,7 +291,7 @@ fno.Runtime.Attached(model_cpus_per_node=None, data_path="auto")
 | `model_cpus_per_node` | `int \| None` | `None` | Positive integer, or automatic selection when omitted |
 | `data_path` | `str` | `"auto"` | `auto`, `shm`, `uds`, `ucx` or `tcp` |
 
-Attached placement starts one ModelHost beside the solver ranks on each node. `auto` selects the fastest available path compatible with the actual placement; an explicit path turns an unavailable transport into a launch error rather than silently changing it.
+Attached placement starts one ModelHost per solver node. `auto` selects a compatible available transport; an unavailable explicit transport raises a launch error.
 
 ## Observations
 

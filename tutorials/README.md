@@ -14,6 +14,18 @@ tutorials/
     └── incompressible/
 ```
 
+## Read an example online
+
+Three guides show the main execution paths with copyable original notebook code:
+
+| Guide | Execution | Purpose |
+| --- | --- | --- |
+| [Basic run](https://pentagontoy.github.io/FoamNordic/foamnordic/examples/lid-driven-cavity/) | Local | Launch an unchanged OpenFOAM case without a closure, transform or observation |
+| [Field exchange](https://pentagontoy.github.io/FoamNordic/foamnordic/examples/field-exchange/) | Slurm | Transform velocity and observe fields during execution |
+| [Smagorinsky closure](https://pentagontoy.github.io/FoamNordic/foamnordic/examples/smagorinsky-closure/) | Slurm | Couple a native symbolic closure through the LES adapter |
+
+Each guide states environment requirements and expected outcomes. Cluster account, partition and resource settings must match the local scheduler. The catalogue below retains the other domain-specific and learned examples.
+
 ## Run a tutorial
 
 Notebook examples locate the FoamNordic checkout from `Path.cwd()`. Start Jupyter anywhere inside the repository; each notebook reads its case from `tutorials/openfoam_tutorials/` and writes generated models and runs below `tutorials/foamnordic_tutorials/`.

@@ -1,6 +1,7 @@
-<p align="center">
-  <img src="others/assets/icon.png" alt="FoamNordic" width="220">
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="others/assets/banner_dark.svg">
+  <img src="others/assets/banner_light.svg" alt="FoamNordic" width="960">
+</picture>
 
 # FoamNordic
 
@@ -8,7 +9,9 @@
 
 FoamNordic couples OpenFOAM fields to mathematical and machine-learning operators without making Python part of the solver loop. The same `Longship` interface runs an unchanged OpenFOAM case, a field transform, or an equation-level closure supplied by any compatible solver adapter.
 
-FNOM is the self-contained model artefact used by **FoamNordic** and implemented by **BindNordic**. It stores the executable payload together with tensor contracts, scaling, runtime requirements, and compatibility metadata. Fjord moves fields over shared memory, Unix sockets, UCX, or TCP; Longship owns placement, launch, logs, observations, and results.
+[Documentation](https://pentagontoy.github.io/FoamNordic/foamnordic/) · [Installation](https://pentagontoy.github.io/FoamNordic/foamnordic/installation/) · [API](https://pentagontoy.github.io/FoamNordic/foamnordic/api/)
+
+FNOM stores the model payload, tensor contracts, scaling and runtime metadata. BindNordic evaluates it; Fjord exchanges fields over shared memory, Unix sockets, UCX or TCP; Longship manages placement, execution and results.
 
 Python 3.11 and 3.12 are supported. See the [changelog](CHANGELOG.md) for release notes and upgrade guidance.
 
@@ -40,46 +43,31 @@ Linux with OpenFOAM v2512 is the primary HPC target. OpenFOAM.app supplies the n
 
 ## Install
 
+Install the PyPI release with pip or uv:
+
 ```console
-uv venv
-source .venv/bin/activate
-uv pip install "foamnordic[ml]"
+pip install foamnordic
 ```
 
-The `ml` extra installs scikit-learn, ONNX, Equinox, Optax, and CPU JAX on Linux or macOS. On a Linux CUDA 12 system, install `foamnordic[ml-cuda12]` instead. Plain `foamnordic` supports ordinary OpenFOAM runs, mathematical functions, and existing model artefacts.
-
-Wheels include the Python API and native control runtime. Build the small OpenFOAM integration for each compiler/ABI used on the machine:
+Or, in an existing virtual environment:
 
 ```console
-# Linux/HPC
-module load openfoam/2512
-foamnordic build
+uv pip install foamnordic
+```
 
-# Apple Silicon with OpenFOAM.app
+Follow the [installation guide](docs/installation.md) for optional environment setup, OpenFOAM activation, build checks and separate main or editable installation instructions. Add `foamnordic[ml]` for CPU model training or `foamnordic[ml-cuda12]` for Linux CUDA 12 training.
+
+Installing the Python package does not install OpenFOAM. Build the integration in the target OpenFOAM environment, then run `foamnordic doctor` there before launching a case.
+
+On macOS with OpenFOAM.app, enter its environment before building:
+
+```console
 openfoam
 foamnordic build
-```
-
-Check the active Python, native, OpenFOAM, MPI, and ABI-matched runtime without starting a CFD workload:
-
-```console
 foamnordic doctor
 ```
 
-The runtime is installed below `~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/`. Multiple OpenFOAM ABIs coexist and `Case.of_cmd` selects one at launch. `FOAMNORDIC_OPENFOAM_LIB` is an advanced override.
-
-To use the current source directly:
-
-```console
-git clone https://github.com/PentagonToy/FoamNordic.git
-cd FoamNordic
-uv sync --all-packages --all-extras
-source .venv/bin/activate
-module load openfoam/2512
-foamnordic build
-```
-
-To install only the library from a checkout, use `uv pip install -e "./packages/foamnordic[ml]"`; use `ml-cuda12` on a Linux CUDA 12 host. On macOS, replace the module command with `openfoam`. Offline ONNX builds may set `FOAMNORDIC_ONNX_RUNTIME_ROOT` to an unpacked ONNX Runtime 1.28.0 archive; workloads without native ONNX can use `foamnordic build --without-onnx`.
+Keep the Python environment containing FoamNordic active inside the OpenFOAM shell.
 
 ## Quick start
 
@@ -170,6 +158,8 @@ python -m pytest
 Native tests that compile the OpenFOAM integration require the target OpenFOAM environment to be active.
 
 ## Documentation
+
+Read the [FoamNordic section](https://pentagontoy.github.io/FoamNordic/foamnordic/) of the shared Nordic documentation site for guides and API references.
 
 - [Package boundary](packages/README.md)
 - [Python API](docs/api/README.md)

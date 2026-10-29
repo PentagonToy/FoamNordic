@@ -93,7 +93,7 @@ post.statistics(fields, *, time_idx=None, physical_time=None, verbose=False)
 | `physical_time` | `float \| None` | `None` | Mutually exclusive with `time_idx` |
 | `verbose` | `bool` | `False` | Display the returned values in a compact table |
 
-The result contains `min`, `max`, `mean`, `std`, and `rms`. Vector and tensor fields use the Euclidean or Frobenius magnitude of each cell. The calculation is always returned as ordinary dictionaries. `verbose=True` additionally displays a compact Onsaemiro table; the default is quiet.
+The result contains `min`, `max`, `mean`, `std`, and `rms`. Vector and tensor fields use the Euclidean or Frobenius magnitude of each cell. The calculation is always returned as ordinary dictionaries. `verbose=True` additionally displays a compact Hedgehogs table; the default is quiet.
 
 ## Compare two runs
 

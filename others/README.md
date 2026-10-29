@@ -2,13 +2,23 @@
 
 This directory keeps publication assets and release tooling outside the runtime package.
 
-This directory contains publication assets and release tooling. Generated wheelhouses remain untracked.
+Generated wheelhouses remain untracked.
 
 | Path | Purpose |
 | --- | --- |
 | [`release/`](release/README.md) | PyPI metadata, wheel preparation, release validation and tests |
 | `assets/` | Package and repository artwork |
 | `figures/` | Repository diagrams |
+
+## Logo variants
+
+| Asset | Use |
+| --- | --- |
+| [`assets/icon.svg`](assets/icon.svg) | Transparent symbol used in the documentation homepage, header and browser favicon |
+| [`assets/banner_light.svg`](assets/banner_light.svg) | README banner for light themes |
+| [`assets/banner_dark.svg`](assets/banner_dark.svg) | README banner for dark themes |
+
+Keep the canvas and internal cut-outs transparent. Check light and dark backgrounds after changing the symbol; the documentation build versions SVG URLs by content hash.
 
 ## Prepare release wheels
 

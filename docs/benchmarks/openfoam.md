@@ -98,7 +98,9 @@ The columns correspond to physical times `1e-5`, `1e-4`, `1e-3` and `4e-3`. All 
 
 ### k-equation configuration
 
-Roihu ran the 89,728-cell incompressible NACA4412 LES to physical time `1` with OpenFOAM v2512, 16 MPI ranks, `deltaT=0.0025` and 400 time steps. OpenFOAM via FoamNordic, abbreviated OF/FNO, used Longship to run the standard OpenFOAM `kEqn` model. FNO-native used the same `Ck=0.094` and `Ce=1.048` algebra declared with `Operator.function` and the implicit k-equation declared by `Field.transport`. The symbolic graph was lowered into `kEqnFjord` and executed at the OpenFOAM correction boundary without a ModelHost or field exchange. Both paths received one warm-up followed by seven measured runs in alternating order.
+Both NACA4412 paths ran on Roihu with 89,728 cells, OpenFOAM v2512, 16 MPI ranks, `deltaT=0.0025` and 400 steps to physical time `1`.
+
+OF/FNO launched standard OpenFOAM `kEqn` through Longship. FNO-native used identical `Ck=0.094` and `Ce=1.048` algebra in `Operator.function`, with the implicit equation in `Field.transport`. The lowered `kEqnFjord` graph ran at the correction boundary without ModelHost or field exchange. Each path used one warm-up and seven measured runs, alternating execution order.
 
 #### Performance
 

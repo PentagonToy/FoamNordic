@@ -1,0 +1,125 @@
+site_name: Nordic documentation
+site_description: FoamNordic execution and StackNordic stored-data workflows
+site_url: https://pentagontoy.github.io/FoamNordic/
+repo_url: https://github.com/PentagonToy/FoamNordic
+repo_name: PentagonToy/FoamNordic
+edit_uri: ''
+docs_dir: docs
+site_dir: site
+strict: true
+theme:
+  variant: modern
+  custom_dir: tools/docs/overrides
+  logo: assets/foamnordic/assets/icon.svg
+  favicon: assets/foamnordic/assets/icon.svg
+  font: false
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+plugins:
+  - search
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.inlinehilite
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+extra_css:
+  - stylesheets/brand.css
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
+nav:
+  - Home: index.md
+  - FoamNordic:
+      - Overview: foamnordic/README.md
+      - Getting started:
+          - Installation: foamnordic/installation.md
+          - First run: foamnordic/getting-started.md
+      - Tutorials:
+          - Overview: foamnordic/tutorials.md
+          - Basic run (local): foamnordic/examples/lid-driven-cavity.md
+          - Field exchange (Slurm): foamnordic/examples/field-exchange.md
+          - Closure (Slurm): foamnordic/examples/smagorinsky-closure.md
+      - API:
+          - Overview: foamnordic/api/README.md
+          - Run control: foamnordic/api/run-control.md
+          - Numerics: foamnordic/api/numerics.md
+          - Models and FNOM: foamnordic/api/model-artifact.md
+          - Postprocessing: foamnordic/api/postprocess.md
+          - Command line: foamnordic/api/command-line.md
+      - Architecture:
+          - Overview: foamnordic/architecture/README.md
+          - Principles: foamnordic/architecture/principles.md
+          - OpenFOAM: foamnordic/architecture/openfoam.md
+          - Runtime: foamnordic/architecture/runtime.md
+          - Transport: foamnordic/architecture/transport.md
+          - FNOM: foamnordic/architecture/fnom.md
+          - Lifecycle: foamnordic/architecture/lifecycle.md
+          - Observations: foamnordic/architecture/observations.md
+      - Development:
+          - Overview: foamnordic/developer/README.md
+          - Field programmes: foamnordic/developer/field-programs.md
+          - OpenFOAM style: foamnordic/developer/openfoam-style.md
+          - Native runtime: foamnordic/developer/native-runtime.md
+          - Verification: foamnordic/developer/verification.md
+          - Documentation site: foamnordic/developer/documentation.md
+      - Validation:
+          - Overview: foamnordic/benchmarks/README.md
+          - OpenFOAM: foamnordic/benchmarks/openfoam.md
+          - Runtime: foamnordic/benchmarks/runtime.md
+          - Transport: foamnordic/benchmarks/transport.md
+  - StackNordic:
+      - Overview: stacknordic/README.md
+      - Getting started:
+          - Installation: stacknordic/installation.md
+          - First reconstruction: stacknordic/getting-started.md
+      - Examples:
+          - Case to dataset: stacknordic/tutorials/case-to-dataset.md
+      - API:
+          - Overview: stacknordic/api/README.md
+          - OpenFOAM cases: stacknordic/api/openfoam.md
+          - Dataset export and storage: stacknordic/api/dataset.md
+          - Field computation: stacknordic/api/fields.md
+          - Filtering: stacknordic/api/filtering.md
+      - Architecture:
+          - Principles: stacknordic/architecture/principles.md
+          - Stored-data layout: stacknordic/architecture/data-layout.md
+          - Workflow: stacknordic/architecture/workflow.md
+      - Development:
+          - Verification: stacknordic/developer/verification.md
+      - Validation:
+          - Overview: stacknordic/benchmarks/README.md
+          - Reconstruction: stacknordic/benchmarks/reconstruction.md
+          - Dataset export: stacknordic/benchmarks/dataset.md
+  - Together:
+      - Run to dataset: workflows/foamnordic-stacknordic.md
+  - Sources: versions.md

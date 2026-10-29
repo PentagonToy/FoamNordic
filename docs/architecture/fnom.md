@@ -48,7 +48,7 @@ Native payloads favour validation, alignment and direct access over maximum comp
 | Joblib | Persistent Python resident | Code-bearing |
 | Equinox | Persistent JAX resident | Code-bearing |
 
-Compiled estimators and native forests suit modest tree or boosting models. Very large compiled estimators can spend more time and memory in code generation than they recover during inference. Joblib is the general compatibility path and avoids generated C++ compilation, while ONNX and Equinox serve portable native and JAX execution respectively. Production selection should use representative batch sizes and the target host.
+Compiled estimators and forests suit modest tree or boosting models. Large generated models may cost more to compile than they save in inference. Joblib offers general compatibility; ONNX and Equinox support native and JAX execution. Compare representative batch sizes on the target host.
 
 ## Validation and trust
 

@@ -55,7 +55,7 @@ $$
 (k^{n+1}, \nu_t^{n+1}) = \mathcal{M}(\mathbf{x}).
 $$
 
-The declared inputs remain selectable, although a learned one-equation closure normally includes the current `k` field. A resident model may update `k` and `nut` directly. A mathematical `Operator.function` may instead place one `Field.transport()` barrier in the graph; FoamNordic lowers its coefficient expressions once and the adapter assembles the implicit OpenFOAM equation at each correction. Both forms retain the same public output contract.
+Inputs remain selectable; learned one-equation closures usually include `k`. Resident models may update `k` and `nut` directly. A native `Operator.function` can instead declare one `Field.transport()` barrier. Its coefficients are lowered once; the adapter assembles the implicit equation at each correction. Both retain the same outputs.
 
 The resulting source and sink terms enter the solver-owned equation as
 
@@ -69,7 +69,7 @@ $$
 + S_k.
 $$
 
-The native transport path solves and bounds `k`, then evaluates `nut` from the updated field. It reserves no ModelHost resources and performs no Python or inter-process exchange in the corrector loop. A post-solve output cannot mix the updated value with the original `k`; FoamNordic rejects that declaration rather than changing its meaning. The earlier resident term contract, `nut`, `kProduction`, and `kDissipationCoeff`, remains available for compatibility.
+Native transport solves and bounds `k`, then evaluates `nut`, without ModelHost or inter-process exchange. Mixing updated and original `k` in a post-solve output is rejected. The earlier resident `nut`, `kProduction` and `kDissipationCoeff` contract remains supported.
 
 ### progressRateFjord
 
@@ -79,7 +79,7 @@ $$
 \omega_c = \mathcal{M}(\mathbf{x}).
 $$
 
-The consumer may bind `progress`, `variance`, `temperature`, arbitrary stored fields, or compatible derived expressions as $\mathbf{x}$. The hook fixes one scalar logical output, `omega_c`, and rejects any other output contract. It does not transport progress, add a source to an equation, define heat release, or update thermochemical state. Those operations remain the responsibility of the consuming solver library, which also registers the hook in its own model hierarchy.
+Inputs may use stored fields or compatible expressions, including progress, variance and temperature. The hook requires one scalar output, `omega_c`. The consuming solver owns transport, equation sources, heat release, thermochemical updates and hook registration.
 
 Model input names remain logical contract keys. A model exported with `c`, `c_var`, and `T`, for example, can map those keys to the hook's `progress`, `variance`, and `temperature` bindings through `inputExpressions`; no input vocabulary is imposed by `progressRateFjord`.
 

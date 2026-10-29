@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <3.13"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'linux'",
@@ -215,10 +215,10 @@ source = { editable = "packages/foamnordic" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "cmake" },
+    { name = "hedgehogs" },
     { name = "joblib" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "onsaemiro" },
     { name = "pyyaml" },
 ]
 
@@ -250,6 +250,7 @@ requires-dist = [
     { name = "cmake", specifier = ">=3.20" },
     { name = "equinox", marker = "extra == 'ml'", specifier = ">=0.13.1,<0.14" },
     { name = "equinox", marker = "extra == 'ml-cuda12'", specifier = ">=0.13.1,<0.14" },
+    { name = "hedgehogs", specifier = ">=0.0.5" },
     { name = "jax", marker = "sys_platform != 'linux' and extra == 'ml-cuda12'", specifier = ">=0.7,<1" },
     { name = "jax", marker = "extra == 'ml'", specifier = ">=0.7,<1" },
     { name = "jax", extras = ["cuda12"], marker = "sys_platform == 'linux' and extra == 'ml-cuda12'", specifier = ">=0.7,<1" },
@@ -257,7 +258,6 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "onnx", marker = "extra == 'ml'", specifier = ">=1.17,<2" },
     { name = "onnx", marker = "extra == 'ml-cuda12'", specifier = ">=1.17,<2" },
-    { name = "onsaemiro", specifier = ">=1.1.2" },
     { name = "optax", marker = "extra == 'ml'", specifier = ">=0.2.6,<0.3" },
     { name = "optax", marker = "extra == 'ml-cuda12'", specifier = ">=0.2.6,<0.3" },
     { name = "pyyaml", specifier = ">=6,<7" },
@@ -310,6 +310,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e2/5e/f9600553b9f645e3068553831685ff1dab6259536a23b38d2e048de38f17/fonttools-4.65.0-cp312-cp312-win32.whl", hash = "sha256:04f73dd01005752a6e75cf4a8dc6b70dc724d1d4bc34cc89522153f4a2f07680", size = 2432089, upload-time = "2026-09-10T15:34:02.803Z" },
     { url = "https://files.pythonhosted.org/packages/3a/02/e436a6a1863b9862bab9f82d6da33055dd7aa3738017edd902a163525dc2/fonttools-4.65.0-cp312-cp312-win_amd64.whl", hash = "sha256:3b5d9ba89edf778b376e669b879ae33a198bf45cf5a23c3f6514f935cf9d0d9d", size = 2483475, upload-time = "2026-09-10T15:34:05.09Z" },
     { url = "https://files.pythonhosted.org/packages/e6/35/f894ceb867118c0261d0f69a9bd516b045a3754238f76c88a49513ac7a83/fonttools-4.65.0-py3-none-any.whl", hash = "sha256:3060b8c1fc2329fa20265b7c138614143ea7c1624e26c5c180c76aeb74deae6f", size = 1196441, upload-time = "2026-09-10T15:35:52.347Z" },
+]
+
+[[package]]
+name = "hedgehogs"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/44/34bad11624fffc2978f463586d35c17a6c947bc6c4bd2d621212bd03c3a6/hedgehogs-0.0.5.tar.gz", hash = "sha256:0972642dcb18642879fb60c389e9fa26309d504e46fc03db278387a04f8b8931", size = 480379, upload-time = "2026-10-24T15:14:13.961Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/41/92/a0acc1e57abb6ecfef35de2fc90a6759c0e233f3c5bb4fbe4e8c9f4d4363/hedgehogs-0.0.5-py3-none-any.whl", hash = "sha256:8c88a7d8c3973a58a944a449950d6cfdab4ecb3f0bddab83e4776ee3b9cd1838", size = 74125, upload-time = "2026-10-24T15:14:12.257Z" },
 ]
 
 [[package]]
@@ -950,20 +964,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d0/f0/68195b5e5a53e333faf2660f5352ee43738d0e42fc5216cc6b1871a9fbfb/onnx-1.22.0-cp312-abi3-win32.whl", hash = "sha256:cc8b66b312f8f03a53e268afb67180a2d97dd12cc79e2b61361c6c0073448016", size = 17081568, upload-time = "2026-06-15T12:49:43.398Z" },
     { url = "https://files.pythonhosted.org/packages/13/a8/734725bb703c5fabb687f79c79e51249475212b3eb37771ac4a4ac9b487f/onnx-1.22.0-cp312-abi3-win_amd64.whl", hash = "sha256:72ccebab3bac07215c204ce8848d42e78eaaa666badbf72d25cd359b9f269e3a", size = 17213290, upload-time = "2026-06-15T12:49:45.933Z" },
     { url = "https://files.pythonhosted.org/packages/bd/2a/8ce48d8ae26a8761ad4e5dc771961b155c5c3c7c8540ec7f2f2d71b69af0/onnx-1.22.0-cp312-abi3-win_arm64.whl", hash = "sha256:f3c120dcdb70ad738f3c061b32798f408ea299eb69f84dd69ab4a6bf3c2ec01f", size = 17207030, upload-time = "2026-06-15T12:49:48.635Z" },
-]
-
-[[package]]
-name = "onsaemiro"
-version = "1.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "ipython" },
-    { name = "matplotlib" },
-    { name = "rich" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/23/9a/f8c0fafa5748c01db3637fe1d19db079dd6ad069cf2fd2b51ca1f4fd7701/onsaemiro-1.1.2.tar.gz", hash = "sha256:57e2c6f5737093bf53a956e2de0d6d4b868fcb28d082238819c5e3c012c68fdd", size = 23303, upload-time = "2026-09-14T05:58:32.562Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cd/d7/8092e905de31c7aac60ea39aa734503a27d81100344a230d938ffd13798f/onsaemiro-1.1.2-py3-none-any.whl", hash = "sha256:52ba2df795e7b31636975c6868dbcd25af67d5ceadc43885b28c8656f9564dff", size = 20652, upload-time = "2026-09-14T05:58:31.474Z" },
 ]
 
 [[package]]

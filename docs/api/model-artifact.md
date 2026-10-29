@@ -62,7 +62,7 @@ Joblib models receive a NumPy array by default. Set `input_format="pandas"` or `
 | Boosting | `GradientBoostingRegressor`, `XGBRegressor`, `XGBRFRegressor`, `LGBMRegressor` |
 | Ensemble | `VotingRegressor` composed only of supported models |
 
-The compiled lowering currently emits one numerical value per estimator. This concerns the packed model output width, not OpenFOAM's `volScalarField` type. A one-value prediction can be bound to a compatible scalar field, while Joblib, ONNX, and Equinox support wider model outputs. In normal use an ML engineer can leave `backend="auto"` selected and let unsupported models fall back to Joblib.
+Compiled estimators emit one numerical value per prediction; this is a model output-width limit, independent of the OpenFOAM field type. Joblib, ONNX and Equinox support wider outputs. Leave `backend="auto"` selected to fall back to Joblib for unsupported estimators.
 
 ### `Export.sklearn`
 
@@ -98,7 +98,7 @@ artifact = fno.Export.sklearn(
 )
 ```
 
-The first compiled load creates and caches a target-specific native library. XGBoost and LightGBM are required only while exporting their fitted models, and the resulting compiled FNOM does not depend on either runtime. Use `foamnordic compile smagorinsky.fnom` to warm the cache when the login and compute nodes share the same target ABI. The `runtime` argument applies only to Joblib and selects `sklearn` or `sklearnex`.
+The first compiled load caches a target-native library. XGBoost and LightGBM are needed only for export. Run `foamnordic compile smagorinsky.fnom` to warm a cache shared by nodes with the same target ABI. `runtime` applies only to Joblib and selects `sklearn` or `sklearnex`.
 
 ### Scalers
 
@@ -150,9 +150,11 @@ print(artifact.trust_policy)
 artifact.validate()
 ```
 
-`FnomArtifact` is immutable. `validate()` re-reads the file through the native FNOM parser without importing or executing its embedded backend payload. Joblib, Equinox, and portable C++ payloads are classified as code-bearing; ONNX, native forest, and regular-grid table payloads are classified as data-only. `foamnordic inspect` reports this distinction. Calling `Operator.model()` or `foamnordic compile` is the execution decision; no redundant trust flag is required.
+`FnomArtifact` is immutable. `validate()` parses FNOM without executing its payload. `inspect` identifies code-bearing Joblib, Equinox and portable C++ payloads, versus data-only ONNX, forests and tables.
 
-OpenFOAM scalar precision and model precision may differ. The native exchange boundary accepts `float32` and `float64` model contracts with either single- or double-precision OpenFOAM, and performs the required conversion while packing inputs and committing outputs. Equal-precision fields keep the direct copy path; a precision conversion is necessarily not zero-copy.
+`Operator.model()` or `foamnordic compile` authorises execution; no extra trust flag is required.
+
+The exchange accepts `float32` or `float64` model tensors with either OpenFOAM precision. Packing and field commit perform required conversions. Equal-precision fields use direct copies; converted fields cannot be zero-copy.
 
 The equivalent CLI commands are:
 

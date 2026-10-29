@@ -1,6 +1,6 @@
 # Developer guide
 
-Use this section to locate the owner of a change before editing source. FoamNordic separates solver semantics, transport, model execution and orchestration so that a new closure or backend does not require changes throughout the repository.
+Use the table to locate the component that owns a change. Read its architecture contract before editing.
 
 | Change | Start here | Continue with | Verify with |
 | --- | --- | --- | --- |
@@ -15,18 +15,13 @@ Use this section to locate the owner of a change before editing source. FoamNord
 
 ## Change route
 
-1. Identify the component that owns the behaviour in the table above.
-2. Read its local `README.md` and the corresponding [architecture contract](../architecture/README.md).
-3. Change the narrowest owning component; do not mirror numerical or lifecycle logic in another layer.
-4. Add a contract or regression test beside the owning component.
-5. Follow the [verification guide](verification.md), escalating to OpenFOAM, MPI or Slurm only when the change crosses those boundaries.
-6. Update user documentation only when supported behaviour, configuration or output changes; keep implementation notes in source and tests.
+1. Locate the owning component and read its local README and [architecture contract](../architecture/README.md).
+2. Change that component and add relevant behavioural coverage; avoid duplicating numerical or lifecycle logic.
+3. Follow the [verification guide](verification.md) and update affected API or usage documentation.
 
 ## Stable boundaries
 
-OpenFOAM owns equations, mesh state, correction order, boundary conditions and field commits. Fjord and Harbor own bounded transport and exchange identity. ModelHost owns resident execution, admission and backend lifetime. BindNordic owns model tensors, FNOM, scaling and backend evaluation. Longship owns preparation, placement, readiness, failure propagation and teardown.
-
-Do not embed a model backend in an OpenFOAM adapter, move solver equations into ModelHost, apply model scaling in the solver, or make observations block solver progress. A change that appears to require any of these should be treated as an architecture change and reviewed against the [design principles](../architecture/principles.md) first.
+Keep equations in OpenFOAM, model execution in ModelHost and BindNordic, exchange in Fjord and Harbor, and orchestration in Longship. Observations remain non-blocking. The [architecture principles](../architecture/principles.md) define these boundaries.
 
 ## Guides
 
@@ -36,3 +31,4 @@ Do not embed a model backend in an OpenFOAM adapter, move solver equations into 
 | [OpenFOAM source style](openfoam-style.md) | Formatting and reviewing OpenFOAM-linked C++ without changing runtime design |
 | [Native runtime](native-runtime.md) | Rune, Fjord, Harbor, ModelHost, Smedja, BindNordic and connectors |
 | [Verification](verification.md) | Selecting the smallest sufficient local, OpenFOAM, MPI and Roihu checks |
+| [Documentation site](documentation.md) | Building and publishing the Zensical site on GitHub Pages |

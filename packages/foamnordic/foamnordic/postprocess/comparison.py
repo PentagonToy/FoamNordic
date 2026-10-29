@@ -52,9 +52,9 @@ def _strict_mesh(reference: Path, candidate: Path) -> None:
 
 
 def _display(rows: list[list[str]], physical_time: float) -> None:
-    import onsaemiro as osm
+    import hedgehogs as hdg
 
-    table = osm.Table(
+    table = hdg.Table(
         title=f"OpenFOAM Case Comparison (t={physical_time:g})",
         columns=["Field", "MAE", "RMSE", "Max Abs", "Relative L2"],
         mode="static",
@@ -80,7 +80,7 @@ def compare(
     completed Results, or existing :class:`Case` readers. ``time_idx`` and
     ``physical_time`` are mutually exclusive. ``mesh='strict'`` verifies mesh
     identity before cell-wise comparison; ``mesh='shape'`` explicitly checks
-    field shapes only. ``verbose=True`` adds an Onsaemiro table.
+    field shapes only. ``verbose=True`` adds an Hedgehogs table.
     """
 
     if mesh not in {"strict", "shape"}:

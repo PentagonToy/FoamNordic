@@ -102,7 +102,7 @@ env -u PYTHONHOME -u PYTHONPATH "$ENVIRONMENT/bin/python" -m pip install --upgra
 env -u PYTHONHOME -u PYTHONPATH "$ENVIRONMENT/bin/python" -m pip install \
     "scikit-build-core>=0.10" \
     "nanobind>=2.4" \
-    "onsaemiro>=1.1.0"
+    "hedgehogs>=0.0.5"
 env -u PYTHONHOME -u PYTHONPATH "$ENVIRONMENT/bin/python" -m pip install \
     --no-build-isolation \
     "$REPOSITORY/packages/foamnordic"

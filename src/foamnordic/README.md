@@ -38,4 +38,4 @@ Equation-level adapters are selected by their native correction boundary, not by
 5. share the common transport, inference, observation, and lifecycle code;
 6. include a solver-integrated numerical acceptance test.
 
-This is the common pattern retained from surveyed FGM, FPV, flamelet, progress-variable, and detailed-chemistry OpenFOAM implementations. Their solver-specific field names, table layouts, and copied framework sources do not belong in FoamNordic.
+Keep solver-specific field names, table layouts and framework sources in the solver project.

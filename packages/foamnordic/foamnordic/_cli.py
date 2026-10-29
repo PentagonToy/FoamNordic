@@ -414,10 +414,10 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
 
 
 def _doctor(stream: TextIO) -> int:
-    import onsaemiro as osm
+    import hedgehogs as hdg
 
     checks = _doctor_checks()
-    table = osm.Table(
+    table = hdg.Table(
         title="FoamNordic Doctor",
         columns=["Status", "Check", "Detail"],
         mode="static",

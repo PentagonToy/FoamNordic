@@ -35,7 +35,9 @@ All `Math` functions return the native result type of their operands: NumPy inpu
 
 `fno.Math.outer(a, b)` maps two vector fields to a tensor field, and `fno.Math.trace(A)` maps a tensor field to a scalar field. `fno.Context.delta_time()` reads the active OpenFOAM time-step size at the invocation boundary.
 
-Native field graphs normalise the common tensor forms `matmul(A, B)`, `einsum("...ii->...", A)` and `einsum("...ij,...ij->...", A, B)` to OpenFOAM contractions. Positive dyadic powers such as `x**2`, `x**1.5`, `x**1.25` and `x**2.5`, together with scalar `where(x > value, a, b)`, remain native. A positive dyadic power has an exponent representable as a positive integer divided by a power of two. Other powers, `einsum` patterns and arbitrary Python control flow retain the resident path.
+Native graphs map `matmul(A, B)`, `einsum("...ii->...", A)` and `einsum("...ij,...ij->...", A, B)` to OpenFOAM contractions. Positive dyadic powers, such as `x**1.5`, and scalar `where(x > value, a, b)` also remain native.
+
+A dyadic exponent is a positive integer divided by a power of two. Other powers, `einsum` patterns and arbitrary Python control flow use the resident path.
 
 ## Mathematical operators
 
@@ -129,7 +131,9 @@ fno.Field.transport(value, *, diffusivity, source, implicit_sink,
 | `implicit_sink` | field name or `FieldExpression` | required | Scalar implicit sink coefficient |
 | `lower_bound` | `float` | `0.0` | Finite post-solve lower bound |
 
-The finite-volume operators use the copied case's `system/fvSchemes`. FoamNordic preserves an exact user-supplied scheme or a usable section default. In convenient mode it adds an exact fallback only when neither is available; strict mode rejects the missing scheme. Current fallbacks are `Gauss linear` for gradient, curl and divergence expressions and `Gauss linear corrected` for Laplacians. The source case is never changed.
+Finite-volume operators use the copied `system/fvSchemes`. Exact schemes and usable section defaults are preserved. Convenient mode adds a fallback only when both are absent; strict mode rejects the missing scheme.
+
+Fallbacks are `Gauss linear` for gradient, curl and divergence, and `Gauss linear corrected` for Laplacians. The source case stays unchanged.
 
 ## Native algebra
 
@@ -218,7 +222,9 @@ def perturb(velocity, *, key):
     return {"velocity": velocity * scale + noise}
 ```
 
-Keys are never consumed. Reusing a key repeats a draw; split it when one function needs independent draws. The available distributions are `uniform`, `normal`, `integers` and `bernoulli`. `scope="global"` gives every solver rank the same invocation key, while `scope="rank"` also folds in the negotiated rank. `fno.Random.to_jax(key)` materialises a JAX key. NumPy and JAX are reproducible within their backend but do not promise bit-identical samples across backends.
+Reusing a key repeats a draw; split keys for independent draws. Distributions are `uniform`, `normal`, `integers` and `bernoulli`.
+
+`scope="global"` shares an invocation key across ranks; `scope="rank"` folds in the negotiated rank. `to_jax()` creates a JAX key. Reproducibility holds within each backend, not bit-for-bit across NumPy and JAX.
 
 | API | Principal arguments | Defaults or constraint |
 | --- | --- | --- |

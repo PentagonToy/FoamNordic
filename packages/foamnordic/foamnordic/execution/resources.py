@@ -101,13 +101,13 @@ def resource_values(longship: Longship) -> dict[str, object]:
 
 
 def display_resources(longship: Longship) -> None:
-    import onsaemiro as osm
+    import hedgehogs as hdg
 
     scheduler = longship.scheduler
     assert scheduler is not None
     values = resource_values(longship)
     programs = int(values["programs"])
-    table = osm.Table(
+    table = hdg.Table(
         title=f"{longship.name} Resource Plan",
         columns=["Resource", "OpenFOAM", "Model", "Allocation"],
         mode="static",

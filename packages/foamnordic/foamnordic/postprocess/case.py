@@ -49,9 +49,9 @@ def display_statistics(
     title: str,
     rows: list[list[str]],
 ) -> None:
-    import onsaemiro as osm
+    import hedgehogs as hdg
 
-    table = osm.Table(
+    table = hdg.Table(
         title=title,
         columns=["Field", "Min", "Max", "Mean", "Std", "RMS"],
         mode="static",
@@ -122,7 +122,7 @@ class Case:
 
         A single field returns one metric dictionary; multiple fields return
         dictionaries keyed by field name. ``verbose=True`` additionally
-        displays the returned values as an Onsaemiro table.
+        displays the returned values as an Hedgehogs table.
         """
 
         if not isinstance(verbose, bool):

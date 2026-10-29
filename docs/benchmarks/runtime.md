@@ -91,7 +91,9 @@ Warm inference used 21 repetitions per batch. Compiled execution is faster for t
 
 ## Resident ModelHost memory
 
-The resident-memory benchmark drives the production ModelHost over SHM with a deterministic affine kernel. Each run performs 20 exchanges of 1,024 rows, three exchanges of 1,048,576 rows, then 20 more small exchanges. The large input and output contain 80 MiB and 8 MiB of float64 data. Each platform used seven independently started ModelHost processes; the table reports the median and maximum observed deviation.
+The production ModelHost ran a deterministic affine kernel over SHM. Each run used 20 exchanges of 1,024 rows, three of 1,048,576 rows, then 20 small exchanges. Large float64 inputs and outputs occupied 80 MiB and 8 MiB.
+
+Each platform used seven independently started processes. The table reports medians and maximum observed deviations.
 
 | Platform | Connected RSS | Initial small RSS | Large RSS | Returned-small RSS | Peak RSS |
 |---|---:|---:|---:|---:|---:|
@@ -107,7 +109,7 @@ Internal accounting was identical on both platforms. MacBook RSS remained at its
 
 ## Runtime generation turnover
 
-The MacBook generation stress published 256 immutable runtime generations with a 64 KiB payload in each of seven independent series. Every publication atomically replaced the current selector and invoked garbage collection while one generation remained pinned for the entire series and another pin moved every 16 publications. After releasing both pins, exactly the current and most recent generation survived as required by the retention policy.
+Each of seven MacBook stress series published 256 immutable runtime generations with 64 KiB payloads. Every publication atomically replaced the selector and ran garbage collection. One generation stayed pinned; another pin moved every 16 publications. After both pins were released, only the current and most recent generations survived, matching retention policy.
 
 | Platform | Series time | Publish latency | GC latency | Collected generations |
 |---|---:|---:|---:|---:|

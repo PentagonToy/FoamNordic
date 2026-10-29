@@ -455,13 +455,13 @@ def _display_export(
     *,
     format_name: str = "ONNX",
 ) -> None:
-    import onsaemiro as osm
+    import hedgehogs as hdg
 
     metadata = load_artifact(manifest).as_dict()
     input_scaler = metadata["input_scaler"]
     output_scaler = metadata["output_scaler"]
 
-    table = osm.Table(
+    table = hdg.Table(
         title=f"FoamNordic Model Exported: {name}",
         columns=["Property", "Value"],
         mode="static",

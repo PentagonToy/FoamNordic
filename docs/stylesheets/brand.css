@@ -1,0 +1,161 @@
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #f6f8fa;
+  --md-primary-bg-color: #243746;
+  --md-primary-bg-color--light: #526574;
+  --md-default-bg-color: #f6f8fa;
+  --md-default-fg-color: #243746;
+  --md-code-bg-color: #eaf0f4;
+  --md-primary-fg-color--light: #0072b2;
+  --md-primary-fg-color--dark: #00466d;
+  --md-accent-fg-color: #0072b2;
+  --md-typeset-a-color: #0072b2;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #141e27;
+  --md-primary-bg-color: #e1e8ee;
+  --md-primary-bg-color--light: #a8bac8;
+  --md-default-fg-color: #e1e8ee;
+  --md-code-bg-color: #1b2a36;
+  --md-primary-fg-color--light: #244b68;
+  --md-primary-fg-color--dark: #101f2b;
+  --md-accent-fg-color: #56b4e9;
+  --md-typeset-a-color: #56b4e9;
+  --md-default-bg-color: #141e27;
+}
+
+.md-header__button.md-logo img {
+  padding: 2px;
+  background: transparent;
+}
+
+.md-header__title {
+  font-size: 1.15rem;
+}
+
+.md-typeset {
+  font-size: .95rem;
+  line-height: 1.75;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h1 {
+  color: var(--md-default-fg-color);
+  margin-bottom: 1em;
+  letter-spacing: -.035em;
+}
+
+.md-nav__link.md-nav__link--active {
+  font-weight: 600;
+  color: var(--md-typeset-a-color);
+}
+
+.md-sidebar .md-nav {
+  font-size: .8rem;
+}
+
+.nordic-home-logo {
+  text-align: center;
+  margin: .5rem 0 1rem;
+}
+
+.nordic-home-logo img {
+  width: 140px;
+  max-width: 55vw;
+}
+
+.nordic-banner { margin: .5rem 0 1.5rem; }
+.nordic-banner img { width: 100%; height: auto; }
+
+.nordic-projects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 2rem;
+}
+
+.nordic-project-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-top: 2px solid var(--md-accent-fg-color);
+  border-radius: 8px;
+  padding: 1.3rem;
+}
+
+.md-typeset .nordic-project-card h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+.nordic-project-card p:last-child {
+  margin-bottom: 0;
+}
+
+.nordic-project-card a {
+  font-weight: 500;
+}
+
+.nordic-project-card a:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .nordic-projects {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+:root {
+  --md-text-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --md-code-font: "SFMono-Regular", Consolas, monospace;
+}
+
+.md-header,
+.md-tabs {
+  box-shadow: none;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-grid {
+  max-width: 76rem;
+}
+
+.md-typeset h2 {
+  margin-top: 2.2em;
+}
+
+.md-typeset pre > code {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 6px;
+}
+
+[data-md-color-scheme="slate"] .nordic-home-logo img,
+[data-md-color-scheme="slate"] .md-logo img {
+  filter: brightness(1.55);
+}
+[data-md-color-scheme="slate"] img[src*="#gh-light-mode-only"],
+[data-md-color-scheme="default"] img[src*="#gh-dark-mode-only"] {
+  display: none;
+}
+
+/* Tables carry primary documentation, so keep them at the body text size. */
+.md-typeset table:not([class]) {
+  font-size: 1em;
+  line-height: 1.6;
+}
+
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: .65em .9em;
+}
+
+.md-typeset code { font-size: .88em; }
+.md-typeset pre { line-height: 1.6; }
+.md-tabs__link { font-size: .8rem; }

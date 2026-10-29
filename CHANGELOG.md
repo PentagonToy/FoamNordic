@@ -2,6 +2,10 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
+## [1.0.10] - Unreleased
+
+- Tables and tutorials use `hedgehogs>=0.0.5` in place of Onsaemiro. Tutorial figures use Matplotlib axes and `hdg.plots.show()`; saved notebook outputs are retained.
+
 ## [1.0.9] - 2026-09-27
 
 ### Python API

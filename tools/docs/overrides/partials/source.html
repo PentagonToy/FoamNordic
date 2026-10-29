@@ -1,0 +1,11 @@
+{% set stack = false %}
+{% if page is defined and page %}
+  {% if page.meta is defined and "nordic_project" in page.meta %}
+    {% set stack = page.meta.nordic_project == "StackNordic" %}
+  {% endif %}
+{% endif %}
+<a class="md-source" data-md-component="source" title="View project repository"
+   href="{{ 'https://github.com/PentagonToy/StackNordic' if stack else config.repo_url }}">
+  <span class="md-source__icon md-icon">{% include ".icons/fontawesome/brands/git-alt.svg" %}</span>
+  <span class="md-source__repository">{{ 'PentagonToy/StackNordic' if stack else config.repo_name }}</span>
+</a>

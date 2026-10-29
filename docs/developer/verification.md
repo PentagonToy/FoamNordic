@@ -6,13 +6,16 @@ Select checks by the boundaries changed. Portable correctness runs locally first
 
 | Level | Run when | Evidence |
 | --- | --- | --- |
-| Static | Every change | Clean diff check, repository formatting and import or compile checks |
-| Focused unit | Every change | Tests for the owning Python or C++ component |
+| Documentation | Prose, links or examples | Diff, links, signatures, units and source/site rendering |
+| Static | Source change | Repository formatting and relevant import or compile checks |
+| Focused unit | Behaviour change | Tests for the owning Python or C++ component |
 | Native integration | Runtime, FNOM, connector or exchange change | CMake build and the matching `tests/backend/` or BindNordic native target |
 | OpenFOAM integration | Field, expression, closure, transform or installed SDK change | `foamnordic build` under the target OpenFOAM environment |
 | Solver smoke | Commit timing, observation, equation or boundary change | Small case completion with expected fields, logs and records |
 | Roihu single-node | Linux ABI, MPI, SHM or Slurm change | Saved batch script and retained logs under the configured test directories |
 | Roihu multi-node or GPU | UCX, split placement or accelerator change | Explicit allocation, readiness, exchange and teardown evidence |
+
+Documentation-only changes need no runtime tests or solver execution. Escalate functional checks only when the changed boundary requires them.
 
 ## Test locations
 

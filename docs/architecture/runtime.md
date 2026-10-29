@@ -1,6 +1,6 @@
 # Native runtime
 
-ModelHost executes every resident field programme outside the OpenFOAM process. One ModelHost process runs on each assigned node; it retains a separate artefact, endpoint, kernel and backend state for every programme while admitting inference through one node-local execution-capacity pool. Python prepares the plan and artefacts but is not called during exchanges.
+One ModelHost per assigned node executes resident field programmes outside OpenFOAM. Each programme retains its artefact, endpoint, kernel and backend state; all share node-local execution capacity. Python prepares plans and artefacts but is not called during exchanges.
 
 ## Request path
 
@@ -21,7 +21,7 @@ Each context owns a reusable Smedja workspace. Immutable field layouts are compi
 
 Backends declare whether evaluation is concurrent. Non-concurrent backends use a narrow lock around evaluation only; packing and output handling remain request-local.
 
-Backend capabilities distinguish internal compute-thread ownership from safe concurrent evaluation. A table lookup may not own a thread pool yet still use several CPUs by serving independent solver-rank requests concurrently; resource planning must therefore preserve both dimensions instead of assigning CPUs from backend names.
+Compute-thread ownership and safe concurrent evaluation are separate capabilities. Threadless table lookups can use several CPUs by serving independent rank requests. Resource planning must account for both.
 
 | Capability | Declared meaning |
 | --- | --- |
@@ -33,11 +33,13 @@ Backend capabilities distinguish internal compute-thread ownership from safe con
 | Workspace recreation | Shape changes require a new workspace when declared |
 | Batch and alignment | Preferred row count and byte alignment |
 
-The same capability contract declares input and output memory spaces (`host`, `pinned_host`, `device` or `unified`), persistent device state, synchronous or event completion, shape-sensitive workspace recreation, preferred batch rows and alignment. A residency planner classifies each boundary as direct, explicitly staged or unsupported. The current ModelHost path admits only direct synchronous host tensors and rejects every other plan before execution, so declaring device residence cannot introduce a hidden copy. Connectors may publish the memory contract through an optional ABI without breaking older host-only plugins.
+The residency planner classifies boundaries as direct, staged or unsupported. ModelHost currently accepts only direct synchronous host tensors and rejects other plans before execution. An optional connector ABI exposes this contract while retaining compatibility with older host-only plugins.
 
-Long-lived backends may implement the internal `StatefulEngineBackend` contract. `TransactionalEngine` owns committed state and generation metadata, publishes a candidate only after a complete successful `advance()`, and provides optional checkpoint and restore operations. A topology change requires explicit reinitialisation unless the backend declares that its state survives the change. An optional observer receives per-operation sizes, timings, retries, fallbacks and device-memory use without granting the runtime authority to redistribute mesh or model work.
+`StatefulEngineBackend` supports persistent state. `TransactionalEngine` commits state and generation metadata only after a successful `advance()`, with optional checkpoint and restore. Topology changes require reinitialisation unless the backend declares state preservation.
 
-Every kernel may use the full node-local CPU budget when it runs alone. A backend that owns compute threads reserves that budget for its evaluation, while independent threadless kernels consume one capacity unit per request and may run concurrently. Field programmes keep independent listeners, so consolidation adds no broker or transport hop. A programme failure terminates the node-local ModelHost and the coupled supervisor tears down the remaining workload.
+An optional observer reports sizes, timings, retries, fallbacks and device-memory use. It does not redistribute mesh or model work.
+
+A compute-thread-owning backend reserves the full node-local budget during evaluation. Threadless kernels use one capacity unit per request and may run concurrently. Each programme keeps its listener; consolidation adds no broker. Programme failure terminates ModelHost and the supervisor tears down the workload.
 
 ## Outputs
 
