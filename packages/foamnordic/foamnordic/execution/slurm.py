@@ -163,6 +163,7 @@ exec srun \\
   --readiness-timeout-ms {round(readiness_timeout * 1000)} \\
   --termination-grace-ms {round(termination_grace * 1000)} \\
   --host srun --nodes={scheduler.nodes} --ntasks={runtime['host_tasks']} \\
+    --resv-ports=0 \\
     --ntasks-per-node=1 \\
     --cpus-per-task={runtime['host_cpus_per_task']} --cpu-bind=none \\
 {host_gres}    --exact --exclusive \\

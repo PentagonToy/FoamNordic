@@ -227,6 +227,8 @@ def test_coupled_batch_reserves_native_sidecar_task(mocker) -> None:
     assert "--host srun --nodes=1 --ntasks=1" in script
     assert "--solver srun --nodes=1 --ntasks=2" in script
     host_step, solver_step = script.split("--solver srun", 1)
+    assert "--resv-ports=0" in host_step
+    assert "--resv-ports=0" not in solver_step
     assert "--mpi=pmix" not in host_step
     assert "--mpi=pmix" in solver_step
     assert "--gres=" not in script
