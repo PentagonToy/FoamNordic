@@ -29,7 +29,7 @@ Keep the project URLs stable: [FoamNordic](https://pentagontoy.github.io/FoamNor
 
 ## Notebook examples
 
-Selected notebook cells are imported as copyable code during the documentation build without execution. Edit the original notebook to update its page. The basic-run, field-exchange and closure pages publish code only, without historical machine logs. Saved outputs are previews, not new validation results.
+Selected notebook cells are imported as copyable code during the documentation build without execution. Edit the original notebook to update its page. The basic-run, field-exchange and closure pages publish code only, without historical machine logs. Saved outputs are previews, not new validation results. The generated pages use the current notebook source, including its concise workload declarations and Hedgehogs figure helpers. Keep common options in examples and describe advanced execution settings in the API reference.
 
 ## Portable Markdown
 

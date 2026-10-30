@@ -51,8 +51,8 @@ def assemble(files, config):
             add('assets/' + prefix + '/' + source.relative_to(owner / 'others').as_posix(), source, owner)
     examples = [
         ('openfoam_lid_driven_cavity', 'lid-driven-cavity', 'Basic run: local cavity',
-         'Run an unchanged OpenFOAM case through Longship with empty closures, transforms and observations.',
-         'This example runs locally with `scheduler=None` and OpenFOAM.app (`of_cmd="openfoam"`, `shell="zsh"`). On Linux, select the local OpenFOAM activation and shell in the case declaration.',
+         'Run an unchanged OpenFOAM case through Longship; closures, transforms and observations are omitted when unused.',
+         'This example omits the scheduler to run locally with OpenFOAM.app (`of_cmd="openfoam"`, `shell="zsh"`). On Linux, select the local OpenFOAM activation and shell in the case declaration.',
          'A successful run reports success and exposes U and p through postprocessing. Field sizes and values depend on the case.'),
         ('field_exchange_lid_driven_cavity', 'field-exchange', 'Field exchange: Slurm cavity',
          'Apply a small seeded velocity perturbation at the start of each time step, observe U and p, and inspect the completed case.',
@@ -68,6 +68,7 @@ def assemble(files, config):
         name = f'foamnordic/examples/{slug}.md'
         introduction = purpose + '\n\n## Before running\n\n[Install FoamNordic](../installation.md), build its integration and check the OpenFOAM environment. Start inside a FoamNordic checkout containing the tutorial cases. Runs are copied below the notebook output directory.\n\n' + environment
         introduction += f'\n\nRead or download [the original notebook](https://github.com/PentagonToy/FoamNordic/blob/main/tutorials/foamnordic_tutorials/incompressible/{stem}.ipynb). Run the original cells below in order.'
+        introduction += '\n\nThe code shows the main workload choices and leaves advanced execution options at their defaults; see the [execution reference](../api/run-control.md). Figure styling uses Hedgehogs helpers on Matplotlib axes.'
         content = render_notebook(source, title, introduction, config, files, outputs=False)
         content += '\n## Check the result\n\n' + outcome + '\n'
         files.append(File.generated(config, name, content=content))

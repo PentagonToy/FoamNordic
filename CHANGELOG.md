@@ -2,6 +2,12 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
+## [Unreleased]
+
+- Slurm ModelHost steps no longer reserve MPI communication ports, allowing the concurrent OpenFOAM solver step to start with compact per-node allocations.
+- Tutorials show the main workload choices and leave advanced launch options at their defaults. Cluster project identifiers are masked, and the basic local cavity uses OpenFOAM.app with zsh.
+- Tutorial figures use Hedgehogs grid, square-panel and colourbar helpers, with static styling outside observation loops. Published example pages import this code from the original notebooks without executing them.
+
 ## [1.0.10] - 2026-10-29
 
 - Slurm memory calculations interpret values without units as MiB, matching the scheduler when combining OpenFOAM and model memory requests.

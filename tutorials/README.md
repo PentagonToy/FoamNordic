@@ -24,6 +24,8 @@ Three guides show the main execution paths with copyable original notebook code:
 | [Field exchange](https://pentagontoy.github.io/FoamNordic/foamnordic/examples/field-exchange/) | Slurm | Transform velocity and observe fields during execution |
 | [Smagorinsky closure](https://pentagontoy.github.io/FoamNordic/foamnordic/examples/smagorinsky-closure/) | Slurm | Couple a native symbolic closure through the LES adapter |
 
+Examples expose case, closure, observation and scheduler choices while omitting redundant defaults. `longship.launch(verbose=None)` inherits the workload verbosity; advanced launch options remain documented in the [execution reference](../docs/api/run-control.md). Figure styling uses Hedgehogs helpers on Matplotlib axes.
+
 Each guide states environment requirements and expected outcomes. Cluster account, partition and resource settings must match the local scheduler. The catalogue below retains the other domain-specific and learned examples.
 
 ## Run a tutorial
