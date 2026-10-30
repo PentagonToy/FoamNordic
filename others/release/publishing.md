@@ -15,7 +15,7 @@ Release CI runs the complete Python suite once on each supported platform with P
 Use the designated validation environment outside the source checkout, or create a fresh environment when authorised. Keep the regular user environment unchanged. Select the exact wheel for that interpreter and platform from the newly prepared wheelhouse:
 
 ```console
-VERSION=1.0.10
+VERSION=1.0.11
 python3 -m venv /absolute/path/to/authorised-test-install
 source /absolute/path/to/authorised-test-install/bin/activate
 python -m pip install "foamnordic[ml] @ file:///absolute/path/to/wheelhouse/foamnordic-${VERSION}-<python>-<abi>-<platform>.whl"

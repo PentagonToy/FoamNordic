@@ -68,7 +68,7 @@ def test_missing_empty_or_duplicate_section(release_root: Path, changelog: str) 
 
 def test_repository() -> None:
     notes = module.release_notes(SCRIPT.parents[2])
-    assert "Slurm memory calculations" in notes
-    assert "`hedgehogs>=0.0.5`" in notes
-    assert "## [1.0.9]" not in notes
+    assert "Slurm ModelHost steps" in notes
+    assert "Hedgehogs grid" in notes
+    assert "## [1.0.10]" not in notes
     assert "`fno.Export.table()`" not in notes

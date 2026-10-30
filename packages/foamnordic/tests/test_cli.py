@@ -108,7 +108,7 @@ def test_build_discovers_kit_bundled_beside_installed_package(mocker) -> None:
 
 
 def test_public_version_and_directory_are_discoverable() -> None:
-    assert fno.__version__ == "1.0.10"
+    assert fno.__version__ == "1.0.11"
     assert "Longship" in dir(fno)
     assert "Export" in dir(fno)
     assert "export" not in dir(fno)
@@ -119,7 +119,7 @@ def test_cli_version_is_discoverable() -> None:
     with pytest.raises(SystemExit) as stopped, redirect_stdout(output):
         main(["--version"])
     assert stopped.value.code == 0
-    assert output.getvalue().strip() == "foamnordic 1.0.10"
+    assert output.getvalue().strip() == "foamnordic 1.0.11"
 
 
 def test_top_level_help_lists_runtime_and_fnom_commands() -> None:
