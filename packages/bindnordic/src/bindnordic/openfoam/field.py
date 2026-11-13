@@ -30,6 +30,7 @@ _NONUNIFORM = re.compile(
     rb"\b(?:internalField\s+)?nonuniform\s+"
     rb"List<(scalar|vector|symmTensor|tensor)>\s+(\d+)\s*\("
 )
+_BINARY_TERMINATOR = re.compile(rb"\s*\)\s*;")
 
 
 def _block(payload: bytes, name: bytes) -> bytes | None:
@@ -120,7 +121,7 @@ def _binary_region(
         expected.append(size)
         for data_start in starts:
             data_end = data_start + size
-            if re.match(rb"\s*\)\s*;", payload[data_end:]) is not None:
+            if _BINARY_TERMINATOR.match(payload, data_end) is not None:
                 return data_start, data_end, dtype
     values = " or ".join(str(size) for size in expected)
     raise OpenFOAMDecodeError(
@@ -138,7 +139,9 @@ def _binary_payload(
     data_start, data_end, dtype = _binary_region(
         payload, start, count, components, arch
     )
-    return np.frombuffer(payload[data_start:data_end], dtype=dtype).astype(
+    count_values = (data_end - data_start) // dtype.itemsize
+
+    return np.frombuffer(payload, dtype=dtype, count=count_values, offset=data_start).astype(
         dtype.newbyteorder("="), copy=True
     )
 
@@ -148,8 +151,9 @@ def _structural_payload(payload: bytes, binary: bool, arch: str | None) -> bytes
 
     if not binary:
         return _COMMENTS.sub(b" ", payload)
-    clean = bytearray(payload)
-    for match in _NONUNIFORM.finditer(payload):
+    sections = []
+    offset = 0
+    while (match := _NONUNIFORM.search(payload, offset)) is not None:
         kind, raw_count = match.groups()
         data_start, data_end, _ = _binary_region(
             payload,
@@ -158,8 +162,13 @@ def _structural_payload(payload: bytes, binary: bool, arch: str | None) -> bytes
             _COMPONENTS[kind],
             arch,
         )
-        clean[data_start:data_end] = b" " * (data_end - data_start)
-    return _COMMENTS.sub(b" ", bytes(clean))
+        sections.append(payload[offset:data_start])
+        offset = data_end
+    if not sections:
+        return _COMMENTS.sub(b" ", payload)
+
+    sections.append(payload[offset:])
+    return _COMMENTS.sub(b" ", b" ".join(sections))
 
 
 def _nonuniform_value(payload: bytes, binary: bool, arch: str | None) -> np.ndarray:

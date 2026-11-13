@@ -100,8 +100,9 @@ def read_case_fields(
     for field_path in sorted(directory.iterdir()):
         if not field_path.is_file():
             continue
-        payload = field_path.read_bytes()[:65536]
-        if b"FoamFile" not in payload:
+        with field_path.open("rb") as stream:
+            header = stream.read(65536)
+        if b"FoamFile" not in header:
             continue
         field = read_field(field_path, toolchain)
         if field is None:

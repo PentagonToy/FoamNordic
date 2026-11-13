@@ -170,6 +170,16 @@ def test_uniform_field_uses_latest_mesh_owner_before_selected_time(tmp_path, dec
     )
     np.testing.assert_array_equal(Case(tmp_path).field("p", physical_time=1), [2] * 4)
 
+    velocity = field.with_name("U")
+    velocity.write_text(
+        "FoamFile { format ascii; class volVectorField; object U; }\n"
+        "dimensions [0 1 -1 0 0 0 0];\n"
+        "internalField uniform (1 2 3);\nboundaryField {}\n"
+    )
+    values = Case(tmp_path).field("U", physical_time=1)
+    np.testing.assert_array_equal(values, [[1, 2, 3]] * 4)
+    assert values.flags.writeable
+
 
 @pytest.mark.parametrize("decomposed", [False, True])
 @pytest.mark.parametrize("changed", ["points", "owner", "cellProcAddressing"])

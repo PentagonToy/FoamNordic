@@ -119,6 +119,22 @@ def test_binary_patch_values_do_not_corrupt_boundary_dictionary():
         assert field.boundaries == ("inlet", "outlet")
 
 
+def test_binary_list_marker_inside_numeric_data_is_ignored(tmp_path):
+    path = tmp_path / "p"
+    payload = b"nonuniform List<scalar> 99 (".ljust(32, b"\0")
+    path.write_bytes(
+        header("binary", "volScalarField", "p", "LSB;label=32;scalar=64")
+        + b"internalField nonuniform List<scalar> 4 ("
+        + payload
+        + b");\nboundaryField { inlet { type zeroGradient; } }\n"
+    )
+
+    field = read_field(path)
+
+    np.testing.assert_array_equal(field.values, np.frombuffer(payload, dtype="<f8"))
+    assert field.boundaries == ("inlet",)
+
+
 def test_binary_arch_selects_float32_and_byte_order():
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "p"

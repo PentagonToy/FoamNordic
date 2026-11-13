@@ -140,21 +140,23 @@ def _cell_count(field_path: Path) -> int:
         raise ValueError(
             f"Cannot expand uniform OpenFOAM field because mesh owner file is missing: {owner}"
         )
-    match = re.search(rb"\bnCells\s*:\s*(\d+)\b", owner.read_bytes()[:65536])
+    with owner.open("rb") as stream:
+        header = stream.read(65536)
+
+    match = re.search(rb"\bnCells\s*:\s*(\d+)\b", header)
     if match is None:
         raise ValueError(f"Mesh cell count is missing from {owner}")
+
     return int(match.group(1))
 
 
 def read_field_file(path: Path) -> np.ndarray:
-    payload = path.read_bytes()
-    uniform = re.search(rb"\binternalField\s+uniform\b", payload) is not None
-    return np.asarray(
-        read_openfoam_field(
-            path,
-            cell_count=_cell_count(path) if uniform else None,
-        ).values
-    )
+    field = read_openfoam_field(path)
+    if not field.uniform:
+        return field.values
+
+    field_shape = (_cell_count(path), *field.values.shape)
+    return np.broadcast_to(field.values, field_shape).copy()
 
 
 def read_case_field(case_dir: Path, field_name: str, physical_time: float) -> np.ndarray:
