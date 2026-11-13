@@ -15,59 +15,15 @@ FNOM stores the model payload, tensor contracts, scaling and runtime metadata. B
 
 Python 3.11 and 3.12 are supported. See the [changelog](CHANGELOG.md) for release notes and upgrade guidance.
 
-## Architecture
-
-The diagrams separate workload setup and launch from the field exchange and inference path used during solver execution.
-
-<table>
-  <tr>
-    <td align="center" valign="bottom"><img src="others/figures/diagram_init.svg" alt="Workload setup and launch" height="440"></td>
-    <td align="center" valign="bottom"><img src="others/figures/diagram_runtime.svg" alt="Runtime field exchange and inference" height="440"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Figure 1: Setup and launch.</sub></td>
-    <td align="center"><sub>Figure 2: Runtime exchange and inference.</sub></td>
-  </tr>
-</table>
-
-## Requirements
-
-| Component | Requirement |
-| --- | --- |
-| Python | CPython 3.11 or 3.12 |
-| OpenFOAM | A supported installation with its compiler and MPI environment for solver execution |
-| Operating system | Linux `x86_64`, Linux `aarch64`, or Apple Silicon |
-| ONNX Runtime | Downloaded by `foamnordic build`, or supplied through `FOAMNORDIC_ONNX_RUNTIME_ROOT` |
-
-Linux with OpenFOAM v2512 is the primary HPC target. OpenFOAM.app supplies the native macOS environment.
-
 ## Install
 
-Install the PyPI release with pip or uv:
+Use Python 3.11 or 3.12 and an OpenFOAM runtime. The primary HPC target is Linux with OpenFOAM.com v2512. On Apple Silicon, use OpenFOAM.app.
 
 ```console
 pip install foamnordic
 ```
 
-Or, in an existing virtual environment:
-
-```console
-uv pip install foamnordic
-```
-
-Follow the [installation guide](docs/installation.md) for optional environment setup, OpenFOAM activation, build checks and separate main or editable installation instructions. Add `foamnordic[ml]` for CPU model training or `foamnordic[ml-cuda12]` for Linux CUDA 12 training.
-
-Installing the Python package does not install OpenFOAM. Build the integration in the target OpenFOAM environment, then run `foamnordic doctor` there before launching a case.
-
-On macOS with OpenFOAM.app, enter its environment before building:
-
-```console
-openfoam
-foamnordic build
-foamnordic doctor
-```
-
-Keep the Python environment containing FoamNordic active inside the OpenFOAM shell.
+Activate OpenFOAM, then run `foamnordic build` and `foamnordic doctor` in that environment. On macOS, enter it with `openfoam`. See the [installation guide](docs/installation.md) for optional ML dependencies, other installation methods and diagnostics.
 
 ## Quick start
 
@@ -117,32 +73,7 @@ External solvers can add an equation-level adapter without including the FoamNor
 
 ## Slurm resources
 
-OpenFOAM and the node-local model worker have explicit resource declarations. One model worker is placed on every OpenFOAM node only when a coupled program is present.
-
-```python
-openfoam_resources = fno.Slurm.openfoam(
-    nodes=2,
-    ntasks=16,
-    cpus_per_task=1,
-    mem_per_cpu="2G",
-)
-model_resources = fno.Slurm.model(
-    cpus_per_task=4,
-    mem_per_cpu="2G",
-)
-scheduler = fno.Slurm(
-    account="<allocation-account>",
-    partition="medium",
-    time="00:15:00",
-    openfoam=openfoam_resources,
-    model=model_resources,
-)
-
-case.initialize(ranks=16, mesh=None, validate_mesh=True)
-run = fno.Longship(case=case, scheduler=scheduler, transforms=(transform,)).launch()
-```
-
-Same-node bulk exchange uses shared memory; multi-node runs place a resident worker beside each node's solver ranks.
+Pass a `Slurm` scheduler to `Longship` and match the OpenFOAM task count to the case rank count. For coupled runs, Longship starts one resident model worker per solver node. See [Slurm launch](docs/api/run-control.md#slurm-launch) for a complete example and resource settings.
 
 ## Develop from source
 

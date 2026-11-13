@@ -2,6 +2,11 @@
 
 This changelog records user-visible changes in reverse chronological order. Internal refactors and superseded protocol revisions are omitted; the documentation describes the current FoamNordic contract.
 
+## Unreleased
+
+- Read only the header bytes needed for field discovery and mesh cell counts.
+- Reduce copying during binary field decoding and avoid a second file read during postprocessing.
+
 ## [1.0.11] - 2026-10-30
 
 - Slurm ModelHost steps no longer reserve MPI communication ports, allowing the concurrent OpenFOAM solver step to start with compact per-node allocations.

@@ -41,8 +41,6 @@ Reconstruct results, export datasets and apply declared field reductions.
 | Turn stored results into a dataset | [StackNordic case-to-dataset example](stacknordic/tutorials/case-to-dataset.md) |
 | Use both projects in one workflow | [Run to dataset](workflows/foamnordic-stacknordic.md) |
 
-Start with an ordinary run before adding field exchange or model coupling. StackNordic can process existing results without running FoamNordic first.
-
 ## Sources and versions
 
 Documents remain in their project repositories. The site imports a fixed StackNordic revision and records both [source commits](versions.md). See [Site maintenance](foamnordic/developer/documentation.md) for builds and updates.
