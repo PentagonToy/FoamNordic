@@ -20,13 +20,13 @@ startTime       0;
 stopAt          endTime;
 endTime         10;
 
-// internal stepping
+// Time-step control
 deltaT          0.000001;         // just an initial guess
 adjustTimeStep  yes;
 maxCo           0.7;
 maxDeltaT       0.004;         // do not allow internal steps to jump over write times
 
-// uniform outputs every 0.004 s
+// Write every 0.1 s of simulation time
 writeControl    adjustableRunTime;
 writeInterval   0.1;
 

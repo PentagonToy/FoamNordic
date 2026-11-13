@@ -68,8 +68,11 @@ ClosureHook::readInputs(
         const word patch = patches.empty() || patches[index] == "none"
             ? word()
             : patches[index];
-        if (!patch.empty()
-            && expression.find_first_of("(),") != std::string::npos)
+        if
+        (
+            !patch.empty()
+         && expression.find_first_of("(),") != std::string::npos
+        )
         {
             throw std::invalid_argument(
                 "FoamNordic patch inputs must name a stored field, not a "
