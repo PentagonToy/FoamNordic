@@ -82,7 +82,7 @@ def compare(
     completed Results, or existing :class:`Case` readers. ``time_idx`` and
     ``physical_time`` are mutually exclusive. ``mesh='strict'`` verifies mesh
     identity before cell-wise comparison; ``mesh='shape'`` explicitly checks
-    field shapes only. ``verbose=True`` adds an Hedgehogs table.
+    field shapes only. ``verbose=True`` adds a Hedgehogs table.
     """
 
     if mesh not in {"strict", "shape"}:
@@ -134,6 +134,8 @@ def compare(
         }
         result[name] = metrics
         rows.append([name, *(f"{metrics[key]:.6e}" for key in metrics)])
+
     if verbose:
         _display(rows, reference_time)
+
     return result

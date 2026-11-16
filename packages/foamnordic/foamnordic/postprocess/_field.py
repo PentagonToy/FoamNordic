@@ -164,11 +164,14 @@ def read_case_field(case_dir: Path, field_name: str, physical_time: float) -> np
         read_field_file(path)
         for path in _field_paths(case_dir, physical_time, field_name)
     ]
+
     if len(arrays) == 1:
         return arrays[0]
+
     shape = arrays[0].shape[1:]
     if any(array.shape[1:] != shape for array in arrays[1:]):
         raise ValueError(f"Decomposed field {field_name!r} has incompatible shapes")
+
     return np.concatenate(arrays, axis=0)
 
 

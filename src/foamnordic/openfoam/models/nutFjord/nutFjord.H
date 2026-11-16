@@ -27,6 +27,10 @@ namespace Foam
 namespace LESModels
 {
 
+/*---------------------------------------------------------------------------*\
+                           Class nutFjord Declaration
+\*---------------------------------------------------------------------------*/
+
 template<class BasicTurbulenceModel>
 class nutFjord final : public LESeddyViscosity<BasicTurbulenceModel>
 {
@@ -47,6 +51,7 @@ class nutFjord final : public LESeddyViscosity<BasicTurbulenceModel>
 protected:
     // Protected Member Functions
 
+    //- Update the subgrid-scale eddy viscosity
     void correctNut() override;
 
 
@@ -73,6 +78,7 @@ public:
         const word& type = typeName
     );
 
+    //- Release the closure and observation resources
     ~nutFjord() override;
 
 
