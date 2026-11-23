@@ -17,6 +17,8 @@ Select checks by the boundaries changed. Portable correctness runs locally first
 
 Documentation-only changes need no runtime tests or solver execution. Escalate functional checks only when the changed boundary requires them.
 
+Release CI runs Python 3.12 source tests on Linux x86_64, Linux ARM64 and the supported `macos-15` ARM64 runner, then checks Python 3.11 and 3.12 wheels. Its installed build-kit check excludes OpenFOAM and ONNX; complete the separate installed-wheel gate in the [publishing guide](../../others/release/publishing.md) before publication.
+
 ## Test locations
 
 | Area | Tests |

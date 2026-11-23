@@ -70,7 +70,7 @@ The same `foamnordic build` command works after PyPI, GitHub, or editable instal
 ~/.local/share/foamnordic/runtime/<platform>/<openfoam-abi>/
 ```
 
-On Apple Silicon, enter the OpenFOAM.app shell before building. On offline systems, provide an unpacked ONNX Runtime through `FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `foamnordic build --without-onnx` when ONNX execution is not required.
+On Apple Silicon, enter the OpenFOAM.app shell before building. ONNX Runtime downloads try GitHub first and fall back to Microsoft's official NuGet package after network or HTTP errors. The NuGet fallback requires macOS 14 or later on Apple Silicon. On offline systems, provide an unpacked ONNX Runtime 1.28.0 SDK through `FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `foamnordic build --without-onnx` when ONNX execution is not required. See the [installation guide](../../docs/installation.md) for acquisition checks and supported platforms.
 
 For an isolated environment outside the uv workspace, the repository helper creates a marked virtual environment:
 

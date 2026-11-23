@@ -26,7 +26,7 @@ Follow the public [installation guide](https://pentagontoy.github.io/FoamNordic/
 
 The `ml` extra includes scikit-learn, ONNX, Equinox, Optax and CPU JAX on Linux or macOS. Install `foamnordic[ml-cuda12]` for CUDA 12 JAX on Linux. CUDA selection is explicit rather than inferred from CPU architecture. Install plain `foamnordic` for ordinary OpenFOAM runs, mathematical functions or existing artefacts that do not require those authoring libraries.
 
-Binary wheels carry the native Python control runtime and compact OpenFOAM source build kit. `foamnordic build` compiles it for the currently loaded ABI; each case later selects that runtime from its declared `of_cmd` and `shell`. The build also prepares the native ONNX ModelHost and verified ONNX Runtime 1.28.0. Offline systems can point `FOAMNORDIC_ONNX_RUNTIME_ROOT` at an unpacked 1.28.0 distribution.
+Binary wheels carry the native Python control runtime and compact OpenFOAM source build kit. `foamnordic build` compiles it for the currently loaded ABI; each case later selects that runtime from its declared `of_cmd` and `shell`. The build also prepares the native ONNX ModelHost and verified ONNX Runtime 1.28.0. Downloads try GitHub first and fall back to Microsoft's official NuGet package after network or HTTP errors, with pinned SHA-256 checks for both sources. The NuGet fallback requires macOS 14 or later on Apple Silicon. Offline systems can point `FOAMNORDIC_ONNX_RUNTIME_ROOT` at an unpacked 1.28.0 SDK, or use `foamnordic build --without-onnx` when native ONNX execution is not required.
 
 On macOS with OpenFOAM.app:
 

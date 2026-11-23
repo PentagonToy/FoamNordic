@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+from http.client import IncompleteRead
+import logging
 import os
 from pathlib import Path
 import platform
@@ -11,12 +13,24 @@ import re
 import shutil
 import tarfile
 import tempfile
+from urllib.error import URLError
 from urllib.request import urlopen
+import zipfile
 
 
 VERSION = "1.28.0"
 API_VERSION = 28
 _BASE_URL = f"https://github.com/microsoft/onnxruntime/releases/download/v{VERSION}"
+_NUGET_URL = (
+    "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/"
+    f"{VERSION}/microsoft.ml.onnxruntime.{VERSION}.nupkg"
+)
+_NUGET_SHA256 = "769d1d3ea8ab6cd69f737c9dd4d4462aa4ad0ccfa106eaf506efc40d7bead5db"
+_NUGET_RIDS = {
+    ("darwin", "arm64"): "osx-arm64",
+    ("linux", "x86_64"): "linux-x64",
+    ("linux", "aarch64"): "linux-arm64",
+}
 _ASSETS = {
     ("darwin", "arm64"): (
         f"onnxruntime-osx-arm64-{VERSION}.tgz",
@@ -99,28 +113,108 @@ def _brew_root() -> Path | None:
     return Path(completed.stdout.strip())
 
 
+def _fetch(url: str, archive: Path, checksum: str) -> None:
+    digest = hashlib.sha256()
+    with urlopen(url, timeout=60) as response, archive.open("wb") as output:
+        while chunk := response.read(1024 * 1024):
+            output.write(chunk)
+            digest.update(chunk)
+
+    if digest.hexdigest() != checksum:
+        raise RuntimeError(f"ONNX Runtime {VERSION} archive checksum mismatch: {url}")
+
+
+def _unpack_nuget(archive: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    system, architecture = _platform_key()
+    rid = _NUGET_RIDS[(system, architecture)]
+    prefixes = {
+        "build/native/include/": destination / "include",
+        f"runtimes/{rid}/native/": destination / "lib",
+    }
+    with zipfile.ZipFile(archive) as bundle:
+        for name in ("LICENSE", "ThirdPartyNotices.txt"):
+            (destination / name).write_bytes(bundle.read(name))
+        for member in bundle.infolist():
+            if member.is_dir():
+                continue
+            for prefix, directory in prefixes.items():
+                if not member.filename.startswith(prefix):
+                    continue
+                target = (directory / member.filename[len(prefix):]).resolve()
+                if directory.resolve() not in target.parents:
+                    raise RuntimeError("ONNX Runtime archive contains an unsafe path")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with bundle.open(member) as source, target.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+                break
+
+    if _inspect(destination, "download") is None:
+        raise RuntimeError(f"NuGet ONNX Runtime {VERSION} is incomplete for {rid}")
+
+    # NuGet ships unversioned filenames; native consumers use the library ID
+    library = destination / "lib"
+    if system == "darwin":
+        (library / "libonnxruntime.1.dylib").symlink_to("libonnxruntime.dylib")
+    else:
+        (library / "libonnxruntime.so.1").symlink_to("libonnxruntime.so")
+
+
 def _download(root: Path, asset: str, checksum: str) -> None:
     root.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=root.parent) as directory:
         stage = Path(directory)
         archive = stage / asset
-        digest = hashlib.sha256()
-        with urlopen(f"{_BASE_URL}/{asset}", timeout=60) as response, archive.open("wb") as output:
-            while chunk := response.read(1024 * 1024):
-                output.write(chunk)
-                digest.update(chunk)
-        if digest.hexdigest() != checksum:
-            raise RuntimeError(f"ONNX Runtime {VERSION} archive checksum mismatch")
+        github_url = f"{_BASE_URL}/{asset}"
+        nuget = False
+        try:
+            _fetch(github_url, archive, checksum)
+        except (URLError, TimeoutError, ConnectionError, IncompleteRead) as github_error:
+            if (
+                _platform_key()[0] == "darwin"
+                and int(platform.mac_ver()[0].split(".")[0]) < 14
+            ):
+                raise RuntimeError(
+                    f"ONNX Runtime download failed: {github_url}: {github_error}. "
+                    "The NuGet fallback requires macOS 14 or later; set "
+                    "FOAMNORDIC_ONNX_RUNTIME_ROOT to a compatible SDK or use --without-onnx."
+                ) from github_error
+            logging.getLogger(__name__).warning(
+                "ONNX Runtime download failed: %s: %s; trying official NuGet package %s",
+                github_url,
+                github_error,
+                _NUGET_URL,
+            )
+            archive = stage / "onnxruntime.nupkg"
+            try:
+                _fetch(_NUGET_URL, archive, _NUGET_SHA256)
+            except (URLError, TimeoutError, ConnectionError, IncompleteRead) as nuget_error:
+                raise RuntimeError(
+                    f"ONNX Runtime {VERSION} downloads failed. "
+                    f"GitHub: {github_url}: {github_error}. "
+                    f"NuGet: {_NUGET_URL}: {nuget_error}. "
+                    "Set FOAMNORDIC_ONNX_RUNTIME_ROOT to an unpacked SDK "
+                    "or use --without-onnx."
+                ) from nuget_error
+            nuget = True
+
         unpacked = stage / "unpacked"
         unpacked.mkdir()
-        with tarfile.open(archive, "r:gz") as bundle:
-            for member in bundle.getmembers():
-                destination = (unpacked / member.name).resolve()
-                if unpacked.resolve() not in destination.parents and destination != unpacked.resolve():
-                    raise RuntimeError("ONNX Runtime archive contains an unsafe path")
-            bundle.extractall(unpacked, filter="data")
-        children = tuple(unpacked.iterdir())
-        source = children[0] if len(children) == 1 and children[0].is_dir() else unpacked
+        if nuget:
+            _unpack_nuget(archive, unpacked)
+            source = unpacked
+        else:
+            with tarfile.open(archive, "r:gz") as bundle:
+                for member in bundle.getmembers():
+                    destination = (unpacked / member.name).resolve()
+                    if unpacked.resolve() not in destination.parents and destination != unpacked.resolve():
+                        raise RuntimeError("ONNX Runtime archive contains an unsafe path")
+                bundle.extractall(unpacked, filter="data")
+            children = tuple(unpacked.iterdir())
+            source = children[0] if len(children) == 1 and children[0].is_dir() else unpacked
+
+        if _inspect(source, "download") is None:
+            raise RuntimeError(f"downloaded ONNX Runtime {VERSION} is incomplete")
         if root.exists():
             shutil.rmtree(root)
         shutil.move(str(source), str(root))

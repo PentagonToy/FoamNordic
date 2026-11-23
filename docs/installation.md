@@ -64,7 +64,9 @@ The plain package supports ordinary OpenFOAM runs, mathematical functions and ex
 
 ## 2. Activate OpenFOAM and build
 
-Wheels include the Python API and native control runtime. The integration build supplies the libraries and runtime executables for the active OpenFOAM compiler/ABI combination. It downloads ONNX Runtime by default and requires network access unless an archive is supplied locally.
+Wheels include the Python API and native control runtime. The integration build supplies the libraries and runtime executables for the active OpenFOAM compiler/ABI combination. It downloads ONNX Runtime 1.28.0 from GitHub and tries Microsoft's official NuGet package after a network or HTTP failure. Both archives use pinned SHA-256 checks; a checksum mismatch stops the build.
+
+The NuGet fallback supports Linux x86_64, Linux ARM64 and macOS ARM64; its macOS library requires macOS 14 or later. Network access is required unless a compatible SDK is already available locally.
 
 <!-- tabs -->
 ### Linux / HPC
@@ -149,7 +151,7 @@ For Linux CUDA 12, replace `ml` with `ml-cuda12`.
 | `foamnordic: command not found` | Activate the environment used for installation. Inside the OpenFOAM shell, activate the same Python environment. |
 | `wmake is unavailable` | Activate OpenFOAM with its compiler environment before building. |
 | Runtime profile or adapter missing | Run `foamnordic build` in the OpenFOAM environment selected for the case, then run `doctor` there. |
-| ONNX Runtime download fails | Supply an unpacked ONNX Runtime 1.28.0 archive through `FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `build --without-onnx` for workloads without native ONNX. |
+| ONNX Runtime download fails | GitHub network or HTTP failures trigger the official NuGet fallback. If both downloads fail, the error includes both URLs. Supply an unpacked ONNX Runtime 1.28.0 SDK through `FOAMNORDIC_ONNX_RUNTIME_ROOT`, or use `build --without-onnx` for workloads without native ONNX. |
 | Import works in the terminal but fails in a notebook | Select the matching Python kernel and restart it after changing the environment. |
 
 For an unresolved failure, retain the build error and `doctor` output, including the Python path and OpenFOAM version. See the [command-line reference](api/command-line.md) for diagnostic commands.

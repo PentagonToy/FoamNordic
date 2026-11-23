@@ -35,6 +35,8 @@ foamnordic build [--source PATH] [--build-dir PATH] [--prefix PATH]
 
 The active OpenFOAM environment must provide `wmake`. Each ABI receives an independent runtime generation, so multiple OpenFOAM installations can coexist.
 
+Unless `--without-onnx` is set, the build uses ONNX Runtime 1.28.0. Downloads try GitHub first and fall back to Microsoft's official NuGet package after network or HTTP errors. Both sources use pinned SHA-256 checks; a checksum mismatch stops the build. See [installation](../installation.md#2-activate-openfoam-and-build) for platform requirements and offline SDK configuration.
+
 ## Diagnostics and paths
 
 ```console

@@ -1,21 +1,21 @@
 # Publishing FoamNordic wheels
 
-FoamNordic publishes native wheels, not an sdist: the monorepo keeps the shared C++ project above `packages/foamnordic/`. Source remains available through the release Git tag. The unreleased changelog heading defines the next candidate version.
+FoamNordic publishes native wheels, not an sdist: the monorepo keeps the shared C++ project above `packages/foamnordic/`. Source remains available through the release Git tag. Move the pending changelog entries into a dated section for the candidate version and synchronise the version sources listed below, CLI assertions and `uv.lock`.
 
-For a future release whose changelog heading is `## [VERSION] - Unreleased`, run `others/release/prepare-release VERSION --push` from a clean `main` branch. It applies the release date, synchronises package and native versions, refreshes `uv.lock`, runs the release metadata tests, amends the current commit, aligns `dev`, and updates both remote branches with lease protection.
+When local and remote `main` and `dev` already identify the same commit, `others/release/prepare-release VERSION --push` can prepare a `## [VERSION] - Unreleased` candidate. It dates the section, updates versions and the lockfile, checks metadata, amends the current commit and updates both branches with lease protection. Prepare the release on `main` directly when `dev` has a separate history; preserve that branch.
 
 ## Build
 
 Commit and push the FoamNordic release source, then run `./others/release/wheel-maker` from a clean checkout. It builds and tests six wheels containing the `foamnordic` package and its internal `bindnordic` namespace: CPython 3.11 and 3.12 on Linux x86_64, Linux aarch64, and macOS arm64. It checks metadata, records SHA256 sums, and extracts the release body from `CHANGELOG.md`. It does not publish anything.
 
-Release CI runs the complete Python suite once on each supported platform with Python 3.12. Each CPython wheel is then installed separately, imports its native packages, reports its CLI version and compiles the installed build kit, including Longship. This is not a substitute for running OpenFOAM on the release target environments.
+Release CI runs the complete Python suite once on each supported platform with Python 3.12. Each CPython wheel is then installed separately, imports its native packages, reports its CLI version and compiles the installed build kit, including Longship, without OpenFOAM or ONNX. Validate the ONNX-enabled OpenFOAM build separately on the release target environment; `--without-onnx` does not check native ONNX acquisition or execution.
 
 ## Clean-install gate
 
 Use the designated validation environment outside the source checkout, or create a fresh environment when authorised. Keep the regular user environment unchanged. Select the exact wheel for that interpreter and platform from the newly prepared wheelhouse:
 
 ```console
-VERSION=1.0.11
+VERSION="<release-version>"
 python3 -m venv /absolute/path/to/authorised-test-install
 source /absolute/path/to/authorised-test-install/bin/activate
 python -m pip install "foamnordic[ml] @ file:///absolute/path/to/wheelhouse/foamnordic-${VERSION}-<python>-<abi>-<platform>.whl"

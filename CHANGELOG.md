@@ -4,6 +4,10 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 ## Unreleased
 
+## [1.0.12] - 2026-11-23
+
+- Fall back to Microsoft's official ONNX Runtime 1.28.0 NuGet package when the GitHub download fails, preserving archive checksum checks and reporting both sources when neither is reachable. The NuGet fallback requires macOS 14 or later on Apple Silicon.
+- Resolve ModelHost's runtime library path from the configured installation directories, including `lib64`, so ONNX Runtime can load without an external library-path override.
 - Read only the header bytes needed for field discovery and mesh cell counts.
 - Reduce copying during binary field decoding and avoid a second file read during postprocessing.
 

@@ -50,7 +50,7 @@ jobs:
           - label: Linux aarch64
             runner: ubuntu-24.04-arm
           - label: macOS arm64
-            runner: macos-14
+            runner: macos-15
 
     steps:
       - uses: actions/checkout@v6
@@ -84,7 +84,7 @@ jobs:
           - label: Linux aarch64
             runner: ubuntu-24.04-arm
           - label: macOS arm64
-            runner: macos-14
+            runner: macos-15
 
     steps:
       - uses: actions/checkout@v6

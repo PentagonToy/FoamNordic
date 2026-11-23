@@ -3,7 +3,7 @@
 # Compatibility names remain importable without cluttering interactive discovery.
 # ruff: noqa: F401
 
-__version__ = "1.0.11"
+__version__ = "1.0.12"
 
 from . import export, math, models, openfoam, postprocess, random, runtime
 from .core.expressions import (
