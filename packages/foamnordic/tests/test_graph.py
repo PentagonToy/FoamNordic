@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from foamnordic.core.graph import (
     NativeAlgebraPlan,
@@ -183,7 +185,10 @@ def test_k_equation_transport_rejects_negative_bound() -> None:
         )
 
 
-def test_native_transport_renders_without_model_host_address() -> None:
+@pytest.mark.parametrize("momentum_transport", [False, True])
+def test_native_transport_renders_without_model_host_address(
+    momentum_transport: bool,
+) -> None:
     closure = fno.Closure(
         name="kEqnFjord",
         operator=fno.Operator.function(keqn_function),
@@ -215,7 +220,7 @@ def test_native_transport_renders_without_model_host_address() -> None:
     )
     assert plan is not None
 
-    _, rendered = render_dictionary(
+    destination, rendered = render_dictionary(
         longship,
         closure,
         "unix:///unused.sock",
@@ -223,8 +228,16 @@ def test_native_transport_renders_without_model_host_address() -> None:
         observation_path="runs/observations.{rank}.jsonl",
         profile_every=7,
         native_program=plan,
+        momentum_transport=momentum_transport,
     )
 
+    if momentum_transport:
+        assert destination == Path("constant/momentumTransport")
+        assert "model           kEqnFjord;" in rendered
+        assert "LESModel" not in rendered
+    else:
+        assert destination == Path("constant/turbulenceProperties")
+        assert "LESModel        kEqnFjord;" in rendered
     assert "foamNordicTransport" in rendered
     assert "foamNordicClosure" not in rendered
     assert "unix:///unused.sock" not in rendered

@@ -21,7 +21,7 @@ Use the table to locate the component that owns a change. Read its architecture 
 
 ## Stable boundaries
 
-Keep equations in OpenFOAM, model execution in ModelHost and BindNordic, exchange in Fjord and Harbor, and orchestration in Longship. Observations remain non-blocking. The [architecture principles](../architecture/principles.md) define these boundaries.
+Keep equations in OpenFOAM, model execution in ModelHost and BindNordic, exchange in Fjord and Harbor, and orchestration in Longship. Observations remain non-blocking. The [architecture overview](../architecture/README.md#component-boundaries) define these boundaries.
 
 ## Guides
 

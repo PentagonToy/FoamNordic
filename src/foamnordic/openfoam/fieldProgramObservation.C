@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "fieldProgramObservation.H"
+#include "foamCompatibility.H"
 
 #include "fieldProgramSession.H"
 #include "fieldBridge.H"
@@ -37,15 +38,15 @@ retention(
     const dictionary& dict
 )
 {
-    const auto maxRecords = dict.getOrDefault<label>("maxRecords", 64);
-    const auto maxBytes = dict.getOrDefault<label>("maxBytes", 256 * 1024);
+    const auto maxRecords = dictionaryValue<label>(dict, "maxRecords", 64);
+    const auto maxBytes = dictionaryValue<label>(dict, "maxBytes", 256 * 1024);
     if (maxRecords <= 0 || maxBytes <= 0)
     {
         throw std::invalid_argument(
             "FoamNordic observation maxRecords and maxBytes must be positive."
         );
     }
-    const auto overflow = dict.getOrDefault<word>("overflow", "dropOldest");
+    const auto overflow = dictionaryValue<word>(dict, "overflow", "dropOldest");
     foamnordic::adapter::ObservationOverflow policy;
     if (overflow == "dropOldest")
     {
@@ -75,8 +76,8 @@ compilePlan(
     const dictionary& dict
 )
 {
-    const auto every = dict.getOrDefault<label>("every", 1);
-    const auto offset = dict.getOrDefault<label>("offset", 0);
+    const auto every = dictionaryValue<label>(dict, "every", 1);
+    const auto offset = dictionaryValue<label>(dict, "offset", 0);
     if (every <= 0 || offset < 0)
     {
         throw std::invalid_argument(
@@ -111,13 +112,13 @@ compilePlan(
 FieldProgramObservation::FieldProgramObservation(
     const dictionary& dict
 ) :
-    fields_(dict.get<wordList>("fields")),
+    fields_(dictionaryValue<wordList>(dict, "fields")),
     plan_(compilePlan(fields_, dict))
 {
     if (dict.found("path"))
     {
         writer_ = std::make_unique<foamnordic::adapter::ObservationJsonlWriter>(
-            resolveRankAddress(dict.get<string>("path")).c_str(),
+            resolveRankAddress(dictionaryValue<string>(dict, "path")).c_str(),
             retention(dict)
         );
     }
@@ -127,7 +128,7 @@ FieldProgramObservation::FieldProgramObservation(
             = std::make_unique<foamnordic::adapter::ObservationPublisher>(
                 foamnordic::fjord::connect(
                     foamnordic::fjord::FjordAddress::parse(
-                        resolveRankAddress(dict.get<string>("address")).c_str()
+                        resolveRankAddress(dictionaryValue<string>(dict, "address")).c_str()
                     )
                 ),
                 retention(dict)

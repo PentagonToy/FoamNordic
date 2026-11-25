@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "frame.H"
+#include "foamCompatibility.H"
 
 #include "fvcCurl.H"
 #include "fvcDiv.H"
@@ -218,10 +219,10 @@ OperationFrame::lookup(
     const word fieldName(name);
     if (name == "deltaTime")
     {
-        return tmp<volScalarField>::New(
+        return makeTemporary<volScalarField>(
             IOobject(
                 "FoamNordic:deltaTime",
-                mesh_.time().timeName(),
+                currentTimeName(mesh_.time()),
                 mesh_,
                 IOobject::NO_READ,
                 IOobject::NO_WRITE,
@@ -710,7 +711,11 @@ OperationFrame::evaluateCoefficient(
         for (const word& dictionaryName :
              { word("transportProperties"), word("physicalProperties") })
         {
+#ifdef FOAMNORDIC_FOUNDATION
+            typeIOobject<IOdictionary> object(
+#else
             IOobject object(
+#endif
                 dictionaryName,
                 mesh_.time().constant(),
                 mesh_,
@@ -718,14 +723,25 @@ OperationFrame::evaluateCoefficient(
                 IOobject::NO_WRITE,
                 false
             );
+#ifdef FOAMNORDIC_FOUNDATION
+            if (!object.headerOk())
+#else
             if (!object.typeHeaderOk<IOdictionary>(false))
+#endif
             {
                 continue;
             }
             const IOdictionary properties(object);
             if (properties.found(coefficientName))
             {
+#ifdef FOAMNORDIC_FOUNDATION
+                return apply(dimensionedScalar(
+                    coefficientName,
+                    properties.lookup(coefficientName)
+                ));
+#else
                 return apply(dimensionedScalar(coefficientName, properties));
+#endif
             }
         }
         throw std::invalid_argument(
@@ -963,7 +979,7 @@ OperationFrame::snapshot(
         {
             const auto& source = field(stored);
             using FieldType = std::decay_t<decltype(source)>;
-            if (!fields_.emplace(name, tmp<FieldType>::New(source)).second)
+            if (!fields_.emplace(name, makeTemporary<FieldType>(source)).second)
             {
                 throw std::invalid_argument(
                     "OpenFOAM native algebra output snapshot is not unique."
@@ -1050,7 +1066,7 @@ OperationFrame::correctBoundary(
         [&](const auto& stored)
         {
             using FieldType = std::decay_t<decltype(field(stored))>;
-            mesh_.lookupObjectRef<FieldType>(name).correctBoundaryConditions();
+            correctBoundaryConditions(mesh_.lookupObjectRef<FieldType>(name));
         },
         value
     );

@@ -78,7 +78,6 @@ nav:
           - Command line: foamnordic/api/command-line.md
       - Architecture:
           - Overview: foamnordic/architecture/README.md
-          - Principles: foamnordic/architecture/principles.md
           - OpenFOAM: foamnordic/architecture/openfoam.md
           - Runtime: foamnordic/architecture/runtime.md
           - Transport: foamnordic/architecture/transport.md

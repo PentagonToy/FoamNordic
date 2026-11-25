@@ -106,9 +106,19 @@ public:
     void operator=(const fjordExchange&) = delete;
 
     bool read(const dictionary& dict) override;
+#ifdef FOAMNORDIC_FOUNDATION
+    wordList fields() const override;
+    bool executeAtStart() const override { return false; }
+#endif
     bool execute() override;
     bool write() override;
+#ifdef FOAMNORDIC_FOUNDATION
+    void topoChange(const polyTopoChangeMap&) override;
+    void mapMesh(const polyMeshMap&) override;
+    void distribute(const polyDistributionMap&) override;
+#else
     void updateMesh(const mapPolyMesh&) override;
+#endif
 };
 
 } // End namespace functionObjects

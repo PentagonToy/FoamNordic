@@ -49,7 +49,8 @@ def check(site):
         'foamnordic/installation/index.html': 'tabbed-set',
         'stacknordic/installation/index.html': 'tabbed-set',
         'stacknordic/api/index.html': 'href="https://github.com/PentagonToy/StackNordic"',
-        'foamnordic/architecture/principles/index.html': 'arithmatex',
+        'foamnordic/architecture/index.html': 'arithmatex',
+        'foamnordic/architecture/principles/index.html': 'http-equiv="refresh"',
         'foamnordic/architecture/runtime/index.html': 'mermaid',
     }
     for name, marker in expected.items():

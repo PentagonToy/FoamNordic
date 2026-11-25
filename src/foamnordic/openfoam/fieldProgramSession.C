@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "fieldProgramSession.H"
+#include "foamCompatibility.H"
 
 #include "Pstream.H"
 
@@ -208,13 +209,13 @@ FieldProgramSession::FieldProgramSession(
     foamnordic::adapter::ExchangeContract contract
 )
 {
-    const auto address = dict.get<string>("address");
-    const auto sharedMemory = dict.getOrDefault<bool>("sharedMemory", true);
-    const auto ucx = dict.getOrDefault<bool>("ucx", false);
+    const auto address = dictionaryValue<string>(dict, "address");
+    const auto sharedMemory = dictionaryValue<bool>(dict, "sharedMemory", true);
+    const auto ucx = dictionaryValue<bool>(dict, "ucx", false);
     const auto sessionId
-        = static_cast<std::uint64_t>(dict.getOrDefault<label>("sessionId", 1));
+        = static_cast<std::uint64_t>(dictionaryValue<label>(dict, "sessionId", 1));
     const auto configuredProfileEvery
-        = dict.getOrDefault<label>("profileEvery", 0);
+        = dictionaryValue<label>(dict, "profileEvery", 0);
     if (configuredProfileEvery < 0)
     {
         throw std::invalid_argument(

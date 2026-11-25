@@ -295,13 +295,14 @@ def test_parallel_preparation_normalizes_incompatible_policy(mocker, capsys) -> 
         assert "decomposePar" in command
 
 
-def test_parallel_preparation_preserves_compatible_policy() -> None:
+@pytest.mark.parametrize("suffix", ["Coeffs", ""])
+def test_parallel_preparation_preserves_compatible_policy(suffix: str) -> None:
     with tempfile.TemporaryDirectory() as directory:
         dictionary = Path(directory) / "decomposeParDict"
         original = (
             "numberOfSubdomains 4;\n"
             "method hierarchical;\n"
-            "hierarchicalCoeffs { n (2 2 1); order xyz; }\n"
+            f"hierarchical{suffix} {{ n (2 2 1); order xyz; }}\n"
         )
         dictionary.write_text(original, encoding="utf-8")
 
@@ -315,7 +316,8 @@ def test_parallel_preparation_updates_rank_and_preserves_valid_policy() -> None:
     with tempfile.TemporaryDirectory() as directory:
         dictionary = Path(directory) / "decomposeParDict"
         dictionary.write_text(
-            "numberOfSubdomains 8;\n"
+            "// numberOfSubdomains 99;\n"
+            "numberOfSubdomains /* requested ranks */ 8;\n"
             "method simple;\n"
             "simpleCoeffs { n (2 2 1); delta 0.001; }\n",
             encoding="utf-8",
@@ -325,7 +327,8 @@ def test_parallel_preparation_updates_rank_and_preserves_valid_policy() -> None:
         updated = dictionary.read_text(encoding="utf-8")
 
         assert changed
-        assert "numberOfSubdomains 4;" in updated
+        assert "// numberOfSubdomains 99;" in updated
+        assert "numberOfSubdomains /* requested ranks */ 4;" in updated
         assert "method simple;" in updated
         assert "simpleCoeffs { n (2 2 1); delta 0.001; }" in updated
 

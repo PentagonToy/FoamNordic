@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "progressRateFjord.H"
+#include "foamCompatibility.H"
 
 #include "operations/frame.H"
 
@@ -27,9 +28,9 @@ progressRateFjord::validateContract(
     const volScalarField& reactionRate
 )
 {
-    const auto outputs = dictionary.get<wordList>("outputs");
+    const auto outputs = dictionaryValue<wordList>(dictionary, "outputs");
     const auto keys
-        = dictionary.getOrDefault<wordList>("outputKeys", wordList());
+        = dictionaryValue<wordList>(dictionary, "outputKeys", wordList());
     if (outputs.size() != 1 || (!keys.empty() && keys.size() != 1))
     {
         throw std::invalid_argument(
@@ -37,8 +38,8 @@ progressRateFjord::validateContract(
             "to the solver-owned reaction-rate field."
         );
     }
-    const word key = keys.empty() ? outputs.front() : keys.front();
-    if (outputs.front() != reactionRate.name() || key != "omega_c")
+    const word key = keys.empty() ? outputs[0] : keys[0];
+    if (outputs[0] != reactionRate.name() || key != "omega_c")
     {
         throw std::invalid_argument(
             "progressRateFjord requires exactly one omega_c output mapped "
@@ -62,7 +63,7 @@ progressRateFjord::progressRateFjord(
     normalizedVariance_(
         IOobject(
             "foamNordicNormalizedVariance",
-            progress.time().timeName(),
+            currentTimeName(progress.time()),
             progress.mesh(),
             IOobject::NO_READ,
             IOobject::NO_WRITE

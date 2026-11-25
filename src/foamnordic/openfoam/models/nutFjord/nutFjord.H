@@ -60,7 +60,11 @@ public:
 
     using alphaField = typename BasicTurbulenceModel::alphaField;
     using rhoField = typename BasicTurbulenceModel::rhoField;
+#ifdef FOAMNORDIC_FOUNDATION
+    using transportModel = Foam::viscosity;
+#else
     using transportModel = typename BasicTurbulenceModel::transportModel;
+#endif
 
     TypeName("nutFjord");
 
@@ -74,7 +78,9 @@ public:
         const surfaceScalarField& alphaRhoPhi,
         const surfaceScalarField& phi,
         const transportModel& transport,
+#ifndef FOAMNORDIC_FOUNDATION
         const word& propertiesName = turbulenceModel::propertiesName,
+#endif
         const word& type = typeName
     );
 

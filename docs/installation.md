@@ -6,7 +6,7 @@ Install the Python package, activate OpenFOAM, then build the integration for th
 
 Use CPython 3.11 or 3.12 on Linux (`x86_64` or `aarch64`) or Apple Silicon. The commands below use a bash or zsh terminal. OpenFOAM must already be installed with its compiler and MPI environment; installing FoamNordic does not install OpenFOAM.
 
-Linux with OpenFOAM.com v2512 is the primary HPC target. On Apple Silicon, use OpenFOAM.app and its `openfoam` launcher. On a cluster, obtain the OpenFOAM module name from the local installation instructions; `openfoam/2512` below is an example.
+See the [OpenFOAM compatibility table](../README.md#openfoam-compatibility) for the tested releases, platforms and workflows. Check your site's compiler, MPI and module settings before building.
 
 ## 1. Install the Python package
 
@@ -115,6 +115,8 @@ The runtime is installed below `~/.local/share/foamnordic/runtime/<platform>/<op
 `foamnordic doctor` checks the environment without starting a solver. Resolve `FAIL` entries first. Solver runs require OpenFOAM, runtime profile, Longship and adapter checks to pass; parallel runs also need MPI. ModelHost or ONNX warnings can be expected from a build without ONNX.
 
 Continue with the [first OpenFOAM run](../README.md#quick-start). Set `Case.of_cmd` to the same OpenFOAM activation used for the build: `"module load openfoam/2512"` with `shell="bash"` on the example cluster, or `"openfoam"` with `shell="zsh"` on macOS. Supply an existing case directory containing the solver dictionaries and fields.
+
+For Foundation 14, activate `openfoam-org/14` before building and set `of_cmd="module load openfoam-org/14"` and `application="foamRun"` when declaring a case on Roihu. The case's `system/controlDict` selects the solver, such as `incompressibleFluid`. The field, closure and workload declarations use the same Python API across these releases.
 
 For notebooks, select a kernel from the Python environment containing FoamNordic. Importing the package in the terminal does not establish that a different notebook kernel can import it.
 

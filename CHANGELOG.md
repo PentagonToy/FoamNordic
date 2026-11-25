@@ -4,6 +4,8 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 ## Unreleased
 
+- Add experimental OpenFOAM Foundation 14 support with the existing Python API. The airFoil2D and channel395 notebooks demonstrate serial and four-rank execution. The Foundation adapter supports field exchange, observations and native LES closures.
+
 ## [1.0.12] - 2026-11-23
 
 - Fall back to Microsoft's official ONNX Runtime 1.28.0 NuGet package when the GitHub download fails, preserving archive checksum checks and reporting both sources when neither is reachable. The NuGet fallback requires macOS 14 or later on Apple Silicon.

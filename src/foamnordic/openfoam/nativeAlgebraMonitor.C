@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "nativeAlgebraMonitor.H"
+#include "foamCompatibility.H"
 
 #include <stdexcept>
 
@@ -23,9 +24,9 @@ NativeAlgebraMonitor::NativeAlgebraMonitor(
     const dictionary& dict
 ) :
     observation_(FieldProgramObservation::create(dict)),
-    program_(dict.getOrDefault<word>("profileProgram", "algebra"))
+    program_(dictionaryValue<word>(dict, "profileProgram", "algebra"))
 {
-    const auto profileEvery = dict.getOrDefault<label>("profileEvery", 0);
+    const auto profileEvery = dictionaryValue<label>(dict, "profileEvery", 0);
     if (profileEvery < 0)
     {
         throw std::invalid_argument(

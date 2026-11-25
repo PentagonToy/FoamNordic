@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "closureHook.H"
+#include "foamCompatibility.H"
 
 #include "fieldBridge.H"
 #include "operations/frame.H"
@@ -30,11 +31,11 @@ ClosureHook::readInputs(
     const dictionary& dict
 )
 {
-    const auto names = dict.get<wordList>("inputs");
+    const auto names = dictionaryValue<wordList>(dict, "inputs");
     const auto expressions
-        = dict.getOrDefault<List<string>>("inputExpressions", List<string>());
+        = dictionaryValue<List<string>>(dict, "inputExpressions", List<string>());
     const auto patches
-        = dict.getOrDefault<wordList>("inputPatches", wordList());
+        = dictionaryValue<wordList>(dict, "inputPatches", wordList());
     if (!expressions.empty() && expressions.size() != names.size())
     {
         throw std::invalid_argument(
@@ -92,10 +93,10 @@ ClosureHook::readOutputs(
     const dictionary& dict
 )
 {
-    const auto fields = dict.get<wordList>("outputs");
-    const auto keys = dict.getOrDefault<wordList>("outputKeys", wordList());
+    const auto fields = dictionaryValue<wordList>(dict, "outputs");
+    const auto keys = dictionaryValue<wordList>(dict, "outputKeys", wordList());
     const auto patches
-        = dict.getOrDefault<wordList>("outputPatches", wordList());
+        = dictionaryValue<wordList>(dict, "outputPatches", wordList());
     if (fields.empty())
     {
         throw std::invalid_argument(
@@ -164,7 +165,7 @@ ClosureHook::ClosureHook(
     outputs_(readOutputs(dict)),
     session_(dict, contract(inputs_, outputs_)),
     observation_(FieldProgramObservation::create(dict)),
-    program_(dict.getOrDefault<word>("profileProgram", "closure"))
+    program_(dictionaryValue<word>(dict, "profileProgram", "closure"))
 {
 }
 

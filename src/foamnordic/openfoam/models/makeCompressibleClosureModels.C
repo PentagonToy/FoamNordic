@@ -10,7 +10,11 @@
  * This file is part of FoamNordic.
  * SPDX-License-Identifier: GPL-3.0-only
  */
+#ifdef FOAMNORDIC_FOUNDATION
+#include "makeCompressibleMomentumTransportModel.H"
+#else
 #include "turbulentFluidThermoModels.H"
+#endif
 
 #include "nutFjord.H"
 #include "kEqnFjord.H"

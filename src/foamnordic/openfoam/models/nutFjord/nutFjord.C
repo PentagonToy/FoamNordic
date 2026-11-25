@@ -11,8 +11,12 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "nutFjord.H"
+#include "foamCompatibility.H"
 
 #include "operations/frame.H"
+#ifdef FOAMNORDIC_FOUNDATION
+#include "fvConstraints.H"
+#endif
 
 #include <chrono>
 
@@ -34,7 +38,11 @@ nutFjord<BasicTurbulenceModel>::correctNut()
         frame.bind("nu", molecularViscosity());
         this->nut_ = frame.scalar(nativeNut_);
         this->nut_.correctBoundaryConditions();
+#ifdef FOAMNORDIC_FOUNDATION
+        fvConstraints::New(this->mesh_).constrain(this->nut_);
+#else
         BasicTurbulenceModel::correctNut();
+#endif
         const auto elapsed
             = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - started
@@ -58,7 +66,11 @@ nutFjord<BasicTurbulenceModel>::correctNut()
     ));
 
     this->nut_.correctBoundaryConditions();
+#ifdef FOAMNORDIC_FOUNDATION
+    fvConstraints::New(this->mesh_).constrain(this->nut_);
+#else
     BasicTurbulenceModel::correctNut();
+#endif
 }
 
 template<class BasicTurbulenceModel>
@@ -69,7 +81,9 @@ nutFjord<BasicTurbulenceModel>::nutFjord(
     const surfaceScalarField& alphaRhoPhi,
     const surfaceScalarField& phi,
     const transportModel& transport,
+#ifndef FOAMNORDIC_FOUNDATION
     const word& propertiesName,
+#endif
     const word& type
 ) :
     LESeddyViscosity<BasicTurbulenceModel>(
@@ -79,18 +93,25 @@ nutFjord<BasicTurbulenceModel>::nutFjord(
         velocity,
         alphaRhoPhi,
         phi,
-        transport,
-        propertiesName
+        transport
+#ifndef FOAMNORDIC_FOUNDATION
+        , propertiesName
+#endif
     ),
     closure_(nullptr),
     nativeAlgebra_(false),
     nativeMonitor_(nullptr)
 {
-    const dictionary* algebra = this->coeffDict_.findDict("foamNordicAlgebra");
-    if (algebra != nullptr)
+#ifdef FOAMNORDIC_FOUNDATION
+    const dictionary& modelCoefficients = this->typeDict(type);
+#else
+    const dictionary& modelCoefficients = this->coeffDict_;
+#endif
+    if (modelCoefficients.found("foamNordicAlgebra"))
     {
+        const dictionary& algebra = modelCoefficients.subDict("foamNordicAlgebra");
         nativeAlgebra_ = true;
-        const dictionary& outputs = algebra->subDict("outputs");
+        const dictionary& outputs = algebra.subDict("outputs");
         if (outputs.size() != 1 || !outputs.found("nut"))
         {
             FatalIOErrorInFunction(outputs)
@@ -98,21 +119,23 @@ nutFjord<BasicTurbulenceModel>::nutFjord(
                 << exit(FatalIOError);
         }
         nativeNut_ = foamNordic::operations::Expression::parse(
-            outputs.get<Foam::string>("nut")
+            Foam::foamNordic::dictionaryValue<Foam::string>(outputs, "nut")
         );
         nativeMonitor_
-            = std::make_unique<foamNordic::NativeAlgebraMonitor>(*algebra);
+            = std::make_unique<foamNordic::NativeAlgebraMonitor>(algebra);
     }
     else
     {
         closure_ = std::make_unique<foamNordic::ClosureHook>(
-            this->coeffDict_.subDict("foamNordicClosure")
+            modelCoefficients.subDict("foamNordicClosure")
         );
     }
+#ifndef FOAMNORDIC_FOUNDATION
     if (type == typeName)
     {
         this->printCoeffs(type);
     }
+#endif
 }
 
 template<class BasicTurbulenceModel> nutFjord<BasicTurbulenceModel>::~nutFjord()
@@ -134,14 +157,18 @@ template<class BasicTurbulenceModel>
 tmp<volScalarField>
 nutFjord<BasicTurbulenceModel>::k() const
 {
-    return tmp<volScalarField>::New(
+    return Foam::foamNordic::makeTemporary<volScalarField>(
         IOobject(
             IOobject::groupName("k", this->U_.group()),
-            this->runTime_.timeName(),
+            Foam::foamNordic::currentTimeName(this->runTime_),
             this->mesh_,
             IOobject::NO_READ,
             IOobject::NO_WRITE,
+#ifdef FOAMNORDIC_FOUNDATION
+            false
+#else
             IOobject::NO_REGISTER
+#endif
         ),
         this->mesh_,
         dimensionedScalar("zero", sqr(dimVelocity), 0)

@@ -27,14 +27,6 @@ if TYPE_CHECKING:
     from ..core.spec import Closure, Longship, Transform
 
 
-def _native_program_plan(
-    program: Closure | Transform,
-) -> NativeFieldPlan | None:
-    """Return a closure's graph compiled once when it was declared."""
-
-    return program.native_program
-
-
 @dataclass(frozen=True, slots=True)
 class PreparedProgram:
     """One isolated field program and its worker lifecycle endpoints."""
@@ -111,12 +103,13 @@ def prepare_case(
     work_dir, case_dir = stage_case(longship, plan)
     prepared: list[PreparedProgram] = []
     closures = longship.closure_programs
-    for index, program in enumerate(closures):
+    programs = (*closures, *longship.transforms)
+    for index, program in enumerate(programs):
         slug = _program_slug(program.name, index)
         ready = internal_path(work_dir, f"{slug}.ready")
         socket = _socket_path(work_dir, index)
-        native_program = _native_program_plan(program)
-        if isinstance(native_program, NativeTransportPlan) and index != 0:
+        native_program = program.native_program
+        if 0 < index < len(closures) and isinstance(native_program, NativeTransportPlan):
             raise ValueError(
                 "Field.transport cannot be used by a solver-mediated update stage"
             )
@@ -131,23 +124,6 @@ def prepare_case(
         if native_program is not None and verbose:
             print(
                 f"[FoamNordic] {program.name} execution lane: native OpenFOAM."
-            )
-    for offset, transform in enumerate(longship.transforms, len(prepared)):
-        slug = _program_slug(transform.name, offset)
-        ready = internal_path(work_dir, f"{slug}.ready")
-        socket = _socket_path(work_dir, offset)
-        native_program = _native_program_plan(transform)
-        artifact = (
-            None
-            if native_program is not None
-            else _package_function(longship, transform, work_dir)
-        )
-        prepared.append(
-            PreparedProgram(transform, ready, socket, artifact, native_program)
-        )
-        if native_program is not None and verbose:
-            print(
-                f"[FoamNordic] {transform.name} execution lane: native OpenFOAM."
             )
     observations = work_dir / "observations"
     if longship.observations:
@@ -167,6 +143,7 @@ def prepare_case(
             update_runtimes,
             profile_every,
             closure_runtime.native_program,
+            momentum_transport=(case_dir / "constant/momentumTransport").is_file(),
         )
         output = case_dir / destination
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -214,10 +191,11 @@ def prepare_case(
     control_path = quote_command((control,))
     # controlDict stores an OpenFOAM word, while the process command may be an
     # absolute executable selected by an advanced user.
-    application = quote_command((Path(longship.case.application).name,))
+    application_name = Path(longship.case.application).name
+    application = quote_command((application_name,))
     mesh_commands = _mesh_commands(longship, case_dir)
     commands: list[str] = []
-    if longship.field_programs:
+    if programs:
         if openfoam_library is None:
             raise RuntimeError(
                 "field-program case preparation requires the selected "
@@ -231,12 +209,32 @@ def prepare_case(
             f"LD_LIBRARY_PATH={quote_command((library_directory,))}:"
             '"${LD_LIBRARY_PATH:-}"'
         )
-    commands.extend(
-        (
-            *mesh_commands,
-            f"foamDictionary {control_path} -entry application -set {application}",
+    commands.extend(mesh_commands)
+    if application_name == "foamRun":
+        commands.append(
+            f"if ! foamDictionary {control_path} -entry solver -value "
+            ">/dev/null 2>&1; then "
+            f"case $(foamDictionary {control_path} -entry application -value 2>/dev/null) in "
+            "pimpleFoam) solver=incompressibleFluid ;; "
+            "rhoPimpleFoam) solver=fluid ;; "
+            "reactingFoam) solver=multicomponentFluid ;; "
+            "*) echo 'Set solver in system/controlDict for foamRun' >&2; exit 1 ;; "
+            f'esac; foamDictionary {control_path} -entry solver -add "$solver"; fi'
         )
+    commands.append(
+        f"foamDictionary {control_path} -entry application -set {application}"
     )
+    transport = case_dir / "constant/transportProperties"
+    if transport.is_file() and not (case_dir / "constant/physicalProperties").exists():
+        transport_path = quote_command((transport,))
+        commands.append(
+            'if [ "${WM_PROJECT_VERSION:-}" = 14 ] '
+            f'&& ! foamDictionary {transport_path} -entry viscosityModel -value '
+            '>/dev/null 2>&1 '
+            f'&& [ "$(foamDictionary {transport_path} -entry transportModel '
+            '-value 2>/dev/null)" = Newtonian ]; then '
+            f"foamDictionary {transport_path} -entry viscosityModel -add constant; fi"
+        )
     for transform, transform_dictionary in transform_dictionaries:
         function_name = quote_command((f"functions/{transform.name}",))
         dictionary = quote_command((transform_dictionary,))
@@ -249,7 +247,7 @@ def prepare_case(
             f"{control_path} -entry {function_name} -add {dictionary}; fi"
         )
     commands.extend(scheme_commands(longship, case_dir, work_dir))
-    if longship.field_programs:
+    if programs:
         assert openfoam_library is not None
         library_value = str(openfoam_library.resolve()).replace('"', '\\"')
         libraries = quote_command((f'("{library_value}")',))

@@ -3,17 +3,16 @@ FoamFile
     format          ascii;
     class           dictionary;
     location        "constant";
-    object          turbulenceProperties;
+    object          @MOMENTUM_DICTIONARY@;
 }
 
 simulationType  LES;
 
 LES
 {
-    LESModel        @FOAMNORDIC_MODEL@;
+    @LES_MODEL_ENTRY@ @FOAMNORDIC_MODEL@;
     turbulence      on;
-    printCoeffs     on;
-    delta           cubeRootVol;
+@PRINT_COEFFICIENTS@    delta           cubeRootVol;
 
     cubeRootVolCoeffs
     {

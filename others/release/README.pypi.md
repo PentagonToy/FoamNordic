@@ -2,8 +2,6 @@
 
 FoamNordic is a native C++ and Python framework for ordinary OpenFOAM and machine-learning field programs, including equation-level closures. It keeps atomic field exchange, packing, and lifecycle in the native runtime, delegates model formats and execution to BindNordic, and exposes a compact declarative API for cases, placement, launch, observations, and results.
 
-> **Note:** The FoamNordic GitHub repository is temporarily private while the software is used in ongoing research and a related publication. The repository will be made public after the research is presented. PyPI distributions remain available in the meantime.
-
 FoamNordic is active research software. Release notes and upgrade guidance are maintained in the [changelog](https://github.com/PentagonToy/FoamNordic/blob/main/CHANGELOG.md).
 
 [Documentation](https://pentagontoy.github.io/FoamNordic/foamnordic/) · [Installation](https://pentagontoy.github.io/FoamNordic/foamnordic/installation/) · [API](https://pentagontoy.github.io/FoamNordic/foamnordic/api/)

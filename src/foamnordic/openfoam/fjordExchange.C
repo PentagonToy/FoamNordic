@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "fjordExchange.H"
+#include "foamCompatibility.H"
 #include "fieldProgramObservation.H"
 #include "fieldProgramSession.H"
 #include "fieldBridge.H"
@@ -28,6 +29,8 @@ namespace Foam
 {
 namespace functionObjects
 {
+
+using foamNordic::dictionaryValue;
 
 defineTypeNameAndDebug(fjordExchange, 0);
 addToRunTimeSelectionTable(functionObject, fjordExchange, dictionary);
@@ -83,12 +86,12 @@ fjordExchange::read(
 )
 {
     fvMeshFunctionObject::read(dict);
-    dict.readEntry("outputs", outputs_);
-    nativeAlgebra_ = dict.findEntry("outputExpressions") != nullptr;
+    outputs_ = dictionaryValue<wordList>(dict, "outputs");
+    nativeAlgebra_ = dict.found("outputExpressions");
     if (nativeAlgebra_)
     {
         const List<string> expressions
-            = dict.get<List<string>>("outputExpressions");
+            = dictionaryValue<List<string>>(dict, "outputExpressions");
         outputExpressions_.clear();
         outputExpressions_.reserve(expressions.size());
         for (const auto& expression : expressions)
@@ -100,28 +103,30 @@ fjordExchange::read(
     }
     else
     {
-        dict.readEntry("inputs", inputs_);
+        inputs_ = dictionaryValue<wordList>(dict, "inputs");
     }
-    inputPatches_ = dict.getOrDefault<wordList>(
+    inputPatches_ = dictionaryValue<wordList>(
+        dict,
         "inputPatches",
         wordList(inputs_.size(), "none")
     );
-    outputPatches_ = dict.getOrDefault<wordList>(
+    outputPatches_ = dictionaryValue<wordList>(
+        dict,
         "outputPatches",
         wordList(outputs_.size(), "none")
     );
-    inputKeys_ = dict.getOrDefault<wordList>("inputKeys", inputs_);
-    outputKeys_ = dict.getOrDefault<wordList>("outputKeys", outputs_);
+    inputKeys_ = dictionaryValue<wordList>(dict, "inputKeys", inputs_);
+    outputKeys_ = dictionaryValue<wordList>(dict, "outputKeys", outputs_);
     if (!nativeAlgebra_)
     {
-        dict.readEntry("address", address_);
-        sharedMemory_ = dict.getOrDefault<bool>("sharedMemory", true);
-        ucx_ = dict.getOrDefault<bool>("ucx", false);
+        address_ = dictionaryValue<string>(dict, "address");
+        sharedMemory_ = dictionaryValue<bool>(dict, "sharedMemory", true);
+        ucx_ = dictionaryValue<bool>(dict, "ucx", false);
         sessionId_ = static_cast<std::uint64_t>(
-            dict.getOrDefault<label>("sessionId", 1)
+            dictionaryValue<label>(dict, "sessionId", 1)
         );
     }
-    const auto profileEvery = dict.getOrDefault<label>("profileEvery", 0);
+    const auto profileEvery = dictionaryValue<label>(dict, "profileEvery", 0);
     if (profileEvery < 0)
     {
         FatalIOErrorInFunction(dict)
@@ -129,7 +134,7 @@ fjordExchange::read(
     }
     profileEvery_ = static_cast<std::uint64_t>(profileEvery);
     const auto stage
-        = dict.getOrDefault<word>("exchangeStage", "timeStepStart");
+        = dictionaryValue<word>(dict, "exchangeStage", "timeStepStart");
     if (stage == "timeStepStart")
     {
         stage_ = Stage::timeStepStart;
@@ -153,7 +158,7 @@ fjordExchange::read(
                "pressureCorrected, or timeStepEnd"
             << exit(FatalIOError);
     }
-    const auto cadence = dict.getOrDefault<word>("exchangeControl", "timeStep");
+    const auto cadence = dictionaryValue<word>(dict, "exchangeControl", "timeStep");
     if (cadence == "timeStep")
     {
         sequence_->configure(foamnordic::adapter::ExchangeCadence::time_step);
@@ -206,6 +211,14 @@ fjordExchange::connectPeer()
         profileEvery_
     );
 }
+
+#ifdef FOAMNORDIC_FOUNDATION
+wordList
+fjordExchange::fields() const
+{
+    return inputs_;
+}
+#endif
 
 bool
 fjordExchange::execute()
@@ -384,6 +397,25 @@ fjordExchange::write()
     return exchange();
 }
 
+#ifdef FOAMNORDIC_FOUNDATION
+void
+fjordExchange::topoChange(const polyTopoChangeMap&)
+{
+    topology_.markChanged();
+}
+
+void
+fjordExchange::mapMesh(const polyMeshMap&)
+{
+    topology_.markChanged();
+}
+
+void
+fjordExchange::distribute(const polyDistributionMap&)
+{
+    topology_.markChanged();
+}
+#else
 void
 fjordExchange::updateMesh(
     const mapPolyMesh& map
@@ -392,6 +424,7 @@ fjordExchange::updateMesh(
     fvMeshFunctionObject::updateMesh(map);
     topology_.markChanged();
 }
+#endif
 
 } // End namespace functionObjects
 } // End namespace Foam

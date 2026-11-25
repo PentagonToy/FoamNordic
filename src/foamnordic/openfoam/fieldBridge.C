@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 #include "fieldBridge.H"
+#include "foamCompatibility.H"
 
 #include "volFields.H"
 #include "surfaceFields.H"
@@ -151,7 +152,7 @@ correct(
     const word& name
 )
 {
-    mesh.lookupObjectRef<FieldType>(name).correctBoundaryConditions();
+    correctBoundaryConditions(mesh.lookupObjectRef<FieldType>(name));
 }
 
 label
@@ -160,7 +161,11 @@ patchIndex(
     const word& patch
 )
 {
+#ifdef FOAMNORDIC_FOUNDATION
+    const auto index = mesh.boundary().findIndex(patch);
+#else
     const auto index = mesh.boundaryMesh().findPatchID(patch);
+#endif
     if (index < 0)
     {
         throw std::invalid_argument(

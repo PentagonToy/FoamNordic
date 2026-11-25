@@ -216,6 +216,8 @@ def render_dictionary(
     updates: tuple[tuple[Closure, str], ...] = (),
     profile_every: int = 0,
     native_program: NativeFieldPlan | None = None,
+    *,
+    momentum_transport: bool = False,
 ) -> tuple[Path, str]:
     integration = longship.case.integration
     if native_program is not None and integration is not None:
@@ -231,13 +233,21 @@ def render_dictionary(
             "turbulenceProperties.fjord.in",
             kind="OpenFOAM dictionary",
         )
-        destination = Path("constant/turbulenceProperties")
+        destination = Path(
+            "constant/momentumTransport"
+            if momentum_transport
+            else "constant/turbulenceProperties"
+        )
         model_configuration = (
             "Ck 0.094;\n        Ce 1.048;"
             if closure.name == "kEqnFjord"
             else ""
         )
-        custom: dict[str, str] = {}
+        custom = {
+            "MOMENTUM_DICTIONARY": destination.name,
+            "LES_MODEL_ENTRY": "model          " if momentum_transport else "LESModel       ",
+            "PRINT_COEFFICIENTS": "" if momentum_transport else "    printCoeffs     on;\n",
+        }
     else:
         template = integration.source.read_text(encoding="utf-8")
         destination = integration.destination

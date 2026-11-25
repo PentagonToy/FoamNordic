@@ -5,75 +5,66 @@
 
 # FoamNordic
 
-**FOAM Native Orchestration Runtime for Distributed Inference Coupling**
+FoamNordic runs OpenFOAM cases and couples solver fields to mathematical functions and machine-learning models. Use `Longship` to launch a baseline case, transform fields during a run, or apply a closure inside a solver equation. OpenFOAM advances the solution without running Python in the solver loop.
 
-FoamNordic couples OpenFOAM fields to mathematical and machine-learning operators without making Python part of the solver loop. The same `Longship` interface runs an unchanged OpenFOAM case, a field transform, or an equation-level closure supplied by any compatible solver adapter.
+[Documentation](https://pentagontoy.github.io/FoamNordic/foamnordic/) · [Installation](docs/installation.md) · [Python API](docs/api/README.md) · [Tutorials](tutorials/README.md)
 
-[Documentation](https://pentagontoy.github.io/FoamNordic/foamnordic/) · [Installation](https://pentagontoy.github.io/FoamNordic/foamnordic/installation/) · [API](https://pentagontoy.github.io/FoamNordic/foamnordic/api/)
+## OpenFOAM compatibility
 
-FNOM stores the model payload, tensor contracts, scaling and runtime metadata. BindNordic evaluates it; Fjord exchanges fields over shared memory, Unix sockets, UCX or TCP; Longship manages placement, execution and results.
+| OpenFOAM release | Tested environment |
+| --- | --- |
+| OpenCFD v2512 | Linux, Apple Silicon |
+| OpenCFD v2606 | Apple Silicon |
+| Foundation 14 | Linux |
 
-Python 3.11 and 3.12 are supported. See the [changelog](CHANGELOG.md) for release notes and upgrade guidance.
+Foundation 14 support is available from this source tree. The published 1.0.12 wheels predate this support.
 
 ## Install
 
-Use Python 3.11 or 3.12 and an OpenFOAM runtime. The primary HPC target is Linux with OpenFOAM.com v2512. On Apple Silicon, use OpenFOAM.app.
+Use CPython 3.11 or 3.12 with an existing OpenFOAM installation. For OpenCFD, install the released package.
 
 ```console
 pip install foamnordic
 ```
 
-Activate OpenFOAM, then run `foamnordic build` and `foamnordic doctor` in that environment. On macOS, enter it with `openfoam`. See the [installation guide](docs/installation.md) for optional ML dependencies, other installation methods and diagnostics.
+For Foundation 14, use this checkout and follow the [editable installation instructions](docs/installation.md#editable-installation).
+
+Activate the OpenFOAM environment you intend to use, then run `foamnordic build` and `foamnordic doctor`. On a Linux cluster, load the corresponding OpenFOAM module. On Apple Silicon, use the `openfoam` launcher from OpenFOAM.app.
 
 ## Quick start
 
+From the repository root, run the supplied lid-driven cavity with OpenCFD v2512. Set `of_cmd` and `shell` to match your OpenFOAM installation.
+
 ```python
 from pathlib import Path
+
 import foamnordic as fno
 
 case = fno.OpenFOAM.Case(
-    name="lidDrivenCavity",
-    case_dir=Path("cases/lidDrivenCavity"),
+    case_dir=Path("tutorials/openfoam_tutorials/incompressible/laminar/lidDrivenCavity"),
     run_dir=Path("output"),
     of_cmd="module load openfoam/2512",
-    shell="bash",  # HPC: bash | macOS: zsh
+    shell="bash",
     application="pimpleFoam",
 )
-case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
+case.initialize(mesh="blockMesh", validate_mesh=True)
 
 run = fno.Longship(case=case).launch()
 result = run.stop(timeout=900, progress=True)
 result.summary(style="compact")
 
-post = result.postprocess
-post.statistics(["U", "p"], time_idx=-1, verbose=True)
+if result.success:
+    result.postprocess.statistics(fields=["U", "p"], time_idx=-1, verbose=True)
 ```
 
-The source case is copied into an isolated run directory. `0.orig/` is accepted when `0/` is absent. With no scheduler, rank one runs directly and multiple ranks use the MPI launcher from the declared OpenFOAM environment.
+FoamNordic stages a copy of the source case before running the solver. For Foundation 14, use `application="foamRun"` with a case configured for a Foundation solver module.
 
-## Couple a model or function
+## Extend the workflow
 
-`Transform` mutates ordinary registered fields at a solver stage. `Closure` enters an equation-specific adapter. FoamNordic ships generic field hooks and two LES adapters (`nutFjord` and `kEqnFjord`) as integration examples; domain solvers own their conservation equations and physical closure semantics.
-
-```python
-transform = fno.Transform(
-    name="predictVelocity",
-    operator=fno.Operator.model("velocity.fnom"),
-    inputs={"pressure": fno.Field("p")},
-    outputs={"velocity": fno.Field("U")},
-    at="time_step_start",
-)
-
-run = fno.Longship(case=case, transforms=(transform,)).launch()
-```
-
-FNOM selects compiled C++, ONNX, Joblib, Equinox, or a native regular-grid table internally, so model loading does not alter the solver-facing API. `foamnordic inspect` reports whether a backend is data-only or code-bearing. Stochastic functions use `fno.Random.key(seed=42, scope="global")`; deterministic programs need no key.
-
-External solvers can add an equation-level adapter without including the FoamNordic source tree. See the installed-SDK [`externalNutFjord` example](examples/openfoam/externalNutFjord/README.md).
-
-## Slurm resources
-
-Pass a `Slurm` scheduler to `Longship` and match the OpenFOAM task count to the case rank count. For coupled runs, Longship starts one resident model worker per solver node. See [Slurm launch](docs/api/run-control.md#slurm-launch) for a complete example and resource settings.
+- Apply a [field transform](docs/developer/field-programs.md#transform-route) at a solver stage, or use an [equation closure](docs/developer/field-programs.md#closure-route) such as the LES adapters `nutFjord` and `kEqnFjord`.
+- Export a model as an [FNOM artefact](docs/api/model-artifact.md) to carry its payload, tensor contract and scaling. The same solver-facing API supports compiled C++, ONNX, Joblib, Equinox and native regular-grid tables.
+- Launch on a cluster with [Slurm](docs/api/run-control.md#slurm-launch). Match the OpenFOAM task count to the case rank count.
+- Read the [architecture](docs/architecture/README.md), [benchmarks](docs/benchmarks/README.md) and [release notes](CHANGELOG.md) for implementation details, validation results and changes.
 
 ## Develop from source
 
@@ -86,17 +77,6 @@ ctest --test-dir build --output-on-failure
 python -m pytest
 ```
 
-Native tests that compile the OpenFOAM integration require the target OpenFOAM environment to be active.
+Activate the target OpenFOAM environment before testing its integration. See the [developer guide](docs/developer/README.md) for component boundaries and verification.
 
-## Documentation
-
-Read the [FoamNordic section](https://pentagontoy.github.io/FoamNordic/foamnordic/) of the shared Nordic documentation site for guides and API references.
-
-- [Package boundary](packages/README.md)
-- [Python API](docs/api/README.md)
-- [Architecture](docs/architecture/README.md)
-- [Benchmarks and validation](docs/benchmarks/README.md)
-- [Tutorials](tutorials/README.md)
-- [Development and publishing](others/README.md)
-
-FoamNordic is GPL-3.0 licensed research software. It is developed by **Hanseul Kang** at Aalto University under the supervision of **Shervin Karimkashi**.
+FoamNordic is [GPL-3.0](LICENSE) research software developed by **Hanseul Kang** at Aalto University under the supervision of **Shervin Karimkashi**.

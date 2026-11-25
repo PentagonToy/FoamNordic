@@ -1,6 +1,6 @@
 # Verification
 
-Select checks by the boundaries changed. Portable correctness runs locally first; Roihu is reserved for behaviour that requires Linux, OpenFOAM v2512, MPI, UCX, Slurm, multiple nodes or GH200 hardware.
+Select checks by the boundaries changed. Run portable checks locally first. Use Roihu for Linux, MPI, UCX, Slurm, multiple nodes or GH200 checks. The [OpenFOAM compatibility table](../../README.md#openfoam-compatibility) records the tested releases, platforms and workflows.
 
 ## Verification ladder
 

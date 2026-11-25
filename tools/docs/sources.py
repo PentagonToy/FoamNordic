@@ -50,15 +50,15 @@ def assemble(files, config):
         for source in sorted((owner / 'others').rglob('*.svg')):
             add('assets/' + prefix + '/' + source.relative_to(owner / 'others').as_posix(), source, owner)
     examples = [
-        ('openfoam_lid_driven_cavity', 'lid-driven-cavity', 'Basic run: local cavity',
+        ('esi_openfoam_lid_driven_cavity', 'lid-driven-cavity', 'Basic run: local cavity',
          'Run an unchanged OpenFOAM case through Longship; closures, transforms and observations are omitted when unused.',
          'This example omits the scheduler to run locally with OpenFOAM.app (`of_cmd="openfoam"`, `shell="zsh"`). On Linux, select the local OpenFOAM activation and shell in the case declaration.',
          'A successful run reports success and exposes U and p through postprocessing. Field sizes and values depend on the case.'),
-        ('field_exchange_lid_driven_cavity', 'field-exchange', 'Field exchange: Slurm cavity',
+        ('esi_field_exchange_lid_driven_cavity', 'field-exchange', 'Field exchange: Slurm cavity',
          'Apply a small seeded velocity perturbation at the start of each time step, observe U and p, and inspect the completed case.',
          'This example uses Slurm and `module load openfoam/2512` with bash. Replace the allocation account, partition and resource settings with those supported by the cluster before submitting. Run the notebook client where Slurm commands and the selected OpenFOAM module are available. The random perturbation illustrates a field transform; it does not define an equation-level closure.',
          'Inspect the run result and observation records for U and p, then load the final fields. The structured visualisation assumes the tutorial cavity grid; saved shapes and mesh dimensions should be checked against the actual case.'),
-        ('smagorinsky_pitz_daily', 'smagorinsky-closure', 'Closure: Smagorinsky on Slurm',
+        ('esi_smagorinsky_pitz_daily', 'smagorinsky-closure', 'Closure: Smagorinsky on Slurm',
          'Declare a native symbolic Smagorinsky operator and couple it through the nutFjord LES adapter in a Pitz Daily case.',
          'This example uses Slurm and `module load openfoam/2512` with bash. Replace the allocation account, partition and resources with local values. The supplied tutorial case and the built nutFjord adapter are required. The mathematical closure uses FoamNordic algebra and requires no trained-model download.',
          'Check successful completion and postprocessed U and p. The example demonstrates the closure integration path; it does not establish a new turbulence-model validation result.'),
@@ -126,7 +126,12 @@ def rewrite_links(markdown, page, config, files):
 
 def write_redirects(config):
     """Keep bookmarks to the former FoamNordic-only paths working."""
-    aliases = {'getting-started.md': 'foamnordic/getting-started.md', 'tutorials.md': 'foamnordic/tutorials.md'}
+    aliases = {
+        'getting-started.md': 'foamnordic/getting-started.md',
+        'tutorials.md': 'foamnordic/tutorials.md',
+        'architecture/principles.md': 'foamnordic/architecture/README.md',
+        'foamnordic/architecture/principles.md': 'foamnordic/architecture/README.md',
+    }
     for source, target in ROUTES.items():
         if source.is_relative_to(ROOT / 'docs') and target.startswith('foamnordic/'):
             original = source.relative_to(ROOT / 'docs').as_posix()
