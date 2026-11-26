@@ -49,7 +49,17 @@ case = fno.OpenFOAM.Case(
 case.initialize(ranks=1, mesh="blockMesh", validate_mesh=True)
 ```
 
-`OpenFOAM.setup(of_cmd="openfoam/2512")` resolves the module shorthand to `module load openfoam/2512` inside generated shell commands. A `Case` may override either setting. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
+`OpenFOAM.setup(of_cmd="openfoam/2512")` sets the default module for later cases. Use the same forms with `Case(of_cmd=...)` to override that default.
+
+| `of_cmd` | Command |
+| --- | --- |
+| `openfoam/2512`, `openfoam-2512`, `openfoam-v2512` | `module load openfoam/2512` |
+| `openfoam-org/14`, `openfoam-v14`, `openfoam-14` on Linux | `module load openfoam-org/14` |
+| `module load openfoam/14` | Runs as written, for sites that provide that module name |
+| `openfoam` | Uses the OpenFOAM.app wrapper |
+| `openfoam-14` on macOS | Uses the OpenFOAM-MacOS Foundation launcher |
+
+A bare `family/version` selects that module name. A full shell command is passed through unchanged. `mesh=None` uses an existing mesh. If `0/` is absent, `0.orig/` is copied into the isolated case.
 
 ### `OpenFOAM.setup`
 

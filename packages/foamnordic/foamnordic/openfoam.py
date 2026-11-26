@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
+import re
 import shlex
+import sys
 from types import MappingProxyType
 from typing import Mapping
 
@@ -72,8 +74,18 @@ class _Toolchain:
 def _toolchain(of_cmd: str | None, shell: str) -> _Toolchain:
     command = None if of_cmd is None else require_nonempty(of_cmd, "of_cmd")
     words = () if command is None else tuple(shlex.split(command))
-    if words and Path(words[0]).name == "openfoam":
-        return _Toolchain.openfoam_wrapper(command, shell=shell)
+    if words:
+        launcher = Path(words[0]).name
+        if launcher == "openfoam" or (
+            sys.platform == "darwin" and launcher == "openfoam-14"
+        ):
+            return _Toolchain.openfoam_wrapper(command, shell=shell)
+    if len(words) == 1:
+        alias = re.fullmatch(r"openfoam-v?([0-9]{1,2}|[0-9]{4})", words[0])
+        if alias:
+            version = alias[1]
+            module_family = "openfoam" if len(version) == 4 else "openfoam-org"
+            return _Toolchain.module(f"{module_family}/{version}", shell=shell)
     if command is not None and "/" in command and not any(
         character.isspace() for character in command
     ):
@@ -139,8 +151,10 @@ class Case:
     """OpenFOAM case, output location, and shell environment declaration.
 
     A compact ``of_cmd`` value such as ``openfoam/2512`` names an environment
-    module. ``openfoam`` uses the OpenFOAM.app command wrapper on macOS. A full
-    shell statement such as ``source /opt/OpenFOAM/bashrc`` is executed
+    module. Bare aliases such as ``openfoam-v2512`` and ``openfoam-v14`` use the
+    OpenCFD and Foundation module families, respectively. On macOS,
+    ``openfoam`` and ``openfoam-14`` invoke the corresponding app launchers.
+    A full shell statement such as ``source /opt/OpenFOAM/bashrc`` is executed
     verbatim. ``None`` uses OpenFOAM commands already available on ``PATH``.
     """
 

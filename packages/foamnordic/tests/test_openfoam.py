@@ -120,16 +120,40 @@ def test_grouped_namespace_naming_is_canonical_and_compatible() -> None:
     assert "CompiledPlan" in dir(fno.Runtime)
 
 
-def test_module_shorthand_is_lowered_to_internal_environment() -> None:
+@pytest.mark.parametrize(
+    ("of_cmd", "expected"),
+    [
+        ("openfoam/2512", "module load openfoam/2512"),
+        ("openfoam-v2512", "module load openfoam/2512"),
+        ("openfoam-2512", "module load openfoam/2512"),
+        ("module load openfoam/2512", "module load openfoam/2512"),
+        ("openfoam-14", "module load openfoam-org/14"),
+        ("openfoam-v14", "module load openfoam-org/14"),
+        ("openfoam-org/14", "module load openfoam-org/14"),
+        ("module load openfoam-org/14", "module load openfoam-org/14"),
+        ("module load openfoam/14", "module load openfoam/14"),
+        (
+            "module load gcc/15.2.0 && module load openfoam-org/14",
+            "module load gcc/15.2.0 && module load openfoam-org/14",
+        ),
+    ],
+)
+def test_module_shorthand_is_lowered_to_internal_environment(
+    of_cmd: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("foamnordic.openfoam.sys.platform", "linux")
     case = fno.OpenFOAM.Case(
         case_dir="case",
         run_dir="runs",
-        of_cmd="openfoam/2512",
+        of_cmd=of_cmd,
         shell="zsh",
     )
-    assert case.of_cmd == "openfoam/2512"
+    assert case.of_cmd == of_cmd
     assert case.shell == "zsh"
-    assert case._toolchain.command == "module load openfoam/2512"
+    assert case._toolchain.command == expected
+    assert not case._toolchain.wrapper
 
 
 def test_setup_supplies_defaults_to_later_cases(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,6 +186,26 @@ def test_macos_openfoam_command_is_used_as_a_wrapper() -> None:
     assert command[:2] == ("zsh", "-lc")
     assert "openfoam -c" in command[2]
     assert "exec pimpleFoam -help" in command[2]
+
+
+def test_macos_foundation_launcher_executes_an_explicit_shell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import shlex
+
+    from foamnordic.execution.shell import toolchain_shell
+
+    monkeypatch.setattr("foamnordic.openfoam.sys.platform", "darwin")
+    case = fno.OpenFOAM.Case(
+        case_dir="case", run_dir="runs", of_cmd="openfoam-14", shell="zsh"
+    )
+
+    assert case._toolchain.wrapper
+    shell, login_flag, command = toolchain_shell(case._toolchain, "exec foamRun -help")
+    assert (shell, login_flag) == ("zsh", "-lc")
+    assert shlex.split(command) == [
+        "exec", "openfoam-14", "--", "zsh", "-c", "exec foamRun -help"
+    ]
 
 
 def test_macos_wrapper_contains_local_mpi_solver() -> None:
