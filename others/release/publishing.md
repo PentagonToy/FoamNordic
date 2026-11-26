@@ -4,6 +4,8 @@ FoamNordic publishes native wheels, not an sdist: the monorepo keeps the shared 
 
 When local and remote `main` and `dev` already identify the same commit, `others/release/prepare-release VERSION --push` can prepare a `## [VERSION] - Unreleased` candidate. It dates the section, updates versions and the lockfile, checks metadata, amends the current commit and updates both branches with lease protection. Prepare the release on `main` directly when `dev` has a separate history; preserve that branch.
 
+Use `Release FoamNordic <version>` as the release commit subject. Use short imperative subjects for development commits.
+
 ## Build
 
 Commit and push the FoamNordic release source, then run `./others/release/wheel-maker` from a clean checkout. It builds and tests six wheels containing the `foamnordic` package and its internal `bindnordic` namespace: CPython 3.11 and 3.12 on Linux x86_64, Linux aarch64, and macOS arm64. It checks metadata, records SHA256 sums, and extracts the release body from `CHANGELOG.md`. It does not publish anything.
