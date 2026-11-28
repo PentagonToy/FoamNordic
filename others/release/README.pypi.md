@@ -8,7 +8,7 @@ FoamNordic is active research software. Release notes and upgrade guidance are m
 
 ## Install
 
-Use Python 3.11 or 3.12. Install the PyPI release with pip:
+Use Python 3.11 or 3.12. FoamNordic supports OpenCFD and adds experimental OpenFOAM Foundation 14 support in 1.0.13. Install the PyPI release with pip:
 
 ```console
 pip install foamnordic

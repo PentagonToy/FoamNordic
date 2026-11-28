@@ -7,7 +7,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "foamnordic"
-version = "1.0.12"
+version = "1.0.13"
 description = "Declarative orchestration for native OpenFOAM closure workloads"
 readme = { file = "../../others/release/README.pypi.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.13"

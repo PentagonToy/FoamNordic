@@ -4,7 +4,10 @@ This changelog records user-visible changes in reverse chronological order. Inte
 
 ## Unreleased
 
-- Add experimental OpenFOAM Foundation 14 support with the existing Python API. The airFoil2D and channel395 notebooks demonstrate serial and four-rank execution. The Foundation adapter supports field exchange, observations and native LES closures.
+## [1.0.13] - 2026-11-28
+
+- Add experimental OpenFOAM Foundation 14 support with the existing Python API, including field exchange, observations and native LES closures. The airFoil2D and channel395 tutorials demonstrate serial and four-rank execution on Roihu.
+- Accept Foundation and OpenCFD activation commands through `Case.of_cmd`, with a separate native build for each OpenFOAM ABI.
 
 ## [1.0.12] - 2026-11-23
 

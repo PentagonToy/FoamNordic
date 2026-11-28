@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(FoamNordicBuildKit VERSION 1.0.12 LANGUAGES CXX)
+project(FoamNordicBuildKit VERSION 1.0.13 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 

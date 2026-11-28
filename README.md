@@ -17,7 +17,7 @@ Run an OpenFOAM case, inspect its fields, or couple a model to the solver from P
 | OpenCFD v2606 | Apple Silicon |
 | Foundation 14 | Linux, Apple Silicon (build and loading) |
 
-Foundation 14 support is available from this source tree. The published 1.0.12 wheels predate this support.
+Experimental Foundation 14 support is available from FoamNordic 1.0.13.
 
 ## Install
 
@@ -41,9 +41,7 @@ foamnordic doctor
 | OpenCFD (ESI) | [OpenFOAM.app](https://github.com/gerlero/openfoam-app) | `openfoam` |
 | Foundation | [OpenFOAM-MacOS](https://github.com/PentagonToy/OpenFOAM-MacOS) | `openfoam-14` |
 
-Start the OpenFOAM shell with the launcher above and activate your Python environment. For OpenCFD, run `pip install foamnordic`, then `foamnordic build` and `foamnordic doctor`.
-
-For Foundation 14, follow the [editable installation instructions](docs/installation.md#editable-installation) in this checkout, then build with Foundation 14 active.
+Start the OpenFOAM shell with the launcher above and activate your Python environment. Install FoamNordic 1.0.13 or later, then run `foamnordic build` and `foamnordic doctor` with the selected OpenFOAM environment active.
 
 ## Quick start
 
